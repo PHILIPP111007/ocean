@@ -42,9 +42,9 @@ int main(void) {
     list_str* a_list = string_split(a, " ");
     qsort(a_list->data, a_list->size, sizeof(char*), compare_string);
     int b = 100;
-    char* b1 = builtin_str(b);
+    char* b1 = builtin_str_int(b);
     char* c = "10";
-    int c1 = builtin_int(c);
+    int c1 = atoi(c);
     list_int* d = create_list_int(4);
     append_list_int(d, 1);
     append_list_int(d, 2);

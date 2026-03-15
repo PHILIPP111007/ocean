@@ -745,6 +745,89 @@ class CCodeGenerator:
 
             return
 
+        elif func_name == "float":
+            c_type = var_info["c_type"] if var_info else "float"
+
+            if args:
+                arg_expr = self.generate_expression(args[0])
+                var_info = self.get_variable_info(target)
+
+                if var_info:
+                    py_type = var_info.get("py_type", "")
+
+                    # Конвертация из строки в float
+                    self.add_line(f"{c_type} {target} = atof({arg_expr});")
+                else:
+                    self.add_line(f"{c_type} {target} = atof({arg_expr});")
+            return
+
+        # Специальная обработка для str()
+        elif func_name == "str":
+            c_type = var_info["c_type"] if var_info else "char*"
+
+            if args:
+                arg_expr = self.generate_expression(args[0])
+
+                # Определяем тип аргумента для выбора правильной функции
+                if isinstance(args[0], dict):
+                    arg_type = args[0].get("type", "")
+                    if arg_type == "variable":
+                        var_name = args[0].get("value", "")
+                        arg_var_info = self.get_variable_info(var_name)
+                        if arg_var_info:
+                            py_type = arg_var_info.get("py_type", "")
+
+                            if py_type == "int":
+                                self.add_line(
+                                    f"{c_type} {target} = builtin_str_int({arg_expr});"
+                                )
+                            elif py_type == "float" or py_type == "double":
+                                self.add_line(
+                                    f"{c_type} {target} = builtin_str_float({arg_expr});"
+                                )
+                            elif py_type == "bool":
+                                self.add_line(
+                                    f"{c_type} {target} = builtin_str_bool({arg_expr});"
+                                )
+                            elif py_type == "str":
+                                self.add_line(
+                                    f"{c_type} {target} = malloc(strlen({arg_expr}) + 1);"
+                                )
+                                self.add_line(f"strcpy({target}, {arg_expr});")
+                            else:
+                                self.add_line(
+                                    f'{c_type} {target} = builtin_str({arg_expr}, "{py_type}");'
+                                )
+                        else:
+                            self.add_line(
+                                f"{c_type} {target} = builtin_str_int({arg_expr});"
+                            )
+                    elif arg_type == "literal":
+                        data_type = args[0].get("data_type", "")
+                        if data_type == "int":
+                            self.add_line(
+                                f"{c_type} {target} = builtin_str_int({arg_expr});"
+                            )
+                        elif data_type == "float":
+                            self.add_line(
+                                f"{c_type} {target} = builtin_str_float({arg_expr});"
+                            )
+                        elif data_type == "bool":
+                            self.add_line(
+                                f"{c_type} {target} = builtin_str_bool({arg_expr});"
+                            )
+                        else:
+                            self.add_line(
+                                f"{c_type} {target} = builtin_str_int({arg_expr});"
+                            )
+                    else:
+                        self.add_line(
+                            f"{c_type} {target} = builtin_str_int({arg_expr});"
+                        )
+                else:
+                    self.add_line(f"{c_type} {target} = builtin_str_int({arg_expr});")
+            return
+
         # Маппинг встроенных функций Python -> C
         builtin_map = {
             "len": "builtin_len",
@@ -883,6 +966,17 @@ class CCodeGenerator:
             return
 
         c_type = var_info["c_type"]
+
+        # Проверяем, является ли выражение вызовом builtin функции
+        if expression_ast and expression_ast.get("type") == "function_call":
+            func_name = expression_ast.get("function", "")
+
+            # Специальная обработка для builtin функций
+            if func_name in ["str", "int", "float", "bool", "len"]:
+                self._generate_builtin_declaration(
+                    var_name, c_type, expression_ast, is_redeclaration
+                )
+                return
 
         # Обработка list[int] с литералом
         if expression_ast.get("type") == "list_literal" and var_type.startswith(
@@ -5716,6 +5810,39 @@ class CCodeGenerator:
     }
     """)
 
+        # Функции для конвертации в строку
+        if "builtin_str_int" not in self.generated_functions:
+            helpers.append("""
+        char* builtin_str_int(int value) {
+            char buffer[12];
+            sprintf(buffer, "%d", value);
+            char* result = malloc(strlen(buffer) + 1);
+            if (!result) return NULL;
+            strcpy(result, buffer);
+            return result;
+        }
+        """)
+            self.generated_functions.add("builtin_str_int")
+
+        if "builtin_str_float" not in self.generated_functions:
+            helpers.append("""
+        char* builtin_str_float(float value) {
+            char buffer[32];
+            sprintf(buffer, "%f", value);
+            // Убираем лишние нули
+            char* dot = strchr(buffer, '.');
+            if (dot) {
+                char* end = buffer + strlen(buffer) - 1;
+                while (end > dot && *end == '0') *end-- = '\\0';
+            }
+            char* result = malloc(strlen(buffer) + 1);
+            if (!result) return NULL;
+            strcpy(result, buffer);
+            return result;
+        }
+        """)
+            self.generated_functions.add("builtin_str_float")
+
         self.generated_helpers.extend(helpers)
 
     def generate_builtin_int_helpers(self):
@@ -7436,3 +7563,136 @@ class CCodeGenerator:
             return "None"
 
         return "int"
+
+    def _generate_builtin_declaration(
+        self, var_name: str, c_type: str, call_ast: Dict, is_redeclaration: bool
+    ):
+        """Генерирует объявление с вызовом builtin функции"""
+        func_name = call_ast.get("function", "")
+        args = call_ast.get("arguments", [])
+
+        if not args:
+            if is_redeclaration:
+                self.add_line(f"{var_name} = 0;")
+            else:
+                self.add_line(f"{c_type} {var_name} = 0;")
+            return
+
+        arg_expr = self.generate_expression(args[0])
+
+        # Определяем тип аргумента для выбора правильной функции
+        arg_type = "unknown"
+        if args and isinstance(args[0], dict):
+            if args[0].get("type") == "variable":
+                var_name_arg = args[0].get("value", "")
+                arg_var_info = self.get_variable_info(var_name_arg)
+                if arg_var_info:
+                    arg_type = arg_var_info.get("py_type", "unknown")
+            elif args[0].get("type") == "literal":
+                arg_type = args[0].get("data_type", "unknown")
+
+        # Выбираем правильную реализацию для str()
+        if func_name == "str":
+            if arg_type == "int":
+                func_call = f"builtin_str_int({arg_expr})"
+            elif arg_type == "float":
+                func_call = f"builtin_str_float({arg_expr})"
+            elif arg_type == "double":
+                func_call = f"builtin_str_double({arg_expr})"
+            elif arg_type == "bool":
+                func_call = f"builtin_str_bool({arg_expr})"
+            elif arg_type == "str":
+                # Для строки - просто копируем
+                if is_redeclaration:
+                    self.add_line(f"if ({var_name}) free({var_name});")
+                    self.add_line(f"{var_name} = malloc(strlen({arg_expr}) + 1);")
+                    self.add_line(f"if ({var_name}) strcpy({var_name}, {arg_expr});")
+                else:
+                    self.add_line(
+                        f"{c_type} {var_name} = malloc(strlen({arg_expr}) + 1);"
+                    )
+                    self.add_line(f"if ({var_name}) strcpy({var_name}, {arg_expr});")
+                return
+            else:
+                # По умолчанию для неизвестного типа используем float
+                func_call = f"builtin_str_float({arg_expr})"
+
+            if is_redeclaration:
+                self.add_line(f"{var_name} = {func_call};")
+            else:
+                self.add_line(f"{c_type} {var_name} = {func_call};")
+            return
+
+        # Для int()
+        elif func_name == "int":
+            if arg_type == "str":
+                func_call = f"atoi({arg_expr})"
+            elif arg_type == "float" or arg_type == "double":
+                func_call = f"(int)({arg_expr})"
+            elif arg_type == "bool":
+                func_call = f"({arg_expr} ? 1 : 0)"
+            else:
+                func_call = f"({int})({arg_expr})"
+
+            if is_redeclaration:
+                self.add_line(f"{var_name} = {func_call};")
+            else:
+                self.add_line(f"{c_type} {var_name} = {func_call};")
+            return
+
+        # Для float()
+        elif func_name == "float":
+            if arg_type == "str":
+                func_call = f"atof({arg_expr})"
+            elif arg_type == "int":
+                func_call = f"(float)({arg_expr})"
+            elif arg_type == "bool":
+                func_call = f"({arg_expr} ? 1.0 : 0.0)"
+            else:
+                func_call = f"(float)({arg_expr})"
+
+            if is_redeclaration:
+                self.add_line(f"{var_name} = {func_call};")
+            else:
+                self.add_line(f"{c_type} {var_name} = {func_call};")
+            return
+
+        # Для bool()
+        elif func_name == "bool":
+            if arg_type == "int":
+                func_call = f"({arg_expr} != 0)"
+            elif arg_type == "float" or arg_type == "double":
+                func_call = f"({arg_expr} != 0.0)"
+            elif arg_type == "str":
+                func_call = f"({arg_expr} && strlen({arg_expr}) > 0)"
+            else:
+                func_call = f"({arg_expr} != 0)"
+
+            if is_redeclaration:
+                self.add_line(f"{var_name} = {func_call};")
+            else:
+                self.add_line(f"{c_type} {var_name} = {func_call};")
+            return
+
+        # Для len()
+        elif func_name == "len":
+            # Определяем функцию len в зависимости от типа аргумента
+            if arg_type.startswith("list["):
+                struct_name = self.generate_list_struct_name(arg_type)
+                func_call = f"builtin_len_{struct_name}({arg_expr})"
+            elif arg_type.startswith("dict["):
+                key_type, value_type = self._extract_dict_types(arg_type)
+                key_name = self.clean_type_name_for_c(key_type)
+                value_name = self.clean_type_name_for_c(value_type)
+                struct_name = f"dict_{key_name}_{value_name}"
+                func_call = f"len_{struct_name}({arg_expr})"
+            elif arg_type == "str":
+                func_call = f"strlen({arg_expr})"
+            else:
+                func_call = f"builtin_len({arg_expr})"
+
+            if is_redeclaration:
+                self.add_line(f"{var_name} = {func_call};")
+            else:
+                self.add_line(f"{c_type} {var_name} = {func_call};")
+            return
