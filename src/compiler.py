@@ -2249,7 +2249,7 @@ class CCodeGenerator:
             self.generated_functions.add(copy_func_name)
 
     def generate_dict_struct(self, key_type: str, value_type: str) -> str:
-        """Генерирует структуру C для словаря с заданными типами ключа и значения"""
+        """Генерирует структуру C для словаря с хеш-таблицей (O(1) доступ)"""
         key_c_type = self.map_type_to_c(key_type)
         value_c_type = self.map_type_to_c(value_type)
 
@@ -2269,202 +2269,380 @@ class CCodeGenerator:
 
         self.generated_structures.add(struct_name)
 
-        # Для ключей-строк нужно особое сравнение
+        # Для ключей-строк нужно особое сравнение и хеш-функция
         is_key_string = key_type == "str" or key_c_type == "char*"
 
-        # Структура для пары ключ-значение
-        pair_struct = f"""typedef struct {{
-        {key_c_type} key;
-        {value_c_type} value;
-    }} {struct_name}_pair;
-    """
-        self.generated_helpers.append(pair_struct)
-        logger.debug(f"  added pair struct")
+        # Размер таблицы по умолчанию
+        DEFAULT_HASH_SIZE = 256
 
-        # Структура для словаря
+        # Определяем хеш-функцию в зависимости от типа ключа
+        if is_key_string:
+            hash_func_name = f"hash_{struct_name}"
+            hash_func = f"""
+        static unsigned int {hash_func_name}({key_c_type} key) {{
+            if (!key) return 0;
+            unsigned int hash = 5381;
+            int c;
+            while ((c = *key++)) {{
+                hash = ((hash << 5) + hash) + c;
+            }}
+            return hash % {DEFAULT_HASH_SIZE};
+        }}
+        """
+            self.generated_helpers.append(hash_func)
+            logger.debug(f"  added hash function for strings")
+        else:
+            # Для целочисленных ключей - простой модуль с обработкой отрицательных
+            hash_func_name = f"hash_{struct_name}"
+            hash_func = f"""
+        static unsigned int {hash_func_name}({key_c_type} key) {{
+            // Обрабатываем отрицательные ключи
+            unsigned int ukey = (key < 0) ? -key : key;
+            return ukey % {DEFAULT_HASH_SIZE};
+        }}
+        """
+            self.generated_helpers.append(hash_func)
+            logger.debug(f"  added hash function for integers")
+
+        # Узел для цепочек коллизий
+        node_struct = f"""typedef struct {struct_name}_node {{
+            {key_c_type} key;
+            {value_c_type} value;
+            struct {struct_name}_node* next;
+        }} {struct_name}_node;
+        """
+        self.generated_helpers.append(node_struct)
+        logger.debug(f"  added node struct")
+
+        # Структура для словаря (хеш-таблица)
         dict_struct = f"""typedef struct {{
-        {struct_name}_pair* data;
-        int size;
-        int capacity;
-    }} {struct_name};
-    """
+            {struct_name}_node** buckets;
+            int size;
+            int capacity;
+            int bucket_count;
+        }} {struct_name};
+        """
         self.generated_helpers.append(dict_struct)
         logger.debug(f"  added dict struct")
 
         # Функция создания словаря
         create_func = f"""
-    {struct_name}* create_{struct_name}(int initial_capacity) {{
-        if (initial_capacity < 16) initial_capacity = 16;
-        {struct_name}* dict = malloc(sizeof({struct_name}));
-        if (!dict) {{
-            fprintf(stderr, "Memory allocation failed for dict\\n");
-            exit(1);
+        {struct_name}* create_{struct_name}(int initial_capacity) {{
+            (void)initial_capacity;  // Параметр не используется, оставлен для совместимости
+            {struct_name}* dict = malloc(sizeof({struct_name}));
+            if (!dict) {{
+                fprintf(stderr, "Memory allocation failed for dict\\n");
+                exit(1);
+            }}
+            
+            dict->bucket_count = {DEFAULT_HASH_SIZE};
+            dict->buckets = ({struct_name}_node**)calloc(dict->bucket_count, sizeof({struct_name}_node*));
+            if (!dict->buckets) {{
+                fprintf(stderr, "Memory allocation failed for dict buckets\\n");
+                free(dict);
+                exit(1);
+            }}
+            
+            dict->size = 0;
+            dict->capacity = {DEFAULT_HASH_SIZE};
+            return dict;
         }}
-        dict->data = malloc(initial_capacity * sizeof({struct_name}_pair));
-        if (!dict->data) {{
-            fprintf(stderr, "Memory allocation failed for dict data\\n");
-            free(dict);
-            exit(1);
-        }}
-        dict->size = 0;
-        dict->capacity = initial_capacity;
-        return dict;
-    }}
-    """
+        """
         self.generated_helpers.append(create_func)
         logger.debug(f"  added create function")
 
-        # Функция установки значения
+        # Функция установки значения (с хешированием)
         if is_key_string:
             set_func = f"""
-    void set_{struct_name}({struct_name}* dict, {key_c_type} key, {value_c_type} value) {{
-        // Ищем существующий ключ
-        for (int i = 0; i < dict->size; i++) {{
-            if (strcmp(dict->data[i].key, key) == 0) {{
-                dict->data[i].value = value;
-                return;
+        void set_{struct_name}({struct_name}* dict, {key_c_type} key, {value_c_type} value) {{
+            if (!dict) return;
+            unsigned int index = hash_{struct_name}(key);
+            {struct_name}_node* current = dict->buckets[index];
+            
+            // Ищем существующий ключ
+            while (current) {{
+                if (strcmp(current->key, key) == 0) {{
+                    current->value = value;
+                    return;
+                }}
+                current = current->next;
             }}
-        }}
-        
-        // Если ключ не найден, добавляем новый
-        if (dict->size >= dict->capacity) {{
-            dict->capacity = dict->capacity == 0 ? 16 : dict->capacity * 2;
-            dict->data = realloc(dict->data, dict->capacity * sizeof({struct_name}_pair));
-            if (!dict->data) {{
-                fprintf(stderr, "Memory reallocation failed for dict\\n");
+            
+            // Если ключ не найден, добавляем новый узел
+            {struct_name}_node* new_node = malloc(sizeof({struct_name}_node));
+            if (!new_node) {{
+                fprintf(stderr, "Memory allocation failed for dict node\\n");
                 exit(1);
             }}
+            
+            new_node->key = malloc(strlen(key) + 1);
+            if (!new_node->key) {{
+                fprintf(stderr, "Memory allocation failed for dict key\\n");
+                free(new_node);
+                exit(1);
+            }}
+            strcpy(new_node->key, key);
+            new_node->value = value;
+            new_node->next = dict->buckets[index];
+            dict->buckets[index] = new_node;
+            dict->size++;
         }}
-        
-        // Для строковых ключей нужно копировать строку
-        dict->data[dict->size].key = malloc(strlen(key) + 1);
-        strcpy(dict->data[dict->size].key, key);
-        dict->data[dict->size].value = value;
-        dict->size++;
-    }}
-    """
+        """
         else:
             set_func = f"""
-    void set_{struct_name}({struct_name}* dict, {key_c_type} key, {value_c_type} value) {{
-        // Ищем существующий ключ
-        for (int i = 0; i < dict->size; i++) {{
-            if (dict->data[i].key == key) {{
-                dict->data[i].value = value;
-                return;
+        void set_{struct_name}({struct_name}* dict, {key_c_type} key, {value_c_type} value) {{
+            if (!dict) return;
+            unsigned int index = hash_{struct_name}(key);
+            {struct_name}_node* current = dict->buckets[index];
+            
+            // Ищем существующий ключ
+            while (current) {{
+                if (current->key == key) {{
+                    current->value = value;
+                    return;
+                }}
+                current = current->next;
             }}
-        }}
-        
-        // Если ключ не найден, добавляем новый
-        if (dict->size >= dict->capacity) {{
-            dict->capacity = dict->capacity == 0 ? 16 : dict->capacity * 2;
-            dict->data = realloc(dict->data, dict->capacity * sizeof({struct_name}_pair));
-            if (!dict->data) {{
-                fprintf(stderr, "Memory reallocation failed for dict\\n");
+            
+            // Если ключ не найден, добавляем новый узел
+            {struct_name}_node* new_node = malloc(sizeof({struct_name}_node));
+            if (!new_node) {{
+                fprintf(stderr, "Memory allocation failed for dict node\\n");
                 exit(1);
             }}
+            
+            new_node->key = key;
+            new_node->value = value;
+            new_node->next = dict->buckets[index];
+            dict->buckets[index] = new_node;
+            dict->size++;
         }}
-        dict->data[dict->size].key = key;
-        dict->data[dict->size].value = value;
-        dict->size++;
-    }}
-    """
+        """
         self.generated_helpers.append(set_func)
         logger.debug(f"  added set function")
 
-        # Функция получения значения
+        # Функция получения значения (O(1) в среднем)
         if is_key_string:
             get_func = f"""
-    {value_c_type} get_{struct_name}({struct_name}* dict, {key_c_type} key) {{
-        for (int i = 0; i < dict->size; i++) {{
-            if (strcmp(dict->data[i].key, key) == 0) {{
-                return dict->data[i].value;
+        {value_c_type} get_{struct_name}({struct_name}* dict, {key_c_type} key) {{
+            if (!dict) {{
+                fprintf(stderr, "KeyError: dict is NULL\\n");
+                exit(1);
             }}
+            unsigned int index = hash_{struct_name}(key);
+            {struct_name}_node* current = dict->buckets[index];
+            
+            while (current) {{
+                if (strcmp(current->key, key) == 0) {{
+                    return current->value;
+                }}
+                current = current->next;
+            }}
+            
+            fprintf(stderr, "KeyError: key not found in dict\\n");
+            exit(1);
         }}
-        fprintf(stderr, "KeyError: key not found in dict\\n");
-        exit(1);
-    }}
-    """
+        """
         else:
             get_func = f"""
-    {value_c_type} get_{struct_name}({struct_name}* dict, {key_c_type} key) {{
-        for (int i = 0; i < dict->size; i++) {{
-            if (dict->data[i].key == key) {{
-                return dict->data[i].value;
+        {value_c_type} get_{struct_name}({struct_name}* dict, {key_c_type} key) {{
+            if (!dict) {{
+                fprintf(stderr, "KeyError: dict is NULL\\n");
+                exit(1);
             }}
+            unsigned int index = hash_{struct_name}(key);
+            {struct_name}_node* current = dict->buckets[index];
+            
+            while (current) {{
+                if (current->key == key) {{
+                    return current->value;
+                }}
+                current = current->next;
+            }}
+            
+            fprintf(stderr, "KeyError: key not found in dict\\n");
+            exit(1);
         }}
-        fprintf(stderr, "KeyError: key not found in dict\\n");
-        exit(1);
-    }}
-    """
+        """
         self.generated_helpers.append(get_func)
         logger.debug(f"  added get function")
 
+        # Функция проверки наличия ключа (O(1) в среднем)
+        if is_key_string:
+            contains_func = f"""
+        int contains_{struct_name}({struct_name}* dict, {key_c_type} key) {{
+            if (!dict) return 0;
+            unsigned int index = hash_{struct_name}(key);
+            {struct_name}_node* current = dict->buckets[index];
+            
+            while (current) {{
+                if (strcmp(current->key, key) == 0) {{
+                    return 1;
+                }}
+                current = current->next;
+            }}
+            return 0;
+        }}
+        """
+        else:
+            contains_func = f"""
+        int contains_{struct_name}({struct_name}* dict, {key_c_type} key) {{
+            if (!dict) return 0;
+            unsigned int index = hash_{struct_name}(key);
+            {struct_name}_node* current = dict->buckets[index];
+            
+            while (current) {{
+                if (current->key == key) {{
+                    return 1;
+                }}
+                current = current->next;
+            }}
+            return 0;
+        }}
+        """
+        self.generated_helpers.append(contains_func)
+        logger.debug(f"  added contains function")
+
+        # Функция удаления ключа
+        if is_key_string:
+            delete_func = f"""
+        void delete_{struct_name}({struct_name}* dict, {key_c_type} key) {{
+            if (!dict) return;
+            unsigned int index = hash_{struct_name}(key);
+            {struct_name}_node* current = dict->buckets[index];
+            {struct_name}_node* prev = NULL;
+            
+            while (current) {{
+                if (strcmp(current->key, key) == 0) {{
+                    if (prev) {{
+                        prev->next = current->next;
+                    }} else {{
+                        dict->buckets[index] = current->next;
+                    }}
+                    free(current->key);
+                    free(current);
+                    dict->size--;
+                    return;
+                }}
+                prev = current;
+                current = current->next;
+            }}
+        }}
+        """
+        else:
+            delete_func = f"""
+        void delete_{struct_name}({struct_name}* dict, {key_c_type} key) {{
+            if (!dict) return;
+            unsigned int index = hash_{struct_name}(key);
+            {struct_name}_node* current = dict->buckets[index];
+            {struct_name}_node* prev = NULL;
+            
+            while (current) {{
+                if (current->key == key) {{
+                    if (prev) {{
+                        prev->next = current->next;
+                    }} else {{
+                        dict->buckets[index] = current->next;
+                    }}
+                    free(current);
+                    dict->size--;
+                    return;
+                }}
+                prev = current;
+                current = current->next;
+            }}
+        }}
+        """
+        self.generated_helpers.append(delete_func)
+        logger.debug(f"  added delete function")
+
         # Функция размера
         len_func = f"""
-    int len_{struct_name}({struct_name}* dict) {{
-        return dict ? dict->size : 0;
-    }}
-    """
+        int len_{struct_name}({struct_name}* dict) {{
+            return dict ? dict->size : 0;
+        }}
+        """
         self.generated_helpers.append(len_func)
         logger.debug(f"  added len function")
 
         # Функция освобождения памяти
         if is_key_string:
             free_func = f"""
-    void free_{struct_name}({struct_name}* dict) {{
-        if (dict) {{
-            for (int i = 0; i < dict->size; i++) {{
-                free(dict->data[i].key);
+        void free_{struct_name}({struct_name}* dict) {{
+            if (dict) {{
+                for (int i = 0; i < dict->bucket_count; i++) {{
+                    {struct_name}_node* current = dict->buckets[i];
+                    while (current) {{
+                        {struct_name}_node* next = current->next;
+                        free(current->key);
+                        free(current);
+                        current = next;
+                    }}
+                }}
+                free(dict->buckets);
+                free(dict);
             }}
-            free(dict->data);
-            free(dict);
         }}
-    }}
-    """
+        """
         else:
             free_func = f"""
-    void free_{struct_name}({struct_name}* dict) {{
-        if (dict) {{
-            free(dict->data);
-            free(dict);
+        void free_{struct_name}({struct_name}* dict) {{
+            if (dict) {{
+                for (int i = 0; i < dict->bucket_count; i++) {{
+                    {struct_name}_node* current = dict->buckets[i];
+                    while (current) {{
+                        {struct_name}_node* next = current->next;
+                        free(current);
+                        current = next;
+                    }}
+                }}
+                free(dict->buckets);
+                free(dict);
+            }}
         }}
-    }}
-    """
+        """
         self.generated_helpers.append(free_func)
         logger.debug(f"  added free function")
 
-        logger.debug(f"  total helpers now: {len(self.generated_helpers)}")
-
-        # Функция получения всех ключей
+        # Функция получения всех ключей (для совместимости)
         list_struct_name = f"list_{key_name}"
         keys_func = f"""
-    {list_struct_name}* keys_{struct_name}({struct_name}* dict) {{
-        {list_struct_name}* result = create_{list_struct_name}(dict->size);
-        for (int i = 0; i < dict->size; i++) {{
-            append_{list_struct_name}(result, dict->data[i].key);
+        {list_struct_name}* keys_{struct_name}({struct_name}* dict) {{
+            if (!dict) return NULL;
+            {list_struct_name}* result = create_{list_struct_name}(dict->size);
+            for (int i = 0; i < dict->bucket_count; i++) {{
+                {struct_name}_node* current = dict->buckets[i];
+                while (current) {{
+                    append_{list_struct_name}(result, current->key);
+                    current = current->next;
+                }}
+            }}
+            return result;
         }}
-        return result;
-    }}
-    """
+        """
         self.generated_helpers.append(keys_func)
         logger.debug(f"  added keys function")
-        self.generated_functions.add(f"keys_{struct_name}")
 
         # Функция получения всех значений
         list_value_struct = f"list_{value_name}"
         values_func = f"""
-    {list_value_struct}* values_{struct_name}({struct_name}* dict) {{
-        {list_value_struct}* result = create_{list_value_struct}(dict->size);
-        for (int i = 0; i < dict->size; i++) {{
-            append_{list_value_struct}(result, dict->data[i].value);
+        {list_value_struct}* values_{struct_name}({struct_name}* dict) {{
+            if (!dict) return NULL;
+            {list_value_struct}* result = create_{list_value_struct}(dict->size);
+            for (int i = 0; i < dict->bucket_count; i++) {{
+                {struct_name}_node* current = dict->buckets[i];
+                while (current) {{
+                    append_{list_value_struct}(result, current->value);
+                    current = current->next;
+                }}
+            }}
+            return result;
         }}
-        return result;
-    }}
-    """
+        """
         self.generated_helpers.append(values_func)
         logger.debug(f"  added values function")
-        self.generated_functions.add(f"values_{struct_name}")
 
+        logger.debug(f"  total helpers now: {len(self.generated_helpers)}")
         return struct_name
 
     def _generate_dict_declaration(
