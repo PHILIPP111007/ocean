@@ -74,3 +74,33 @@ int main(void) {
 }
 """
     run(P, C)
+
+
+def test_dict_get():
+    P = r"""
+def main() -> int:
+    var a: dict[str, str] = {"a": "1"}
+    var a1: str = a.get("a")
+    var a2: str = a.get("a", "")
+
+    var b: dict[str, int] = {"a": 1}
+    var b1: int = b.get("a")
+    var b2: int = b.get("a", 100)
+
+    return 0
+"""
+
+    C = r"""
+int main(void) {
+    dict_str_str* a = create_dict_str_str(16);
+    set_dict_str_str(a, "a", "1");
+    char* a1 = get_default_dict_str_str(a, "a", NULL);
+    char* a2 = get_default_dict_str_str(a, "a", "");
+    dict_str_int* b = create_dict_str_int(16);
+    set_dict_str_int(b, "a", 1);
+    int b1 = get_default_dict_str_int(b, "a", 0);
+    int b2 = get_default_dict_str_int(b, "a", 100);
+    return 0;
+}
+"""
+    run(P, C)

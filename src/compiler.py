@@ -2503,6 +2503,43 @@ class CCodeGenerator:
         self.generated_helpers.append(contains_func)
         logger.debug(f"  added contains function")
 
+        # Функция get с значением по умолчанию (аналог Python dict.get)
+        if is_key_string:
+            get_default_func = f"""
+            {value_c_type} get_default_{struct_name}({struct_name}* dict, {key_c_type} key, {value_c_type} default_value) {{
+                if (!dict) return default_value;
+                unsigned int index = hash_{struct_name}(key);
+                {struct_name}_node* current = dict->buckets[index];
+                
+                while (current) {{
+                    if (strcmp(current->key, key) == 0) {{
+                        return current->value;
+                    }}
+                    current = current->next;
+                }}
+                return default_value;
+            }}
+            """
+        else:
+            get_default_func = f"""
+            {value_c_type} get_default_{struct_name}({struct_name}* dict, {key_c_type} key, {value_c_type} default_value) {{
+                if (!dict) return default_value;
+                unsigned int index = hash_{struct_name}(key);
+                {struct_name}_node* current = dict->buckets[index];
+                
+                while (current) {{
+                    if (current->key == key) {{
+                        return current->value;
+                    }}
+                    current = current->next;
+                }}
+                return default_value;
+            }}
+            """
+        self.generated_helpers.append(get_default_func)
+        logger.debug(f"  added get_default function")
+        self.generated_functions.add(f"get_default_{struct_name}")
+
         # Функция удаления ключа
         if is_key_string:
             delete_func = f"""
@@ -4450,6 +4487,45 @@ class CCodeGenerator:
 
                 # TODO: реализовать items()
                 self.add_line(f"// items() method not fully implemented yet")
+
+            elif method_name == "get":
+                # get(key, default_value)
+                if len(arg_strings) >= 1:
+                    key_arg = arg_strings[0]
+
+                    # Определяем значение по умолчанию
+                    if len(arg_strings) >= 2:
+                        default_arg = arg_strings[1]
+                    else:
+                        # Если default не указан, используем 0, NULL или false в зависимости от типа
+                        if value_type == "int":
+                            default_arg = "0"
+                        elif value_type == "float" or value_type == "double":
+                            default_arg = "0.0"
+                        elif value_type == "bool":
+                            default_arg = "false"
+                        elif value_type == "str" or value_type == "char*":
+                            default_arg = "NULL"
+                        else:
+                            default_arg = "0"
+
+                    if target_var:
+                        # Присваивание результата переменной
+                        self.add_line(
+                            f"{target_var} = get_default_{struct_name}({object_name}, {key_arg}, {default_arg});"
+                        )
+                    elif is_standalone:
+                        # Вызов без присваивания (обычно так не делают, но поддержим)
+                        temp_var = self.generate_temporary_var(value_type)
+                        self.add_line(
+                            f"{self.map_type_to_c(value_type)} {temp_var} = get_default_{struct_name}({object_name}, {key_arg}, {default_arg});"
+                        )
+                    else:
+                        # Используется в выражении (например, в print)
+                        return f"get_default_{struct_name}({object_name}, {key_arg}, {default_arg})"
+                else:
+                    self.add_line(f"// get() requires at least a key argument")
+                return
 
             else:
                 self.add_line(f"// Метод словаря '{method_name}' не реализован")
