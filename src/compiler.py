@@ -10,6 +10,7 @@ from src.modules.logger import logger
 
 
 class CCodeGenerator:
+    # Core / Initialization
     def __init__(self):
         self.output = []
         self.indent_level = 0
@@ -100,7 +101,7 @@ class CCodeGenerator:
         self.class_fields.clear()  # Очищаем поля классов
         self.generated_functions.clear()  # Очищаем кэш функций
         self.generated_structures.clear()  # Очищаем кэш структур
-        logger.debug(f"reset: generated_helpers очищен")
+        logger.debug("reset: generated_helpers очищен")
 
     ###############################################################################################
     # INDENT
@@ -281,6 +282,127 @@ class CCodeGenerator:
 
         return False
 
+    def _is_class_type(self, type_name: str) -> bool:
+        """Определяет, является ли тип классом"""
+        if not isinstance(type_name, str):
+            return False
+
+        # Проверяем по зарегистрированным классам
+        if hasattr(self, "class_types") and type_name in self.class_types:
+            return True
+
+        # Проверяем по типу (классы обычно с большой буквы)
+        if type_name and len(type_name) > 0 and type_name[0].isupper():
+            # Проверяем, не является ли это базовым типом или встроенным типом
+            base_types = {"int", "float", "double", "char", "bool", "void", "None"}
+            if type_name not in base_types:
+                return True
+
+        return False
+
+    def _get_current_class(self) -> Optional[str]:
+        """Получает имя текущего класса из контекста"""
+        # Ищем в текущем и родительских scope'ах
+        for i in range(len(self.variable_scopes) - 1, -1, -1):
+            if "class_name" in self.variable_scopes[i]:
+                return self.variable_scopes[i]["class_name"]
+        return None
+
+    def _is_string_expression(self, ast: Dict) -> bool:
+        """Определяет, является ли выражение строкой"""
+        if not ast:
+            return False
+
+        node_type = ast.get("type", "")
+
+        if node_type == "literal":
+            return ast.get("data_type", "") == "str"
+
+        elif node_type == "variable":
+            var_name = ast.get("value", "")
+            var_info = self.get_variable_info(var_name)
+            if var_info:
+                return var_info.get("py_type", "") == "str"
+
+        elif node_type == "binary_operation":
+            left_ast = ast.get("left", {})
+            right_ast = ast.get("right", {})
+            operator = ast.get("operator_symbol", "")
+
+            if operator == "+":
+                return self._is_string_expression(
+                    left_ast
+                ) or self._is_string_expression(right_ast)
+
+        return False
+
+    def _is_none_expression(self, ast: Dict) -> bool:
+        """Проверяет, является ли выражение None"""
+        if not ast:
+            return False
+
+        if ast.get("type") == "literal":
+            return ast.get("data_type") == "None" or ast.get("value") == "None"
+
+        if ast.get("type") == "variable":
+            var_name = ast.get("value", "")
+            var_info = self.get_variable_info(var_name)
+            if var_info:
+                return var_info.get("py_type") == "None"
+
+        return False
+
+    def _extract_dict_types(self, dict_type: str) -> tuple:
+        """Извлекает типы ключа и значения из dict[K, V]"""
+        if not dict_type.startswith("dict[") or not dict_type.endswith("]"):
+            return "int", "int"  # По умолчанию
+
+        # Извлекаем содержимое между скобками
+        inner = dict_type[5:-1].strip()
+
+        # Ищем запятую, которая не находится внутри вложенных скобок
+        depth = 0
+        comma_pos = -1
+
+        for i, char in enumerate(inner):
+            if char == "[":
+                depth += 1
+            elif char == "]":
+                depth -= 1
+            elif char == "," and depth == 0:
+                comma_pos = i
+                break
+
+        if comma_pos == -1:
+            return "int", "int"
+
+        key_type = inner[:comma_pos].strip()
+        value_type = inner[comma_pos + 1 :].strip()
+
+        return key_type, value_type
+
+    def clean_type_name_for_c(self, type_name: str) -> str:
+        """Очищает имя типа для использования в C идентификаторах"""
+        if not isinstance(type_name, str):
+            return "unknown"
+
+        # Удаляем все небуквенно-цифровые символы и заменяем на _
+        cleaned = re.sub(r"[^a-zA-Z0-9]", "_", type_name)
+        # Убираем множественные подчеркивания
+        cleaned = re.sub(r"_+", "_", cleaned)
+        # Убираем подчеркивания в начале и конце
+        cleaned = cleaned.strip("_")
+
+        # Если после очистки строка пустая, используем дефолтное имя
+        if not cleaned:
+            return "unknown"
+
+        # Делаем первую букву строчной для согласованности
+        if cleaned[0].isupper():
+            cleaned = cleaned[0].lower() + cleaned[1:]
+
+        return cleaned
+
     ###############################################################################################
     # VARIABLES
     ###############################################################################################
@@ -338,7 +460,7 @@ class CCodeGenerator:
         return None
 
     ###############################################################################################
-    # GENERATE
+    # Main Generation
     ###############################################################################################
 
     def generate_from_json(self, json_data: List[Dict]) -> str:
@@ -514,81 +636,1269 @@ class CCodeGenerator:
             else:
                 self.add_line(f"{c_type} {var_name};")
 
-    def generate_nested_index_assignment(self, node: Dict):
-        """Генерирует код для многомерного индексного присваивания: A_data[0][0] = 10"""
-        variable = node.get("variable", "")
-        indices = node.get("indices", [])
-        value_ast = node.get("value", {})
-        var_type = node.get("var_type", "")
+    ###############################################################################################
+    # Statements / Control Flow
+    ###############################################################################################
 
-        # Генерируем выражение для значения
-        value_expr = self.generate_expression(value_ast)
+    def generate_break(self, node: Dict):
+        """Генерирует оператор break"""
+        self.add_line("break;")
+        self.add_line("// break statement")
 
-        # Получаем информацию о переменной
-        var_info = self.get_variable_info(variable)
-        if not var_info:
-            self.add_line(f"// ERROR: Variable '{variable}' not found")
-            return
+    def generate_continue(self, node: Dict):
+        """Генерирует оператор continue"""
+        self.add_line("continue;")
+        self.add_line("// continue statement")
 
-        # Определяем тип переменной
-        py_type = var_info.get("py_type", "")
+    def generate_return(self, node: Dict):
+        """Генерирует return с поддержкой кастомных типов"""
+        operations = node.get("operations", [])
 
-        # Проверяем, является ли это вложенным списком
-        if py_type.startswith("list[list["):
-            # Это многомерный массив
-            match = re.match(r"list\[list\[([^\]]+)\]\]", py_type)
-            if not match:
-                self.add_line(f"// ERROR: Invalid nested list type: {py_type}")
+        for op in operations:
+            if op.get("type") == "RETURN":
+                value_ast = op.get("value", {})
+
+                if not value_ast:
+                    self.add_line("return;")
+                    return
+
+                # Определяем тип возвращаемого значения
+                if value_ast.get("type") == "variable":
+                    var_name = value_ast.get("value", "")
+                    var_info = self.get_variable_info(var_name)
+
+                    if var_info:
+                        py_type = var_info.get("py_type", "")
+
+                        # Если возвращаем список или кортеж
+                        if py_type.startswith("list[") or py_type.startswith("tuple["):
+                            # Просто возвращаем указатель
+                            self.add_line(f"return {var_name};")
+                            return
+
+                # Для других случаев генерируем выражение
+                expr = self.generate_expression(value_ast)
+                self.add_line(f"return {expr};")
                 return
 
-            inner_type = match.group(1)  # "int"
+        # Если ничего не нашли
+        self.add_line("return;")
 
-            # Генерируем структуры для обоих уровней
-            outer_struct_name = self.generate_list_struct_name(
-                f"list[list[{inner_type}]]"
+    def generate_while_loop(self, node: Dict):
+        """Генерирует while loop с правильной обработкой структуры JSON"""
+        # В вашем JSON ключ "condition", а не "condition_ast"
+        condition_ast = node.get("condition")
+        if not condition_ast:
+            return
+
+        condition = self.generate_expression(condition_ast)
+
+        self.add_line(f"while ({condition}) {{")
+        self.indent_level += 1
+
+        # Входим в scope цикла
+        self.enter_scope()
+
+        # Генерируем тело цикла из списка body
+        body_nodes = node.get("body", [])
+        for body_node in body_nodes:
+            self.generate_graph_node(body_node)
+
+        # Выходим из scope цикла
+        self.exit_scope()
+
+        self.indent_level -= 1
+        self.add_line("}")
+
+    def generate_if_statement(self, node: Dict):
+        """Генерирует if statement"""
+        condition_ast = node.get("condition_ast")
+        if not condition_ast:
+            return
+
+        condition = self.generate_expression(condition_ast)
+
+        self.add_line(f"if ({condition}) {{")
+        self.indent_level += 1
+
+        # Входим в scope if
+        self.enter_scope()
+
+        # Генерируем тело if
+        for body_node in node.get("body", []):
+            self.generate_graph_node(body_node)
+
+        # Выходим из scope if
+        self.exit_scope()
+
+        self.indent_level -= 1
+        self.add_line("}")
+
+        # elif блоки
+        for elif_block in node.get("elif_blocks", []):
+            elif_condition = self.generate_expression(
+                elif_block.get("condition_ast", {})
             )
-            inner_struct_name = self.generate_list_struct_name(f"list[{inner_type}]")
+            self.add_line(f"else if ({elif_condition}) {{")
+            self.indent_level += 1
 
-            # Убедимся, что структуры сгенерированы
-            self.generate_list_struct(f"list[{inner_type}]")
-            self.generate_list_struct(f"list[list[{inner_type}]]")
+            # Входим в scope elif
+            self.enter_scope()
 
-            # Генерируем индексы
-            if len(indices) == 2:
-                index1_expr = self.generate_expression(indices[0])
-                index2_expr = self.generate_expression(indices[1])
+            # Генерируем тело elif
+            for body_node in elif_block.get("body", []):
+                self.generate_graph_node(body_node)
 
-                # Получаем внутренний список
-                temp_var = f"{variable}_inner_{self.temp_var_counter}"
-                self.temp_var_counter += 1
+            # Выходим из scope elif
+            self.exit_scope()
 
-                self.add_line(
-                    f"// Доступ к элементу {variable}[{index1_expr}][{index2_expr}]"
+            self.indent_level -= 1
+            self.add_line("}")
+
+        # else блок
+        else_block = node.get("else_block")
+        if else_block:
+            self.add_line("else {")
+            self.indent_level += 1
+
+            # Входим в scope else
+            self.enter_scope()
+
+            # Генерируем тело else
+            for body_node in else_block.get("body", []):
+                self.generate_graph_node(body_node)
+
+            # Выходим из scope else
+            self.exit_scope()
+
+            self.indent_level -= 1
+            self.add_line("}")
+
+    def generate_for_loop(self, node: Dict):
+        """Генерирует for loop"""
+        loop_var = node.get("loop_variable", "i")
+        iterable = node.get("iterable", {})
+
+        if iterable.get("type") == "RANGE_CALL":
+            args = iterable.get("arguments", {})
+            start = args.get("start", "0")
+            stop = args.get("stop", "10")
+            step = args.get("step", "1")
+
+            # Объявляем переменную цикла
+            self.declare_variable(loop_var, "int")
+
+            self.add_line(
+                f"for (int {loop_var} = {start}; {loop_var} < {stop}; {loop_var} += {step}) {{"
+            )
+            self.indent_level += 1
+
+            # Входим в scope цикла
+            self.enter_scope()
+
+            # Генерируем тело цикла
+            for body_node in node.get("body", []):
+                self.generate_graph_node(body_node)
+
+            # Выходим из scope цикла
+            self.exit_scope()
+
+            self.indent_level -= 1
+            self.add_line("}")
+
+    def generate_attribute_assignment(self, node: Dict):
+        """Генерирует присваивание атрибуту объекта (self.attr = value)"""
+        object_name = node.get("object", "")
+        attribute = node.get("attribute", "")
+        value_ast = node.get("value", {})
+
+        logger.debug(
+            f"generate_attribute_assignment: {object_name}.{attribute} = {value_ast}"
+        )
+
+        # Если это self внутри метода класса
+        if object_name == "self":
+            # Находим текущий класс
+            current_class = self._get_current_class()
+
+            if current_class:
+                # Генерируем выражение для значения
+                value_expr = self.generate_expression(value_ast)
+
+                # Добавляем присваивание
+                self.add_line(f"self->{attribute} = {value_expr};")
+                return
+
+        # Если это другой объект
+        var_info = self.get_variable_info(object_name)
+        if var_info:
+            obj_type = var_info.get("py_type", "")
+            if self._is_class_type(obj_type):
+                # Это объект класса
+                value_expr = self.generate_expression(value_ast)
+                self.add_line(f"{object_name}->{attribute} = {value_expr};")
+                return
+
+        # Fallback
+        value_expr = self.generate_expression(value_ast)
+        self.add_line(f"{object_name}.{attribute} = {value_expr};")
+
+    def generate_assignment(self, node: Dict):
+        """Генерирует присваивание с поддержкой строковых операций"""
+        symbols = node.get("symbols", [])
+        if not symbols:
+            return
+
+        target = symbols[0]
+        expression_ast = node.get("expression_ast")
+
+        if expression_ast:
+            expression_ast["target"] = target
+
+            # Проверяем, является ли это строковой операцией
+            if expression_ast.get("type") == "binary_operation":
+                operator = expression_ast.get("operator_symbol", "")
+                left_ast = expression_ast.get("left", {})
+                right_ast = expression_ast.get("right", {})
+
+                left_is_string = self._is_string_expression(left_ast)
+                right_is_string = self._is_string_expression(right_ast)
+
+                if operator == "+" and (left_is_string or right_is_string):
+                    # Генерируем конкатенацию строк
+                    left_expr = self.generate_expression(left_ast)
+                    right_expr = self.generate_expression(right_ast)
+
+                    # Освобождаем старую память, если переменная уже была инициализирована
+                    var_info = self.get_variable_info(target)
+                    if var_info and var_info.get("py_type") == "str":
+                        self.add_line(f"if ({target}) {{")
+                        self.indent_level += 1
+                        self.add_line(f"free({target});")
+                        self.indent_level -= 1
+                        self.add_line(f"}}")
+
+                    self.add_line(
+                        f"{target} = malloc(strlen({left_expr}) + strlen({right_expr}) + 1);"
+                    )
+                    self.add_line(f"if (!{target}) {{")
+                    self.indent_level += 1
+                    self.add_line(
+                        f'fprintf(stderr, "Memory allocation failed for string concatenation\\n");'
+                    )
+                    self.add_line(f"exit(1);")
+                    self.indent_level -= 1
+                    self.add_line(f"}}")
+                    self.add_line(f"strcpy({target}, {left_expr});")
+                    self.add_line(f"strcat({target}, {right_expr});")
+                    return
+
+            # Обычное присваивание
+            expr = self.generate_expression(expression_ast)
+
+            # Для строковых литералов при присваивании
+            if (
+                expression_ast.get("type") == "literal"
+                and expression_ast.get("data_type") == "str"
+            ):
+                var_info = self.get_variable_info(target)
+                if var_info and var_info.get("py_type") == "str":
+                    self.add_line(f"if ({target}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"free({target});")
+                    self.indent_level -= 1
+                    self.add_line("}}")
+                    self.add_line(f"{target} = malloc(strlen({expr}) + 1);")
+                    self.add_line(f"strcpy({target}, {expr});")
+                    return
+
+            if expr is not None:
+                self.add_line(f"{target} = {expr};")
+
+    def generate_declaration(self, node: Dict):
+        """Генерирует объявление переменной с поддержкой повторных объявлений"""
+        var_name = node.get("var_name", "")
+        var_type = node.get("var_type", "")
+        expression_ast = node.get("expression_ast", {})
+
+        logger.debug(f"Генерация объявления для {var_name}: {var_type}")
+
+        if var_type.startswith("dict["):
+            self._generate_dict_declaration(var_name, var_type, expression_ast, node)
+            return
+
+        # Проверяем, объявлена ли уже переменная
+        var_info = self.get_variable_info(var_name)
+        is_redeclaration = var_info is not None and not var_info.get(
+            "is_deleted", False
+        )
+
+        if is_redeclaration:
+            logger.debug(f"Переменная '{var_name}' уже объявлена, переобъявляем")
+
+            # Освобождаем старую память
+            old_py_type = var_info.get("py_type", "")
+            if old_py_type.startswith("list["):
+                struct_name = self.generate_list_struct_name(old_py_type)
+                self.add_line(f"if ({var_name}) {{")
+                self.indent_level += 1
+                self.add_line(f"free_{struct_name}({var_name});")
+                self.indent_level -= 1
+                self.add_line("}")
+            elif old_py_type == "str":
+                self.add_line(f"if ({var_name}) {{")
+                self.indent_level += 1
+                self.add_line(f"free({var_name});")
+                self.indent_level -= 1
+                self.add_line("}")
+
+        # Объявляем/обновляем переменную
+        self.declare_variable(var_name, var_type)
+        var_info = self.get_variable_info(var_name)
+
+        if not var_info:
+            return
+
+        c_type = var_info["c_type"]
+
+        # Проверяем, является ли выражение вызовом builtin функции
+        if expression_ast and expression_ast.get("type") == "function_call":
+            func_name = expression_ast.get("function", "")
+
+            # Специальная обработка для builtin функций
+            if func_name in ["str", "int", "float", "bool", "len"]:
+                self._generate_builtin_declaration(
+                    var_name, c_type, expression_ast, is_redeclaration
                 )
-                self.add_line(
-                    f"{inner_struct_name}* {temp_var} = get_{outer_struct_name}({variable}, {index1_expr});"
-                )
+                return
 
-                # Устанавливаем значение во внутреннем списке
+        # Обработка list[int] с литералом
+        if expression_ast.get("type") == "list_literal" and var_type.startswith(
+            "list["
+        ):
+            items = expression_ast.get("items", [])
+
+            if is_redeclaration:
+                # Для повторного объявления используем присваивание
+                struct_name = self.generate_list_struct_name(var_type)
                 self.add_line(
-                    f"set_{inner_struct_name}({temp_var}, {index2_expr}, {value_expr});"
+                    f"{var_name} = create_{struct_name}({max(len(items), INITIAL_LIST_CAPACITY)});"
                 )
             else:
-                self.add_line(f"// ERROR: Unsupported nesting depth {len(indices)}")
-        elif py_type.startswith("list["):
-            # Это одномерный список (но с вложенной индексацией - ошибка)
-            if len(indices) == 1:
-                # Это фактически обычное индексное присваивание
-                index_expr = self.generate_expression(indices[0])
-                struct_name = self.generate_list_struct_name(py_type)
+                # Для первого объявления генерируем объявление с инициализацией
+                struct_name = self.generate_list_struct_name(var_type)
                 self.add_line(
-                    f"set_{struct_name}({variable}, {index_expr}, {value_expr});"
+                    f"{c_type} {var_name} = create_{struct_name}({max(len(items), INITIAL_LIST_CAPACITY)});"
                 )
+
+            # Добавляем элементы
+            for item_ast in items:
+                item_expr = self.generate_expression(item_ast)
+                self.add_line(f"append_{struct_name}({var_name}, {item_expr});")
+
+            return
+
+        # Обычная инициализация
+        if expression_ast:
+            expr = self.generate_expression(expression_ast)
+
+            if is_redeclaration:
+                # Повторное объявление = присваивание
+                self.add_line(f"{var_name} = {expr};")
             else:
-                self.add_line(f"// ERROR: Too many indices for type {py_type}")
+                # Первое объявление
+                self.add_line(f"{c_type} {var_name} = {expr};")
         else:
-            # Неизвестный тип
-            self.add_line(f"// ERROR: Cannot assign to nested index of type {py_type}")
+            # Объявление без инициализации
+            if not is_redeclaration:
+                if c_type.endswith("*"):
+                    self.add_line(f"{c_type} {var_name} = NULL;")
+                else:
+                    self.add_line(f"{c_type} {var_name};")
+
+    def generate_redeclaration(self, node: Dict):
+        """Генерирует код для повторного объявления переменной"""
+        var_name = node.get("var_name", "")
+        var_type = node.get("var_type", "")
+        expression_ast = node.get("expression_ast", {})
+
+        logger.debug(f"generate_redeclaration: {var_name}: {var_type}")
+
+        # Получаем информацию о старой переменной
+        old_var_info = self.get_variable_info(var_name)
+
+        # Освобождаем старую память если нужно
+        if old_var_info:
+            old_py_type = old_var_info.get("py_type", "")
+
+            if old_py_type.startswith("list["):
+                struct_name = self.generate_list_struct_name(old_py_type)
+                self.add_line(f"if ({var_name}) {{")
+                self.indent_level += 1
+                self.add_line(f"free_{struct_name}({var_name});")
+                self.indent_level -= 1
+                self.add_line("}")
+            elif old_py_type.startswith("tuple["):
+                struct_name = self.generate_tuple_struct_name(old_py_type)
+                self.add_line(f"free_{struct_name}({var_name});")
+            elif old_py_type == "str":
+                self.add_line(f"if ({var_name}) {{")
+                self.indent_level += 1
+                self.add_line(f"free({var_name});")
+                self.indent_level -= 1
+                self.add_line("}")
+
+        # Обновляем переменную в scope
+        self.declare_variable(var_name, var_type)
+
+        # Генерируем код для нового значения
+        if expression_ast:
+            if (
+                var_type.startswith("list[")
+                and expression_ast.get("type") == "list_literal"
+            ):
+                # Генерируем код для нового списка
+                self._generate_list_redeclaration(var_name, var_type, expression_ast)
+            elif (
+                var_type.startswith("tuple[")
+                and expression_ast.get("type") == "tuple_literal"
+            ):
+                # Генерируем код для нового кортежа
+                self._generate_tuple_redeclaration(var_name, var_type, expression_ast)
+            else:
+                # Обычное присваивание
+                expr = self.generate_expression(expression_ast)
+                self.add_line(f"{var_name} = {expr};")
+
+    def generate_delete(self, node: Dict):
+        """Генерирует код для del с поддержкой tuple и list"""
+        symbols = node.get("symbols", [])
+
+        for target in symbols:
+            self.mark_variable_deleted(target, "full")
+            var_info = self.get_variable_info(target)
+
+            if not var_info:
+                self.add_line(f"// ERROR: Переменная '{target}' не найдена для del")
+                continue
+
+            self.add_line(f"// del {target}")
+
+            py_type = var_info.get("py_type", "")
+            c_type = var_info.get("c_type", "")
+
+            if py_type.startswith("dict["):
+                # Для словаря вызываем функцию очистки
+                # Извлекаем типы ключа и значения для имени структуры
+                key_type, value_type = self._extract_dict_types(py_type)
+                key_name = self.clean_type_name_for_c(key_type)
+                value_name = self.clean_type_name_for_c(value_type)
+                struct_name = f"dict_{key_name}_{value_name}"
+
+                self.add_line(f"if ({target}) {{")
+                self.indent_level += 1
+                self.add_line(f"free_{struct_name}({target});")
+                self.indent_level -= 1
+                self.add_line("}")
+                self.add_line(f"{target} = NULL;")
+            elif py_type.startswith("list["):
+                # Для list вызываем функцию очистки
+                struct_name = self.generate_list_struct_name(py_type)
+                self.add_line(f"if ({target}) {{")
+                self.indent_level += 1
+                self.add_line(f"free_{struct_name}({target});")
+                self.indent_level -= 1
+                self.add_line("}")
+                self.add_line(f"{target} = NULL;")
+
+            elif py_type.startswith("tuple["):
+                # Для tuple вызываем функцию очистки
+                struct_name = self.generate_tuple_struct_name(py_type)
+                self.add_line(f"free_{struct_name}(&{target});")
+
+            elif var_info["is_pointer"]:
+                self.add_line(f"if ({target} != NULL) {{")
+                self.indent_level += 1
+                self.add_line(f"free({target});")
+                self.indent_level -= 1
+                self.add_line("}")
+                self.add_line(f"{target} = NULL;")
+            else:
+                if c_type in ["int", "float", "double", "long"]:
+                    self.add_line(f"{target} = 0;")
+                elif c_type == "bool":
+                    self.add_line(f"{target} = false;")
+                elif "char*" in c_type or c_type.endswith("*"):
+                    self.add_line(f"{target} = NULL;")
+                else:
+                    self.add_line(f"// {target} обнулена")
+
+    ###############################################################################################
+    # Function & Method Calls
+    ###############################################################################################
+
+    def generate_function_call(self, node: Dict):
+        """Генерирует вызов функции"""
+        func_name = node.get("function", "")
+        args = node.get("arguments", [])
+
+        # Удаляем @ из имени функции для C кода
+        if func_name.startswith("@"):
+            func_name = func_name[1:]
+
+        # Генерируем аргументы
+        arg_strings = []
+        for arg in args:
+            if isinstance(arg, dict):
+                arg_strings.append(self.generate_expression(arg))
+            else:
+                if str(arg) == "None":
+                    arg_strings.append("NULL")
+                else:
+                    arg_strings.append(str(arg))
+
+        args_str = ", ".join(arg_strings)
+        self.add_line(f"{func_name}({args_str});")
+
+    def generate_method_call(self, node: Dict):
+        """Генерирует вызов метода объекта"""
+        object_name = node.get("object", "")
+        method_name = node.get("method", "")
+        args = node.get("arguments", [])
+        is_standalone = node.get("is_standalone", False)  # Новое поле из парсера
+        # Добавляем получение целевой переменной для присваивания
+        target_var = node.get("target", "")  # Добавьте эту строку
+
+        # Проверяем тип объекта
+        var_info = self.get_variable_info(object_name)
+        if not var_info:
+            self.add_line(f"// ERROR: Объект '{object_name}' не найден")
+            return
+
+        obj_type = var_info.get("py_type", "")
+
+        # Генерируем аргументы
+        arg_strings = []
+        for arg in args:
+            if isinstance(arg, dict):
+                arg_strings.append(self.generate_expression(arg))
+            else:
+                arg_strings.append(str(arg))
+
+        args_str = ", ".join(arg_strings) if arg_strings else ""
+
+        if self._is_class_type(obj_type):
+            # Это класс - используем формат ClassName_methodName
+            # Первым аргументом идет указатель на объект (self)
+            full_args = f"{object_name}"
+            if args_str:
+                full_args = f"{object_name}, {args_str}"
+
+            # Если это standalone вызов (statement)
+            if is_standalone:
+                self.add_line(f"{obj_type}_{method_name}({full_args});")
+            else:
+                # Если это выражение (возвращаем результат)
+                return f"{obj_type}_{method_name}({full_args})"
+
+        # Для атрибутов объектов (self.attribute)
+        elif object_name == "self":
+            # self.get(i, j) должно стать Matrix_get(self, i, j)
+            # Получаем класс из текущего scope
+            current_scope = None
+            for scope in reversed(self.variable_scopes):
+                if "class_name" in scope:
+                    current_scope = scope
+                    break
+
+            if current_scope:
+                class_name = current_scope.get("class_name", "")
+                full_args = f"self"
+                if args_str:
+                    full_args = f"self, {args_str}"
+
+                if is_standalone:
+                    self.add_line(f"{class_name}_{method_name}({full_args});")
+                else:
+                    return f"{class_name}_{method_name}({full_args})"
+        # Обработка методов для списков
+        # Обработка методов для строк
+        elif obj_type == "str":
+            if method_name == "upper":
+                if is_standalone:
+                    # Для a.upper() как standalone - результат должен быть присвоен обратно в a
+                    self.add_line("// upper")
+                    temp_var = self.generate_temporary_var("str")
+                    self.add_line(f"char* {temp_var} = string_upper({object_name});")
+                    # Освобождаем старую строку
+                    self.add_line(f"if ({object_name}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"free({object_name});")
+                    self.indent_level -= 1
+                    self.add_line(f"}}")
+                    # Присваиваем новую строку
+                    self.add_line(f"{object_name} = {temp_var};")
+                else:
+                    # Для upper() внутри выражения
+                    return f"string_upper({object_name})"
+
+            elif method_name == "lower":
+                if is_standalone:
+                    self.add_line("// lower")
+                    # Для a.lower() как standalone
+                    temp_var = self.generate_temporary_var("str")
+                    self.add_line(f"char* {temp_var} = string_lower({object_name});")
+                    # Освобождаем старую строку
+                    self.add_line(f"if ({object_name}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"free({object_name});")
+                    self.indent_level -= 1
+                    self.add_line(f"}}")
+                    # Присваиваем новую строку
+                    self.add_line(f"{object_name} = {temp_var};")
+                else:
+                    # Для lower() внутри выражения
+                    return f"string_lower({object_name})"
+
+            elif method_name == "capitalize":
+                if is_standalone:
+                    self.add_line("// capitalize")
+
+                    # Для a.capitalize() как standalone
+                    temp_var = self.generate_temporary_var("str")
+                    self.add_line(
+                        f"char* {temp_var} = string_capitalize({object_name});"
+                    )
+                    # Освобождаем старую строку
+                    self.add_line(f"if ({object_name}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"free({object_name});")
+                    self.indent_level -= 1
+                    self.add_line(f"}}")
+                    # Присваиваем новую строку
+                    self.add_line(f"{object_name} = {temp_var};")
+                else:
+                    # Для capitalize() внутри выражения
+                    return f"string_capitalize({object_name})"
+
+            elif method_name == "title":
+                if is_standalone:
+                    self.add_line("// title")
+
+                    # Для a.title() как standalone
+                    temp_var = self.generate_temporary_var("str")
+                    self.add_line(f"char* {temp_var} = string_title({object_name});")
+                    # Освобождаем старую строку
+                    self.add_line(f"if ({object_name}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"free({object_name});")
+                    self.indent_level -= 1
+                    self.add_line(f"}}")
+                    # Присваиваем новую строку
+                    self.add_line(f"{object_name} = {temp_var};")
+                else:
+                    # Для title() внутри выражения
+                    return f"string_title({object_name})"
+
+            elif method_name == "strip":
+                if is_standalone:
+                    self.add_line("// strip")
+
+                    # Для a.strip() как standalone
+                    temp_var = self.generate_temporary_var("str")
+                    self.add_line(f"char* {temp_var} = string_strip({object_name});")
+                    # Освобождаем старую строку
+                    self.add_line(f"if ({object_name}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"free({object_name});")
+                    self.indent_level -= 1
+                    self.add_line(f"}}")
+                    # Присваиваем новую строку
+                    self.add_line(f"{object_name} = {temp_var};")
+                else:
+                    # Для strip() внутри выражения
+                    return f"string_strip({object_name})"
+
+            elif method_name == "lstrip":
+                if is_standalone:
+                    self.add_line("// lstrip")
+
+                    # Для a.lstrip() как standalone
+                    temp_var = self.generate_temporary_var("str")
+                    self.add_line(f"char* {temp_var} = string_lstrip({object_name});")
+                    # Освобождаем старую строку
+                    self.add_line(f"if ({object_name}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"free({object_name});")
+                    self.indent_level -= 1
+                    self.add_line(f"}}")
+                    # Присваиваем новую строку
+                    self.add_line(f"{object_name} = {temp_var};")
+                else:
+                    # Для lstrip() внутри выражения
+                    return f"string_lstrip({object_name})"
+
+            elif method_name == "rstrip":
+                if is_standalone:
+                    self.add_line("// rstrip")
+
+                    # Для a.rstrip() как standalone
+                    temp_var = self.generate_temporary_var("str")
+                    self.add_line(f"char* {temp_var} = string_rstrip({object_name});")
+                    # Освобождаем старую строку
+                    self.add_line(f"if ({object_name}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"free({object_name});")
+                    self.indent_level -= 1
+                    self.add_line(f"}}")
+                    # Присваиваем новую строку
+                    self.add_line(f"{object_name} = {temp_var};")
+                else:
+                    # Для rstrip() внутри выражения
+                    return f"string_rstrip({object_name})"
+
+            elif method_name == "format":
+                if is_standalone:
+                    self.add_line("// format")
+
+                    # Для a.format("world") как standalone - результат должен быть присвоен обратно в a
+                    temp_var = self.generate_temporary_var("str")
+                    self.add_line(
+                        f"char* {temp_var} = string_format({object_name}, {args_str});"
+                    )
+                    # Освобождаем старую строку
+                    self.add_line(f"if ({object_name}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"free({object_name});")
+                    self.indent_level -= 1
+                    self.add_line(f"}}")
+                    # Присваиваем новую строку
+                    self.add_line(f"{object_name} = {temp_var};")
+                else:
+                    # Для format() внутри выражения
+                    return f"string_format({object_name}, {args_str})"
+
+            elif method_name == "split":
+                # Определяем разделитель
+                if len(arg_strings) > 0:
+                    delimiter = arg_strings[0]
+                else:
+                    delimiter = '" "'  # По умолчанию пробел
+
+                if is_standalone:
+                    # Для a.split() как standalone - результат игнорируется
+                    temp_var = self.generate_temporary_var("str_list")
+                    self.add_line(
+                        f"string_list* {temp_var} = string_split({object_name}, {delimiter});"
+                    )
+                    self.add_line(f"// Результат split() игнорируется")
+                else:
+                    # Для split() внутри выражения - возвращаем результат
+                    return f"string_split({object_name}, {delimiter})"
+
+            elif method_name == "replace":
+                # replace(old, new) - заменяет все вхождения подстроки
+                if len(arg_strings) >= 2:
+                    old = arg_strings[0]
+                    new = arg_strings[1]
+
+                    if is_standalone:
+                        self.add_line("// replace")
+                        temp_var = self.generate_temporary_var("str")
+                        self.add_line(
+                            f"char* {temp_var} = string_replace({object_name}, {old}, {new});"
+                        )
+                        # Освобождаем старую строку
+                        self.add_line(f"if ({object_name}) {{")
+                        self.indent_level += 1
+                        self.add_line(f"free({object_name});")
+                        self.indent_level -= 1
+                        self.add_line(f"}}")
+                        # Присваиваем новую строку
+                        self.add_line(f"{object_name} = {temp_var};")
+                    else:
+                        if target_var:
+                            self.add_line(
+                                f"{target_var} = string_replace({object_name}, {old}, {new});"
+                            )
+                        else:
+                            return f"string_replace({object_name}, {old}, {new})"
+                else:
+                    self.add_line(f"// replace() requires 2 arguments")
+
+        elif obj_type.startswith("list["):
+            if method_name == "append":
+                if args_str:
+                    struct_name = self.generate_list_struct_name(obj_type)
+                    self.add_line(f"append_{struct_name}({object_name}, {args_str});")
+
+            elif method_name == "extend":
+                if args_str:
+                    # args[0] должен быть другим списком
+                    struct_name = self.generate_list_struct_name(obj_type)
+                    other_list = arg_strings[0]
+                    self.add_line(f"// extend: добавление элементов из другого списка")
+                    self.add_line(f"for (int i = 0; i < {other_list}->size; i++) {{")
+                    self.indent_level += 1
+                    self.add_line(
+                        f"append_{struct_name}({object_name}, {other_list}->data[i]);"
+                    )
+                    self.indent_level -= 1
+                    self.add_line("}")
+
+            elif method_name == "insert":
+                if len(arg_strings) >= 2:
+                    index_var = arg_strings[0]
+                    value_var = arg_strings[1]
+                    struct_name = self.generate_list_struct_name(obj_type)
+                    self.add_line(
+                        f"if ({index_var} >= 0 && {index_var} <= {object_name}->size) {{"
+                    )
+                    self.indent_level += 1
+                    self.add_line(
+                        f"if ({object_name}->size >= {object_name}->capacity) {{"
+                    )
+                    self.indent_level += 1
+                    self.add_line(
+                        f"{object_name}->capacity = {object_name}->capacity == 0 ? {INITIAL_LIST_CAPACITY} : {object_name}->capacity * 2;"
+                    )
+                    self.add_line(
+                        f"{object_name}->data = realloc({object_name}->data, {object_name}->capacity * sizeof(int));"
+                    )
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    self.add_line(
+                        f"for (int i = {object_name}->size; i > {index_var}; i--) {{"
+                    )
+                    self.indent_level += 1
+                    self.add_line(
+                        f"{object_name}->data[i] = {object_name}->data[i - 1];"
+                    )
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    self.add_line(f"{object_name}->data[{index_var}] = {value_var};")
+                    self.add_line(f"{object_name}->size++;")
+                    self.indent_level -= 1
+                    self.add_line("}")
+
+            elif method_name == "remove":
+                if args_str:
+                    value_var = arg_strings[0]
+                    self.add_line(f"// remove первый элемент со значением {value_var}")
+                    self.add_line(f"int found_index = -1;")
+                    self.add_line(f"for (int i = 0; i < {object_name}->size; i++) {{")
+                    self.indent_level += 1
+                    self.add_line(f"if ({object_name}->data[i] == {value_var}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"found_index = i;")
+                    self.add_line(f"break;")
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    self.add_line(f"if (found_index != -1) {{")
+                    self.indent_level += 1
+                    self.add_line(
+                        f"for (int i = found_index; i < {object_name}->size - 1; i++) {{"
+                    )
+                    self.indent_level += 1
+                    self.add_line(
+                        f"{object_name}->data[i] = {object_name}->data[i + 1];"
+                    )
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    self.add_line(f"{object_name}->size--;")
+                    self.indent_level -= 1
+                    self.add_line("}")
+
+            elif method_name == "pop":
+                # Проверяем, есть ли присваивание результата
+                # Если is_standalone == False, значит результат используется (в выражении или присваивании)
+                if not args_str:
+                    # pop() без аргументов - удалить последний
+                    self.add_line(f"if ({object_name} && {object_name}->size > 0) {{")
+                    self.indent_level += 1
+
+                    # Получаем удаляемое значение
+                    temp_var = self.generate_temporary_var("int")
+                    self.add_line(
+                        f"int {temp_var} = {object_name}->data[{object_name}->size - 1];"
+                    )
+
+                    # Уменьшаем размер
+                    self.add_line(f"{object_name}->size--;")
+
+                    # Если результат используется (не standalone), присваиваем его
+                    if not is_standalone:
+                        if target_var:
+                            self.add_line(f"{target_var} = {temp_var};")
+                        else:
+                            self.add_line(
+                                f"// Результат pop() используется, но не присвоен"
+                            )
+
+                    self.indent_level -= 1
+                    self.add_line("} else {")
+                    self.indent_level += 1
+                    self.add_line(
+                        f'fprintf(stderr, "IndexError: pop from empty list\\n");'
+                    )
+                    self.add_line(f"exit(1);")
+                    self.indent_level -= 1
+                    self.add_line("}")
+                else:
+                    # pop(index) - удалить по индексу
+                    index_var = arg_strings[0]
+                    self.add_line(
+                        f"if ({object_name} && {index_var} >= 0 && {index_var} < {object_name}->size) {{"
+                    )
+                    self.indent_level += 1
+
+                    # Получаем удаляемое значение
+                    temp_var = self.generate_temporary_var("int")
+                    self.add_line(f"int {temp_var} = {object_name}->data[{index_var}];")
+
+                    # Сдвигаем элементы
+                    self.add_line(
+                        f"for (int i = {index_var}; i < {object_name}->size - 1; i++) {{"
+                    )
+                    self.indent_level += 1
+                    self.add_line(
+                        f"{object_name}->data[i] = {object_name}->data[i + 1];"
+                    )
+                    self.indent_level -= 1
+                    self.add_line("}")
+
+                    # Уменьшаем размер
+                    self.add_line(f"{object_name}->size--;")
+
+                    # Если результат используется (не standalone), присваиваем его
+                    if not is_standalone:
+                        if target_var:
+                            self.add_line(f"{target_var} = {temp_var};")
+                        else:
+                            self.add_line(
+                                f"// Результат pop() используется, но не присвоен"
+                            )
+
+                    self.indent_level -= 1
+                    self.add_line("} else {")
+                    self.indent_level += 1
+                    self.add_line(
+                        f'fprintf(stderr, "IndexError: pop index out of range\\n");'
+                    )
+                    self.add_line(f"exit(1);")
+                    self.indent_level -= 1
+                    self.add_line("}")
+
+            elif method_name == "clear":
+                self.add_line(f"{object_name}->size = 0;")
+
+            elif method_name == "index":
+                if args_str:
+                    value_var = arg_strings[0]
+                    temp_var = self.generate_temporary_var("int")
+                    self.add_line(f"int {temp_var} = -1;")
+                    self.add_line(f"for (int i = 0; i < {object_name}->size; i++) {{")
+                    self.indent_level += 1
+                    self.add_line(f"if ({object_name}->data[i] == {value_var}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"{temp_var} = i;")
+                    self.add_line(f"break;")
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    # TODO: Проверить на -1 и выдать ошибку как в Python
+
+            elif method_name == "count":
+                if args_str:
+                    value_var = arg_strings[0]
+                    temp_var = self.generate_temporary_var("int")
+                    self.add_line(f"int {temp_var} = 0;")
+                    self.add_line(f"for (int i = 0; i < {object_name}->size; i++) {{")
+                    self.indent_level += 1
+                    self.add_line(f"if ({object_name}->data[i] == {value_var}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"{temp_var}++;")
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    self.indent_level -= 1
+                    self.add_line("}")
+
+            elif method_name == "sort":
+                # Используем qsort для эффективности
+                # Определяем тип элементов списка
+                match = re.match(r"list\[([^\]]+)\]", obj_type)
+                element_type = match.group(1) if match else "int"
+                c_element_type = self.map_type_to_c(element_type)
+
+                # Выбираем соответствующую функцию сравнения
+                if element_type == "int":
+                    compare_func = "compare_int"
+                elif element_type == "float":
+                    compare_func = "compare_float"
+                elif element_type == "double":
+                    compare_func = "compare_double"
+                elif element_type == "str":
+                    compare_func = "compare_string"
+                else:
+                    # По умолчанию для неизвестных типов
+                    compare_func = "compare_int"
+
+                self.add_line(
+                    f"qsort({object_name}->data, {object_name}->size, sizeof({c_element_type}), {compare_func});"
+                )
+
+            elif method_name == "reverse":
+                self.add_line(f"for (int i = 0; i < {object_name}->size / 2; i++) {{")
+                self.indent_level += 1
+                self.add_line(f"int temp = {object_name}->data[i];")
+                self.add_line(
+                    f"{object_name}->data[i] = {object_name}->data[{object_name}->size - i - 1];"
+                )
+                self.add_line(
+                    f"{object_name}->data[{object_name}->size - i - 1] = temp;"
+                )
+                self.indent_level -= 1
+                self.add_line("}")
+
+            else:
+                self.add_line(f"// Метод списка '{method_name}' не реализован")
+
+        # Обработка методов для кортежей
+        elif obj_type.startswith("tuple["):
+            if method_name == "count":
+                if args_str:
+                    struct_name = self.generate_tuple_struct_name(obj_type)
+                    self.add_line(f"// count в кортеже")
+                    temp_var = self.generate_temporary_var("int")
+                    self.add_line(f"int {temp_var} = 0;")
+                    self.add_line(f"for (int i = 0; i < {object_name}.size; i++) {{")
+                    self.indent_level += 1
+                    self.add_line(f"if ({object_name}.data[i] == {args_str}) {{")
+                    self.indent_level += 1
+                    self.add_line(f"{temp_var}++;")
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    # Возвращаем значение
+                    # Но в вашем коде нет присваивания результата, так что просто вычисляем
+
+            elif method_name == "index":
+                if args_str:
+                    struct_name = self.generate_tuple_struct_name(obj_type)
+                    self.add_line(f"// index в кортеже")
+                    temp_var = self.generate_temporary_var("int")
+                    self.add_line(f"int {temp_var} = -1;")
+                    self.add_line(f"for (int i = 0; i < {object_name}.size; i++) {{")
+                    self.indent_level += 1
+                    self.add_line(
+                        f"if ({object_name}.data[i] == {args_str} && {temp_var} == -1) {{"
+                    )
+                    self.indent_level += 1
+                    self.add_line(f"{temp_var} = i;")
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    self.indent_level -= 1
+                    self.add_line("}")
+                    # Возвращаем значение
+                    # Но в вашем коде нет присваивания результата
+
+            else:
+                self.add_line(f"// Метод '{method_name}' для кортежа не реализован")
+
+        # Обработка методов для словарей
+        elif obj_type.startswith("dict["):
+            # Извлекаем типы ключа и значения
+            key_type, value_type = self._extract_dict_types(obj_type)
+            key_name = self.clean_type_name_for_c(key_type)
+            value_name = self.clean_type_name_for_c(value_type)
+            struct_name = f"dict_{key_name}_{value_name}"
+
+            if method_name == "keys":
+                # keys() - возвращает список ключей
+                list_struct = f"list_{key_name}"
+
+                if target_var:
+                    self.add_line(
+                        f"{list_struct}* {target_var} = keys_{struct_name}({object_name});"
+                    )
+                elif is_standalone:
+                    # Если вызов без присваивания, создаем временную переменную и освобождаем
+                    temp_var = self.generate_temporary_var(list_struct)
+                    self.add_line(
+                        f"{list_struct}* {temp_var} = keys_{struct_name}({object_name});"
+                    )
+                    self.add_line(f"free_{list_struct}({temp_var});")
+                else:
+                    # Если используется в выражении, возвращаем вызов функции
+                    return f"keys_{struct_name}({object_name})"
+
+            elif method_name == "values":
+                # values() - возвращает список значений
+                list_struct = f"list_{value_name}"
+
+                if target_var:
+                    self.add_line(
+                        f"{list_struct}* {target_var} = values_{struct_name}({object_name});"
+                    )
+                elif is_standalone:
+                    temp_var = self.generate_temporary_var(list_struct)
+                    self.add_line(
+                        f"{list_struct}* {temp_var} = values_{struct_name}({object_name});"
+                    )
+                    self.add_line(f"free_{list_struct}({temp_var});")
+                else:
+                    return f"values_{struct_name}({object_name})"
+
+            elif method_name == "items":
+                # items() - возвращает список пар (ключ, значение)
+                # Для этого нужно создать структуру для пары
+                pair_struct = f"{struct_name}_pair"
+                list_pair_struct = f"list_{key_name}_{value_name}_pair"
+
+                # Создаем структуру для списка пар, если еще не создана
+                if list_pair_struct not in self.generated_structures:
+                    # Здесь нужно сгенерировать структуру для списка пар
+                    pass
+
+                # TODO: реализовать items()
+                self.add_line(f"// items() method not fully implemented yet")
+
+            elif method_name == "get":
+                # get(key, default_value)
+                if len(arg_strings) >= 1:
+                    key_arg = arg_strings[0]
+
+                    # Определяем значение по умолчанию
+                    if len(arg_strings) >= 2:
+                        default_arg = arg_strings[1]
+                    else:
+                        # Если default не указан, используем 0, NULL или false в зависимости от типа
+                        if value_type == "int":
+                            default_arg = "0"
+                        elif value_type == "float" or value_type == "double":
+                            default_arg = "0.0"
+                        elif value_type == "bool":
+                            default_arg = "false"
+                        elif value_type == "str" or value_type == "char*":
+                            default_arg = "NULL"
+                        else:
+                            default_arg = "0"
+
+                    if target_var:
+                        # Присваивание результата переменной
+                        self.add_line(
+                            f"{target_var} = get_default_{struct_name}({object_name}, {key_arg}, {default_arg});"
+                        )
+                    elif is_standalone:
+                        # Вызов без присваивания (обычно так не делают, но поддержим)
+                        temp_var = self.generate_temporary_var(value_type)
+                        self.add_line(
+                            f"{self.map_type_to_c(value_type)} {temp_var} = get_default_{struct_name}({object_name}, {key_arg}, {default_arg});"
+                        )
+                    else:
+                        # Используется в выражении (например, в print)
+                        return f"get_default_{struct_name}({object_name}, {key_arg}, {default_arg})"
+                else:
+                    self.add_line("// get() requires at least a key argument")
+                return
+
+            else:
+                self.add_line(f"// Метод словаря '{method_name}' не реализован")
+
+            return
+
+    def generate_object_method_call(self, node: Dict):
+        """Генерирует вызов метода объекта (obj.method())"""
+        object_name = node.get(
+            "class_name", ""
+        )  # В JSON это поле называется class_name
+        method_name = node.get("method", "")
+        args = node.get("arguments", [])
+
+        logger.debug(
+            f"DEBUG generate_object_method_call: {object_name}.{method_name}()"
+        )
+
+        # Универсальная реализация
+        var_info = self.get_variable_info(object_name)
+        if not var_info:
+            self.add_line(f"// ERROR: Object '{object_name}' not found")
+            return
+
+        object_type = var_info.get("py_type", "")
+        if not object_type:
+            self.add_line(f"// ERROR: No type for '{object_name}'")
+            return
+
+        # ПРОВЕРЯЕМ, ЯВЛЯЕТСЯ ЛИ ОБЪЕКТ СПИСКОМ
+        if object_type.startswith("list["):
+            # Для списков используем специальные функции
+            if method_name == "append" and args:
+                # Получаем правильное имя структуры
+                struct_name = self.generate_list_struct_name(object_type)
+                logger.debug(
+                    f"DEBUG: append для {object_name} типа {object_type}, struct_name={struct_name}"
+                )
+
+                # Генерируем аргумент
+                arg = args[0]
+                if isinstance(arg, dict):
+                    arg_expr = self.generate_expression(arg)
+                else:
+                    arg_expr = str(arg)
+
+                # Генерируем правильный вызов
+                self.add_line(f"append_{struct_name}({object_name}, {arg_expr});")
+                return
+
+            # Добавляем обработку других методов списков если нужно
+            else:
+                self.add_line(f"// Метод списка '{method_name}' для типа {object_type}")
+                return
+
+        # ДЛЯ КЛАССОВ (не списков) - оригинальная логика
+        # Генерируем аргументы
+        arg_exprs = []
+        for arg in args:
+            if isinstance(arg, dict):
+                expr = self.generate_expression(arg)
+                if expr is None:
+                    expr = "0"
+                arg_exprs.append(expr)
+            else:
+                arg_exprs.append(str(arg))
+
+        # Собираем все аргументы: self + остальные
+        all_args = [object_name] + arg_exprs
+        args_str = ", ".join(all_args)
+
+        # Формируем имя функции: TypeName_methodName
+        # Но для списков это не должно использоваться!
+        self.add_line(f"{object_type}_{method_name}({args_str});")
+
+    def generate_c_call(self, node: Dict):
+        """Генерирует прямой вызов C-функции"""
+        func_name = node.get("function", "")
+        args = node.get("arguments", [])
+
+        # Генерируем аргументы
+        arg_strings = []
+        for arg in args:
+            if isinstance(arg, dict):
+                # Если аргумент - AST, генерируем выражение
+                arg_strings.append(self.generate_expression(arg))
+            else:
+                # Если это простая строка
+                arg_strings.append(str(arg))
+
+        args_str = ", ".join(arg_strings)
+
+        # Просто генерируем вызов C-функции
+        self.add_line(f"{func_name}({args_str});")
 
     def generate_builtin_function_call(self, node: Dict):
         """Генерирует вызов встроенной функции"""
@@ -870,6 +2180,104 @@ class CCodeGenerator:
         c_type = var_info["c_type"] if var_info else self.map_type_to_c(return_type)
         self.add_line(f"{c_type} {target} = {c_func_name}({args_str});")
 
+    def generate_constructor_call(self, ast: Dict) -> str:
+        """Генерирует вызов конструктора"""
+        class_name = ast.get("class_name", "")
+        args = ast.get("arguments", [])
+
+        # Генерируем аргументы
+        arg_strings = []
+        for arg in args:
+            if isinstance(arg, dict):
+                arg_strings.append(self.generate_expression(arg))
+            else:
+                arg_strings.append(str(arg))
+
+        args_str = ", ".join(arg_strings)
+        return f"create_{class_name}({args_str})"
+
+    ###############################################################################################
+    # Index & Slice Operations
+    ###############################################################################################
+
+    ###############################################################################################
+
+    def generate_nested_index_assignment(self, node: Dict):
+        """Генерирует код для многомерного индексного присваивания: A_data[0][0] = 10"""
+        variable = node.get("variable", "")
+        indices = node.get("indices", [])
+        value_ast = node.get("value", {})
+        var_type = node.get("var_type", "")
+
+        # Генерируем выражение для значения
+        value_expr = self.generate_expression(value_ast)
+
+        # Получаем информацию о переменной
+        var_info = self.get_variable_info(variable)
+        if not var_info:
+            self.add_line(f"// ERROR: Variable '{variable}' not found")
+            return
+
+        # Определяем тип переменной
+        py_type = var_info.get("py_type", "")
+
+        # Проверяем, является ли это вложенным списком
+        if py_type.startswith("list[list["):
+            # Это многомерный массив
+            match = re.match(r"list\[list\[([^\]]+)\]\]", py_type)
+            if not match:
+                self.add_line(f"// ERROR: Invalid nested list type: {py_type}")
+                return
+
+            inner_type = match.group(1)  # "int"
+
+            # Генерируем структуры для обоих уровней
+            outer_struct_name = self.generate_list_struct_name(
+                f"list[list[{inner_type}]]"
+            )
+            inner_struct_name = self.generate_list_struct_name(f"list[{inner_type}]")
+
+            # Убедимся, что структуры сгенерированы
+            self.generate_list_struct(f"list[{inner_type}]")
+            self.generate_list_struct(f"list[list[{inner_type}]]")
+
+            # Генерируем индексы
+            if len(indices) == 2:
+                index1_expr = self.generate_expression(indices[0])
+                index2_expr = self.generate_expression(indices[1])
+
+                # Получаем внутренний список
+                temp_var = f"{variable}_inner_{self.temp_var_counter}"
+                self.temp_var_counter += 1
+
+                self.add_line(
+                    f"// Доступ к элементу {variable}[{index1_expr}][{index2_expr}]"
+                )
+                self.add_line(
+                    f"{inner_struct_name}* {temp_var} = get_{outer_struct_name}({variable}, {index1_expr});"
+                )
+
+                # Устанавливаем значение во внутреннем списке
+                self.add_line(
+                    f"set_{inner_struct_name}({temp_var}, {index2_expr}, {value_expr});"
+                )
+            else:
+                self.add_line(f"// ERROR: Unsupported nesting depth {len(indices)}")
+        elif py_type.startswith("list["):
+            # Это одномерный список (но с вложенной индексацией - ошибка)
+            if len(indices) == 1:
+                # Это фактически обычное индексное присваивание
+                index_expr = self.generate_expression(indices[0])
+                struct_name = self.generate_list_struct_name(py_type)
+                self.add_line(
+                    f"set_{struct_name}({variable}, {index_expr}, {value_expr});"
+                )
+            else:
+                self.add_line(f"// ERROR: Too many indices for type {py_type}")
+        else:
+            # Неизвестный тип
+            self.add_line(f"// ERROR: Cannot assign to nested index of type {py_type}")
+
     def _generate_input_read_code_direct(self, target_var: str):
         """Генерирует код для чтения ввода с клавиатуры прямо в целевую переменную"""
         buffer_var = f"{target_var}_buffer"
@@ -910,117 +2318,6 @@ class CCodeGenerator:
         self.add_line(f"strcpy({target_var}, {buffer_var});")
         self.indent_level -= 1
         self.add_line(f"}}")
-
-    def generate_break(self, node: Dict):
-        """Генерирует оператор break"""
-        self.add_line("break;")
-        self.add_line("// break statement")
-
-    def generate_continue(self, node: Dict):
-        """Генерирует оператор continue"""
-        self.add_line("continue;")
-        self.add_line("// continue statement")
-
-    def generate_declaration(self, node: Dict):
-        """Генерирует объявление переменной с поддержкой повторных объявлений"""
-        var_name = node.get("var_name", "")
-        var_type = node.get("var_type", "")
-        expression_ast = node.get("expression_ast", {})
-
-        logger.debug(f"Генерация объявления для {var_name}: {var_type}")
-
-        if var_type.startswith("dict["):
-            self._generate_dict_declaration(var_name, var_type, expression_ast, node)
-            return
-
-        # Проверяем, объявлена ли уже переменная
-        var_info = self.get_variable_info(var_name)
-        is_redeclaration = var_info is not None and not var_info.get(
-            "is_deleted", False
-        )
-
-        if is_redeclaration:
-            logger.debug(f"Переменная '{var_name}' уже объявлена, переобъявляем")
-
-            # Освобождаем старую память
-            old_py_type = var_info.get("py_type", "")
-            if old_py_type.startswith("list["):
-                struct_name = self.generate_list_struct_name(old_py_type)
-                self.add_line(f"if ({var_name}) {{")
-                self.indent_level += 1
-                self.add_line(f"free_{struct_name}({var_name});")
-                self.indent_level -= 1
-                self.add_line("}")
-            elif old_py_type == "str":
-                self.add_line(f"if ({var_name}) {{")
-                self.indent_level += 1
-                self.add_line(f"free({var_name});")
-                self.indent_level -= 1
-                self.add_line("}")
-
-        # Объявляем/обновляем переменную
-        self.declare_variable(var_name, var_type)
-        var_info = self.get_variable_info(var_name)
-
-        if not var_info:
-            return
-
-        c_type = var_info["c_type"]
-
-        # Проверяем, является ли выражение вызовом builtin функции
-        if expression_ast and expression_ast.get("type") == "function_call":
-            func_name = expression_ast.get("function", "")
-
-            # Специальная обработка для builtin функций
-            if func_name in ["str", "int", "float", "bool", "len"]:
-                self._generate_builtin_declaration(
-                    var_name, c_type, expression_ast, is_redeclaration
-                )
-                return
-
-        # Обработка list[int] с литералом
-        if expression_ast.get("type") == "list_literal" and var_type.startswith(
-            "list["
-        ):
-            items = expression_ast.get("items", [])
-
-            if is_redeclaration:
-                # Для повторного объявления используем присваивание
-                struct_name = self.generate_list_struct_name(var_type)
-                self.add_line(
-                    f"{var_name} = create_{struct_name}({max(len(items), INITIAL_LIST_CAPACITY)});"
-                )
-            else:
-                # Для первого объявления генерируем объявление с инициализацией
-                struct_name = self.generate_list_struct_name(var_type)
-                self.add_line(
-                    f"{c_type} {var_name} = create_{struct_name}({max(len(items), INITIAL_LIST_CAPACITY)});"
-                )
-
-            # Добавляем элементы
-            for item_ast in items:
-                item_expr = self.generate_expression(item_ast)
-                self.add_line(f"append_{struct_name}({var_name}, {item_expr});")
-
-            return
-
-        # Обычная инициализация
-        if expression_ast:
-            expr = self.generate_expression(expression_ast)
-
-            if is_redeclaration:
-                # Повторное объявление = присваивание
-                self.add_line(f"{var_name} = {expr};")
-            else:
-                # Первое объявление
-                self.add_line(f"{c_type} {var_name} = {expr};")
-        else:
-            # Объявление без инициализации
-            if not is_redeclaration:
-                if c_type.endswith("*"):
-                    self.add_line(f"{c_type} {var_name} = NULL;")
-                else:
-                    self.add_line(f"{c_type} {var_name};")
 
     def _generate_nested_list_elements_correctly(
         self, parent_var: str, items: List, type_info: Dict, level: int
@@ -1208,320 +2505,6 @@ class CCodeGenerator:
                     f"ERROR: Ожидался list_literal на уровне {level}, получено {item_ast.get('type')}"
                 )
 
-    def generate_delete(self, node: Dict):
-        """Генерирует код для del с поддержкой tuple и list"""
-        symbols = node.get("symbols", [])
-
-        for target in symbols:
-            self.mark_variable_deleted(target, "full")
-            var_info = self.get_variable_info(target)
-
-            if not var_info:
-                self.add_line(f"// ERROR: Переменная '{target}' не найдена для del")
-                continue
-
-            self.add_line(f"// del {target}")
-
-            py_type = var_info.get("py_type", "")
-            c_type = var_info.get("c_type", "")
-
-            if py_type.startswith("dict["):
-                # Для словаря вызываем функцию очистки
-                # Извлекаем типы ключа и значения для имени структуры
-                key_type, value_type = self._extract_dict_types(py_type)
-                key_name = self.clean_type_name_for_c(key_type)
-                value_name = self.clean_type_name_for_c(value_type)
-                struct_name = f"dict_{key_name}_{value_name}"
-
-                self.add_line(f"if ({target}) {{")
-                self.indent_level += 1
-                self.add_line(f"free_{struct_name}({target});")
-                self.indent_level -= 1
-                self.add_line("}")
-                self.add_line(f"{target} = NULL;")
-            elif py_type.startswith("list["):
-                # Для list вызываем функцию очистки
-                struct_name = self.generate_list_struct_name(py_type)
-                self.add_line(f"if ({target}) {{")
-                self.indent_level += 1
-                self.add_line(f"free_{struct_name}({target});")
-                self.indent_level -= 1
-                self.add_line("}")
-                self.add_line(f"{target} = NULL;")
-
-            elif py_type.startswith("tuple["):
-                # Для tuple вызываем функцию очистки
-                struct_name = self.generate_tuple_struct_name(py_type)
-                self.add_line(f"free_{struct_name}(&{target});")
-
-            elif var_info["is_pointer"]:
-                self.add_line(f"if ({target} != NULL) {{")
-                self.indent_level += 1
-                self.add_line(f"free({target});")
-                self.indent_level -= 1
-                self.add_line("}")
-                self.add_line(f"{target} = NULL;")
-            else:
-                if c_type in ["int", "float", "double", "long"]:
-                    self.add_line(f"{target} = 0;")
-                elif c_type == "bool":
-                    self.add_line(f"{target} = false;")
-                elif "char*" in c_type or c_type.endswith("*"):
-                    self.add_line(f"{target} = NULL;")
-                else:
-                    self.add_line(f"// {target} обнулена")
-
-    def generate_assignment(self, node: Dict):
-        """Генерирует присваивание с поддержкой строковых операций"""
-        symbols = node.get("symbols", [])
-        if not symbols:
-            return
-
-        target = symbols[0]
-        expression_ast = node.get("expression_ast")
-
-        if expression_ast:
-            expression_ast["target"] = target
-
-            # Проверяем, является ли это строковой операцией
-            if expression_ast.get("type") == "binary_operation":
-                operator = expression_ast.get("operator_symbol", "")
-                left_ast = expression_ast.get("left", {})
-                right_ast = expression_ast.get("right", {})
-
-                left_is_string = self._is_string_expression(left_ast)
-                right_is_string = self._is_string_expression(right_ast)
-
-                if operator == "+" and (left_is_string or right_is_string):
-                    # Генерируем конкатенацию строк
-                    left_expr = self.generate_expression(left_ast)
-                    right_expr = self.generate_expression(right_ast)
-
-                    # Освобождаем старую память, если переменная уже была инициализирована
-                    var_info = self.get_variable_info(target)
-                    if var_info and var_info.get("py_type") == "str":
-                        self.add_line(f"if ({target}) {{")
-                        self.indent_level += 1
-                        self.add_line(f"free({target});")
-                        self.indent_level -= 1
-                        self.add_line(f"}}")
-
-                    self.add_line(
-                        f"{target} = malloc(strlen({left_expr}) + strlen({right_expr}) + 1);"
-                    )
-                    self.add_line(f"if (!{target}) {{")
-                    self.indent_level += 1
-                    self.add_line(
-                        f'fprintf(stderr, "Memory allocation failed for string concatenation\\n");'
-                    )
-                    self.add_line(f"exit(1);")
-                    self.indent_level -= 1
-                    self.add_line(f"}}")
-                    self.add_line(f"strcpy({target}, {left_expr});")
-                    self.add_line(f"strcat({target}, {right_expr});")
-                    return
-
-            # Обычное присваивание
-            expr = self.generate_expression(expression_ast)
-
-            # Для строковых литералов при присваивании
-            if (
-                expression_ast.get("type") == "literal"
-                and expression_ast.get("data_type") == "str"
-            ):
-                var_info = self.get_variable_info(target)
-                if var_info and var_info.get("py_type") == "str":
-                    self.add_line(f"if ({target}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"free({target});")
-                    self.indent_level -= 1
-                    self.add_line("}}")
-                    self.add_line(f"{target} = malloc(strlen({expr}) + 1);")
-                    self.add_line(f"strcpy({target}, {expr});")
-                    return
-
-            if expr is not None:
-                self.add_line(f"{target} = {expr};")
-
-    def generate_function_call(self, node: Dict):
-        """Генерирует вызов функции"""
-        func_name = node.get("function", "")
-        args = node.get("arguments", [])
-
-        # Удаляем @ из имени функции для C кода
-        if func_name.startswith("@"):
-            func_name = func_name[1:]
-
-        # Генерируем аргументы
-        arg_strings = []
-        for arg in args:
-            if isinstance(arg, dict):
-                arg_strings.append(self.generate_expression(arg))
-            else:
-                if str(arg) == "None":
-                    arg_strings.append("NULL")
-                else:
-                    arg_strings.append(str(arg))
-
-        args_str = ", ".join(arg_strings)
-        self.add_line(f"{func_name}({args_str});")
-
-    def generate_return(self, node: Dict):
-        """Генерирует return с поддержкой кастомных типов"""
-        operations = node.get("operations", [])
-
-        for op in operations:
-            if op.get("type") == "RETURN":
-                value_ast = op.get("value", {})
-
-                if not value_ast:
-                    self.add_line("return;")
-                    return
-
-                # Определяем тип возвращаемого значения
-                if value_ast.get("type") == "variable":
-                    var_name = value_ast.get("value", "")
-                    var_info = self.get_variable_info(var_name)
-
-                    if var_info:
-                        py_type = var_info.get("py_type", "")
-
-                        # Если возвращаем список или кортеж
-                        if py_type.startswith("list[") or py_type.startswith("tuple["):
-                            # Просто возвращаем указатель
-                            self.add_line(f"return {var_name};")
-                            return
-
-                # Для других случаев генерируем выражение
-                expr = self.generate_expression(value_ast)
-                self.add_line(f"return {expr};")
-                return
-
-        # Если ничего не нашли
-        self.add_line("return;")
-
-    def generate_while_loop(self, node: Dict):
-        """Генерирует while loop с правильной обработкой структуры JSON"""
-        # В вашем JSON ключ "condition", а не "condition_ast"
-        condition_ast = node.get("condition")
-        if not condition_ast:
-            return
-
-        condition = self.generate_expression(condition_ast)
-
-        self.add_line(f"while ({condition}) {{")
-        self.indent_level += 1
-
-        # Входим в scope цикла
-        self.enter_scope()
-
-        # Генерируем тело цикла из списка body
-        body_nodes = node.get("body", [])
-        for body_node in body_nodes:
-            self.generate_graph_node(body_node)
-
-        # Выходим из scope цикла
-        self.exit_scope()
-
-        self.indent_level -= 1
-        self.add_line("}")
-
-    def generate_if_statement(self, node: Dict):
-        """Генерирует if statement"""
-        condition_ast = node.get("condition_ast")
-        if not condition_ast:
-            return
-
-        condition = self.generate_expression(condition_ast)
-
-        self.add_line(f"if ({condition}) {{")
-        self.indent_level += 1
-
-        # Входим в scope if
-        self.enter_scope()
-
-        # Генерируем тело if
-        for body_node in node.get("body", []):
-            self.generate_graph_node(body_node)
-
-        # Выходим из scope if
-        self.exit_scope()
-
-        self.indent_level -= 1
-        self.add_line("}")
-
-        # elif блоки
-        for elif_block in node.get("elif_blocks", []):
-            elif_condition = self.generate_expression(
-                elif_block.get("condition_ast", {})
-            )
-            self.add_line(f"else if ({elif_condition}) {{")
-            self.indent_level += 1
-
-            # Входим в scope elif
-            self.enter_scope()
-
-            # Генерируем тело elif
-            for body_node in elif_block.get("body", []):
-                self.generate_graph_node(body_node)
-
-            # Выходим из scope elif
-            self.exit_scope()
-
-            self.indent_level -= 1
-            self.add_line("}")
-
-        # else блок
-        else_block = node.get("else_block")
-        if else_block:
-            self.add_line("else {")
-            self.indent_level += 1
-
-            # Входим в scope else
-            self.enter_scope()
-
-            # Генерируем тело else
-            for body_node in else_block.get("body", []):
-                self.generate_graph_node(body_node)
-
-            # Выходим из scope else
-            self.exit_scope()
-
-            self.indent_level -= 1
-            self.add_line("}")
-
-    def generate_for_loop(self, node: Dict):
-        """Генерирует for loop"""
-        loop_var = node.get("loop_variable", "i")
-        iterable = node.get("iterable", {})
-
-        if iterable.get("type") == "RANGE_CALL":
-            args = iterable.get("arguments", {})
-            start = args.get("start", "0")
-            stop = args.get("stop", "10")
-            step = args.get("step", "1")
-
-            # Объявляем переменную цикла
-            self.declare_variable(loop_var, "int")
-
-            self.add_line(
-                f"for (int {loop_var} = {start}; {loop_var} < {stop}; {loop_var} += {step}) {{"
-            )
-            self.indent_level += 1
-
-            # Входим в scope цикла
-            self.enter_scope()
-
-            # Генерируем тело цикла
-            for body_node in node.get("body", []):
-                self.generate_graph_node(body_node)
-
-            # Выходим из scope цикла
-            self.exit_scope()
-
-            self.indent_level -= 1
-            self.add_line("}")
-
     def generate_c_imports(self):
         """Генерирует #include директивы"""
         for lib in DEFAULT_C_IMPORTS:
@@ -1541,26 +2524,6 @@ class CCodeGenerator:
 
         if seen:
             self.add_empty_line()
-
-    def generate_c_call(self, node: Dict):
-        """Генерирует прямой вызов C-функции"""
-        func_name = node.get("function", "")
-        args = node.get("arguments", [])
-
-        # Генерируем аргументы
-        arg_strings = []
-        for arg in args:
-            if isinstance(arg, dict):
-                # Если аргумент - AST, генерируем выражение
-                arg_strings.append(self.generate_expression(arg))
-            else:
-                # Если это простая строка
-                arg_strings.append(str(arg))
-
-        args_str = ", ".join(arg_strings)
-
-        # Просто генерируем вызов C-функции
-        self.add_line(f"{func_name}({args_str});")
 
     def generate_forward_declarations(self):
         """Генерирует forward declarations функций"""
@@ -3526,14 +4489,6 @@ class CCodeGenerator:
             "inner_info": None,
         }
 
-    def _get_current_class(self) -> Optional[str]:
-        """Получает имя текущего класса из контекста"""
-        # Ищем в текущем и родительских scope'ах
-        for i in range(len(self.variable_scopes) - 1, -1, -1):
-            if "class_name" in self.variable_scopes[i]:
-                return self.variable_scopes[i]["class_name"]
-        return None
-
     def _is_string_expression(self, ast: Dict) -> bool:
         """Определяет, является ли выражение строкой"""
         if not ast:
@@ -3865,673 +4820,6 @@ class CCodeGenerator:
         # По умолчанию используем точку
         return f"{obj_name}.{attr_name}"
 
-    def generate_constructor_call(self, ast: Dict) -> str:
-        """Генерирует вызов конструктора"""
-        class_name = ast.get("class_name", "")
-        args = ast.get("arguments", [])
-
-        # Генерируем аргументы
-        arg_strings = []
-        for arg in args:
-            if isinstance(arg, dict):
-                arg_strings.append(self.generate_expression(arg))
-            else:
-                arg_strings.append(str(arg))
-
-        args_str = ", ".join(arg_strings)
-        return f"create_{class_name}({args_str})"
-
-    def generate_method_call(self, node: Dict):
-        """Генерирует вызов метода объекта"""
-        object_name = node.get("object", "")
-        method_name = node.get("method", "")
-        args = node.get("arguments", [])
-        is_standalone = node.get("is_standalone", False)  # Новое поле из парсера
-        # Добавляем получение целевой переменной для присваивания
-        target_var = node.get("target", "")  # Добавьте эту строку
-
-        # Проверяем тип объекта
-        var_info = self.get_variable_info(object_name)
-        if not var_info:
-            self.add_line(f"// ERROR: Объект '{object_name}' не найден")
-            return
-
-        obj_type = var_info.get("py_type", "")
-
-        # Генерируем аргументы
-        arg_strings = []
-        for arg in args:
-            if isinstance(arg, dict):
-                arg_strings.append(self.generate_expression(arg))
-            else:
-                arg_strings.append(str(arg))
-
-        args_str = ", ".join(arg_strings) if arg_strings else ""
-
-        if self._is_class_type(obj_type):
-            # Это класс - используем формат ClassName_methodName
-            # Первым аргументом идет указатель на объект (self)
-            full_args = f"{object_name}"
-            if args_str:
-                full_args = f"{object_name}, {args_str}"
-
-            # Если это standalone вызов (statement)
-            if is_standalone:
-                self.add_line(f"{obj_type}_{method_name}({full_args});")
-            else:
-                # Если это выражение (возвращаем результат)
-                return f"{obj_type}_{method_name}({full_args})"
-
-        # Для атрибутов объектов (self.attribute)
-        elif object_name == "self":
-            # self.get(i, j) должно стать Matrix_get(self, i, j)
-            # Получаем класс из текущего scope
-            current_scope = None
-            for scope in reversed(self.variable_scopes):
-                if "class_name" in scope:
-                    current_scope = scope
-                    break
-
-            if current_scope:
-                class_name = current_scope.get("class_name", "")
-                full_args = f"self"
-                if args_str:
-                    full_args = f"self, {args_str}"
-
-                if is_standalone:
-                    self.add_line(f"{class_name}_{method_name}({full_args});")
-                else:
-                    return f"{class_name}_{method_name}({full_args})"
-        # Обработка методов для списков
-        # Обработка методов для строк
-        elif obj_type == "str":
-            if method_name == "upper":
-                if is_standalone:
-                    # Для a.upper() как standalone - результат должен быть присвоен обратно в a
-                    self.add_line("// upper")
-                    temp_var = self.generate_temporary_var("str")
-                    self.add_line(f"char* {temp_var} = string_upper({object_name});")
-                    # Освобождаем старую строку
-                    self.add_line(f"if ({object_name}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"free({object_name});")
-                    self.indent_level -= 1
-                    self.add_line(f"}}")
-                    # Присваиваем новую строку
-                    self.add_line(f"{object_name} = {temp_var};")
-                else:
-                    # Для upper() внутри выражения
-                    return f"string_upper({object_name})"
-
-            elif method_name == "lower":
-                if is_standalone:
-                    self.add_line("// lower")
-                    # Для a.lower() как standalone
-                    temp_var = self.generate_temporary_var("str")
-                    self.add_line(f"char* {temp_var} = string_lower({object_name});")
-                    # Освобождаем старую строку
-                    self.add_line(f"if ({object_name}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"free({object_name});")
-                    self.indent_level -= 1
-                    self.add_line(f"}}")
-                    # Присваиваем новую строку
-                    self.add_line(f"{object_name} = {temp_var};")
-                else:
-                    # Для lower() внутри выражения
-                    return f"string_lower({object_name})"
-
-            elif method_name == "capitalize":
-                if is_standalone:
-                    self.add_line("// capitalize")
-
-                    # Для a.capitalize() как standalone
-                    temp_var = self.generate_temporary_var("str")
-                    self.add_line(
-                        f"char* {temp_var} = string_capitalize({object_name});"
-                    )
-                    # Освобождаем старую строку
-                    self.add_line(f"if ({object_name}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"free({object_name});")
-                    self.indent_level -= 1
-                    self.add_line(f"}}")
-                    # Присваиваем новую строку
-                    self.add_line(f"{object_name} = {temp_var};")
-                else:
-                    # Для capitalize() внутри выражения
-                    return f"string_capitalize({object_name})"
-
-            elif method_name == "title":
-                if is_standalone:
-                    self.add_line("// title")
-
-                    # Для a.title() как standalone
-                    temp_var = self.generate_temporary_var("str")
-                    self.add_line(f"char* {temp_var} = string_title({object_name});")
-                    # Освобождаем старую строку
-                    self.add_line(f"if ({object_name}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"free({object_name});")
-                    self.indent_level -= 1
-                    self.add_line(f"}}")
-                    # Присваиваем новую строку
-                    self.add_line(f"{object_name} = {temp_var};")
-                else:
-                    # Для title() внутри выражения
-                    return f"string_title({object_name})"
-
-            elif method_name == "strip":
-                if is_standalone:
-                    self.add_line("// strip")
-
-                    # Для a.strip() как standalone
-                    temp_var = self.generate_temporary_var("str")
-                    self.add_line(f"char* {temp_var} = string_strip({object_name});")
-                    # Освобождаем старую строку
-                    self.add_line(f"if ({object_name}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"free({object_name});")
-                    self.indent_level -= 1
-                    self.add_line(f"}}")
-                    # Присваиваем новую строку
-                    self.add_line(f"{object_name} = {temp_var};")
-                else:
-                    # Для strip() внутри выражения
-                    return f"string_strip({object_name})"
-
-            elif method_name == "lstrip":
-                if is_standalone:
-                    self.add_line("// lstrip")
-
-                    # Для a.lstrip() как standalone
-                    temp_var = self.generate_temporary_var("str")
-                    self.add_line(f"char* {temp_var} = string_lstrip({object_name});")
-                    # Освобождаем старую строку
-                    self.add_line(f"if ({object_name}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"free({object_name});")
-                    self.indent_level -= 1
-                    self.add_line(f"}}")
-                    # Присваиваем новую строку
-                    self.add_line(f"{object_name} = {temp_var};")
-                else:
-                    # Для lstrip() внутри выражения
-                    return f"string_lstrip({object_name})"
-
-            elif method_name == "rstrip":
-                if is_standalone:
-                    self.add_line("// rstrip")
-
-                    # Для a.rstrip() как standalone
-                    temp_var = self.generate_temporary_var("str")
-                    self.add_line(f"char* {temp_var} = string_rstrip({object_name});")
-                    # Освобождаем старую строку
-                    self.add_line(f"if ({object_name}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"free({object_name});")
-                    self.indent_level -= 1
-                    self.add_line(f"}}")
-                    # Присваиваем новую строку
-                    self.add_line(f"{object_name} = {temp_var};")
-                else:
-                    # Для rstrip() внутри выражения
-                    return f"string_rstrip({object_name})"
-
-            elif method_name == "format":
-                if is_standalone:
-                    self.add_line("// format")
-
-                    # Для a.format("world") как standalone - результат должен быть присвоен обратно в a
-                    temp_var = self.generate_temporary_var("str")
-                    self.add_line(
-                        f"char* {temp_var} = string_format({object_name}, {args_str});"
-                    )
-                    # Освобождаем старую строку
-                    self.add_line(f"if ({object_name}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"free({object_name});")
-                    self.indent_level -= 1
-                    self.add_line(f"}}")
-                    # Присваиваем новую строку
-                    self.add_line(f"{object_name} = {temp_var};")
-                else:
-                    # Для format() внутри выражения
-                    return f"string_format({object_name}, {args_str})"
-
-            elif method_name == "split":
-                # Определяем разделитель
-                if len(arg_strings) > 0:
-                    delimiter = arg_strings[0]
-                else:
-                    delimiter = '" "'  # По умолчанию пробел
-
-                if is_standalone:
-                    # Для a.split() как standalone - результат игнорируется
-                    temp_var = self.generate_temporary_var("str_list")
-                    self.add_line(
-                        f"string_list* {temp_var} = string_split({object_name}, {delimiter});"
-                    )
-                    self.add_line(f"// Результат split() игнорируется")
-                else:
-                    # Для split() внутри выражения - возвращаем результат
-                    return f"string_split({object_name}, {delimiter})"
-
-            elif method_name == "replace":
-                # replace(old, new) - заменяет все вхождения подстроки
-                if len(arg_strings) >= 2:
-                    old = arg_strings[0]
-                    new = arg_strings[1]
-
-                    if is_standalone:
-                        self.add_line("// replace")
-                        temp_var = self.generate_temporary_var("str")
-                        self.add_line(
-                            f"char* {temp_var} = string_replace({object_name}, {old}, {new});"
-                        )
-                        # Освобождаем старую строку
-                        self.add_line(f"if ({object_name}) {{")
-                        self.indent_level += 1
-                        self.add_line(f"free({object_name});")
-                        self.indent_level -= 1
-                        self.add_line(f"}}")
-                        # Присваиваем новую строку
-                        self.add_line(f"{object_name} = {temp_var};")
-                    else:
-                        if target_var:
-                            self.add_line(
-                                f"{target_var} = string_replace({object_name}, {old}, {new});"
-                            )
-                        else:
-                            return f"string_replace({object_name}, {old}, {new})"
-                else:
-                    self.add_line(f"// replace() requires 2 arguments")
-
-        elif obj_type.startswith("list["):
-            if method_name == "append":
-                if args_str:
-                    struct_name = self.generate_list_struct_name(obj_type)
-                    self.add_line(f"append_{struct_name}({object_name}, {args_str});")
-
-            elif method_name == "extend":
-                if args_str:
-                    # args[0] должен быть другим списком
-                    struct_name = self.generate_list_struct_name(obj_type)
-                    other_list = arg_strings[0]
-                    self.add_line(f"// extend: добавление элементов из другого списка")
-                    self.add_line(f"for (int i = 0; i < {other_list}->size; i++) {{")
-                    self.indent_level += 1
-                    self.add_line(
-                        f"append_{struct_name}({object_name}, {other_list}->data[i]);"
-                    )
-                    self.indent_level -= 1
-                    self.add_line("}")
-
-            elif method_name == "insert":
-                if len(arg_strings) >= 2:
-                    index_var = arg_strings[0]
-                    value_var = arg_strings[1]
-                    struct_name = self.generate_list_struct_name(obj_type)
-                    self.add_line(
-                        f"if ({index_var} >= 0 && {index_var} <= {object_name}->size) {{"
-                    )
-                    self.indent_level += 1
-                    self.add_line(
-                        f"if ({object_name}->size >= {object_name}->capacity) {{"
-                    )
-                    self.indent_level += 1
-                    self.add_line(
-                        f"{object_name}->capacity = {object_name}->capacity == 0 ? {INITIAL_LIST_CAPACITY} : {object_name}->capacity * 2;"
-                    )
-                    self.add_line(
-                        f"{object_name}->data = realloc({object_name}->data, {object_name}->capacity * sizeof(int));"
-                    )
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    self.add_line(
-                        f"for (int i = {object_name}->size; i > {index_var}; i--) {{"
-                    )
-                    self.indent_level += 1
-                    self.add_line(
-                        f"{object_name}->data[i] = {object_name}->data[i - 1];"
-                    )
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    self.add_line(f"{object_name}->data[{index_var}] = {value_var};")
-                    self.add_line(f"{object_name}->size++;")
-                    self.indent_level -= 1
-                    self.add_line("}")
-
-            elif method_name == "remove":
-                if args_str:
-                    value_var = arg_strings[0]
-                    self.add_line(f"// remove первый элемент со значением {value_var}")
-                    self.add_line(f"int found_index = -1;")
-                    self.add_line(f"for (int i = 0; i < {object_name}->size; i++) {{")
-                    self.indent_level += 1
-                    self.add_line(f"if ({object_name}->data[i] == {value_var}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"found_index = i;")
-                    self.add_line(f"break;")
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    self.add_line(f"if (found_index != -1) {{")
-                    self.indent_level += 1
-                    self.add_line(
-                        f"for (int i = found_index; i < {object_name}->size - 1; i++) {{"
-                    )
-                    self.indent_level += 1
-                    self.add_line(
-                        f"{object_name}->data[i] = {object_name}->data[i + 1];"
-                    )
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    self.add_line(f"{object_name}->size--;")
-                    self.indent_level -= 1
-                    self.add_line("}")
-
-            elif method_name == "pop":
-                # Проверяем, есть ли присваивание результата
-                # Если is_standalone == False, значит результат используется (в выражении или присваивании)
-                if not args_str:
-                    # pop() без аргументов - удалить последний
-                    self.add_line(f"if ({object_name} && {object_name}->size > 0) {{")
-                    self.indent_level += 1
-
-                    # Получаем удаляемое значение
-                    temp_var = self.generate_temporary_var("int")
-                    self.add_line(
-                        f"int {temp_var} = {object_name}->data[{object_name}->size - 1];"
-                    )
-
-                    # Уменьшаем размер
-                    self.add_line(f"{object_name}->size--;")
-
-                    # Если результат используется (не standalone), присваиваем его
-                    if not is_standalone:
-                        if target_var:
-                            self.add_line(f"{target_var} = {temp_var};")
-                        else:
-                            self.add_line(
-                                f"// Результат pop() используется, но не присвоен"
-                            )
-
-                    self.indent_level -= 1
-                    self.add_line("} else {")
-                    self.indent_level += 1
-                    self.add_line(
-                        f'fprintf(stderr, "IndexError: pop from empty list\\n");'
-                    )
-                    self.add_line(f"exit(1);")
-                    self.indent_level -= 1
-                    self.add_line("}")
-                else:
-                    # pop(index) - удалить по индексу
-                    index_var = arg_strings[0]
-                    self.add_line(
-                        f"if ({object_name} && {index_var} >= 0 && {index_var} < {object_name}->size) {{"
-                    )
-                    self.indent_level += 1
-
-                    # Получаем удаляемое значение
-                    temp_var = self.generate_temporary_var("int")
-                    self.add_line(f"int {temp_var} = {object_name}->data[{index_var}];")
-
-                    # Сдвигаем элементы
-                    self.add_line(
-                        f"for (int i = {index_var}; i < {object_name}->size - 1; i++) {{"
-                    )
-                    self.indent_level += 1
-                    self.add_line(
-                        f"{object_name}->data[i] = {object_name}->data[i + 1];"
-                    )
-                    self.indent_level -= 1
-                    self.add_line("}")
-
-                    # Уменьшаем размер
-                    self.add_line(f"{object_name}->size--;")
-
-                    # Если результат используется (не standalone), присваиваем его
-                    if not is_standalone:
-                        if target_var:
-                            self.add_line(f"{target_var} = {temp_var};")
-                        else:
-                            self.add_line(
-                                f"// Результат pop() используется, но не присвоен"
-                            )
-
-                    self.indent_level -= 1
-                    self.add_line("} else {")
-                    self.indent_level += 1
-                    self.add_line(
-                        f'fprintf(stderr, "IndexError: pop index out of range\\n");'
-                    )
-                    self.add_line(f"exit(1);")
-                    self.indent_level -= 1
-                    self.add_line("}")
-
-            elif method_name == "clear":
-                self.add_line(f"{object_name}->size = 0;")
-
-            elif method_name == "index":
-                if args_str:
-                    value_var = arg_strings[0]
-                    temp_var = self.generate_temporary_var("int")
-                    self.add_line(f"int {temp_var} = -1;")
-                    self.add_line(f"for (int i = 0; i < {object_name}->size; i++) {{")
-                    self.indent_level += 1
-                    self.add_line(f"if ({object_name}->data[i] == {value_var}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"{temp_var} = i;")
-                    self.add_line(f"break;")
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    # TODO: Проверить на -1 и выдать ошибку как в Python
-
-            elif method_name == "count":
-                if args_str:
-                    value_var = arg_strings[0]
-                    temp_var = self.generate_temporary_var("int")
-                    self.add_line(f"int {temp_var} = 0;")
-                    self.add_line(f"for (int i = 0; i < {object_name}->size; i++) {{")
-                    self.indent_level += 1
-                    self.add_line(f"if ({object_name}->data[i] == {value_var}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"{temp_var}++;")
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    self.indent_level -= 1
-                    self.add_line("}")
-
-            elif method_name == "sort":
-                # Используем qsort для эффективности
-                # Определяем тип элементов списка
-                match = re.match(r"list\[([^\]]+)\]", obj_type)
-                element_type = match.group(1) if match else "int"
-                c_element_type = self.map_type_to_c(element_type)
-
-                # Выбираем соответствующую функцию сравнения
-                if element_type == "int":
-                    compare_func = "compare_int"
-                elif element_type == "float":
-                    compare_func = "compare_float"
-                elif element_type == "double":
-                    compare_func = "compare_double"
-                elif element_type == "str":
-                    compare_func = "compare_string"
-                else:
-                    # По умолчанию для неизвестных типов
-                    compare_func = "compare_int"
-
-                self.add_line(
-                    f"qsort({object_name}->data, {object_name}->size, sizeof({c_element_type}), {compare_func});"
-                )
-
-            elif method_name == "reverse":
-                self.add_line(f"for (int i = 0; i < {object_name}->size / 2; i++) {{")
-                self.indent_level += 1
-                self.add_line(f"int temp = {object_name}->data[i];")
-                self.add_line(
-                    f"{object_name}->data[i] = {object_name}->data[{object_name}->size - i - 1];"
-                )
-                self.add_line(
-                    f"{object_name}->data[{object_name}->size - i - 1] = temp;"
-                )
-                self.indent_level -= 1
-                self.add_line("}")
-
-            else:
-                self.add_line(f"// Метод списка '{method_name}' не реализован")
-
-        # Обработка методов для кортежей
-        elif obj_type.startswith("tuple["):
-            if method_name == "count":
-                if args_str:
-                    struct_name = self.generate_tuple_struct_name(obj_type)
-                    self.add_line(f"// count в кортеже")
-                    temp_var = self.generate_temporary_var("int")
-                    self.add_line(f"int {temp_var} = 0;")
-                    self.add_line(f"for (int i = 0; i < {object_name}.size; i++) {{")
-                    self.indent_level += 1
-                    self.add_line(f"if ({object_name}.data[i] == {args_str}) {{")
-                    self.indent_level += 1
-                    self.add_line(f"{temp_var}++;")
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    # Возвращаем значение
-                    # Но в вашем коде нет присваивания результата, так что просто вычисляем
-
-            elif method_name == "index":
-                if args_str:
-                    struct_name = self.generate_tuple_struct_name(obj_type)
-                    self.add_line(f"// index в кортеже")
-                    temp_var = self.generate_temporary_var("int")
-                    self.add_line(f"int {temp_var} = -1;")
-                    self.add_line(f"for (int i = 0; i < {object_name}.size; i++) {{")
-                    self.indent_level += 1
-                    self.add_line(
-                        f"if ({object_name}.data[i] == {args_str} && {temp_var} == -1) {{"
-                    )
-                    self.indent_level += 1
-                    self.add_line(f"{temp_var} = i;")
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    self.indent_level -= 1
-                    self.add_line("}")
-                    # Возвращаем значение
-                    # Но в вашем коде нет присваивания результата
-
-            else:
-                self.add_line(f"// Метод '{method_name}' для кортежа не реализован")
-
-        # Обработка методов для словарей
-        elif obj_type.startswith("dict["):
-            # Извлекаем типы ключа и значения
-            key_type, value_type = self._extract_dict_types(obj_type)
-            key_name = self.clean_type_name_for_c(key_type)
-            value_name = self.clean_type_name_for_c(value_type)
-            struct_name = f"dict_{key_name}_{value_name}"
-
-            if method_name == "keys":
-                # keys() - возвращает список ключей
-                list_struct = f"list_{key_name}"
-
-                if target_var:
-                    self.add_line(
-                        f"{list_struct}* {target_var} = keys_{struct_name}({object_name});"
-                    )
-                elif is_standalone:
-                    # Если вызов без присваивания, создаем временную переменную и освобождаем
-                    temp_var = self.generate_temporary_var(list_struct)
-                    self.add_line(
-                        f"{list_struct}* {temp_var} = keys_{struct_name}({object_name});"
-                    )
-                    self.add_line(f"free_{list_struct}({temp_var});")
-                else:
-                    # Если используется в выражении, возвращаем вызов функции
-                    return f"keys_{struct_name}({object_name})"
-
-            elif method_name == "values":
-                # values() - возвращает список значений
-                list_struct = f"list_{value_name}"
-
-                if target_var:
-                    self.add_line(
-                        f"{list_struct}* {target_var} = values_{struct_name}({object_name});"
-                    )
-                elif is_standalone:
-                    temp_var = self.generate_temporary_var(list_struct)
-                    self.add_line(
-                        f"{list_struct}* {temp_var} = values_{struct_name}({object_name});"
-                    )
-                    self.add_line(f"free_{list_struct}({temp_var});")
-                else:
-                    return f"values_{struct_name}({object_name})"
-
-            elif method_name == "items":
-                # items() - возвращает список пар (ключ, значение)
-                # Для этого нужно создать структуру для пары
-                pair_struct = f"{struct_name}_pair"
-                list_pair_struct = f"list_{key_name}_{value_name}_pair"
-
-                # Создаем структуру для списка пар, если еще не создана
-                if list_pair_struct not in self.generated_structures:
-                    # Здесь нужно сгенерировать структуру для списка пар
-                    pass
-
-                # TODO: реализовать items()
-                self.add_line(f"// items() method not fully implemented yet")
-
-            elif method_name == "get":
-                # get(key, default_value)
-                if len(arg_strings) >= 1:
-                    key_arg = arg_strings[0]
-
-                    # Определяем значение по умолчанию
-                    if len(arg_strings) >= 2:
-                        default_arg = arg_strings[1]
-                    else:
-                        # Если default не указан, используем 0, NULL или false в зависимости от типа
-                        if value_type == "int":
-                            default_arg = "0"
-                        elif value_type == "float" or value_type == "double":
-                            default_arg = "0.0"
-                        elif value_type == "bool":
-                            default_arg = "false"
-                        elif value_type == "str" or value_type == "char*":
-                            default_arg = "NULL"
-                        else:
-                            default_arg = "0"
-
-                    if target_var:
-                        # Присваивание результата переменной
-                        self.add_line(
-                            f"{target_var} = get_default_{struct_name}({object_name}, {key_arg}, {default_arg});"
-                        )
-                    elif is_standalone:
-                        # Вызов без присваивания (обычно так не делают, но поддержим)
-                        temp_var = self.generate_temporary_var(value_type)
-                        self.add_line(
-                            f"{self.map_type_to_c(value_type)} {temp_var} = get_default_{struct_name}({object_name}, {key_arg}, {default_arg});"
-                        )
-                    else:
-                        # Используется в выражении (например, в print)
-                        return f"get_default_{struct_name}({object_name}, {key_arg}, {default_arg})"
-                else:
-                    self.add_line(f"// get() requires at least a key argument")
-                return
-
-            else:
-                self.add_line(f"// Метод словаря '{method_name}' не реализован")
-
-            return
-
     def generate_class_constructors(self, json_data: List[Dict]):
         """Генерирует конструкторы для всех классов"""
         # Сначала находим все методы __init__
@@ -4667,24 +4955,6 @@ class CCodeGenerator:
         self.add_line("}")
         self.add_empty_line()
 
-    def _is_class_type(self, type_name: str) -> bool:
-        """Определяет, является ли тип классом"""
-        if not isinstance(type_name, str):
-            return False
-
-        # Проверяем по зарегистрированным классам
-        if hasattr(self, "class_types") and type_name in self.class_types:
-            return True
-
-        # Проверяем по типу (классы обычно с большой буквы)
-        if type_name and len(type_name) > 0 and type_name[0].isupper():
-            # Проверяем, не является ли это базовым типом или встроенным типом
-            base_types = {"int", "float", "double", "char", "bool", "void", "None"}
-            if type_name not in base_types:
-                return True
-
-        return False
-
     def analyze_classes(self, json_data: List[Dict]):
         """Анализирует все классы и их методы для определения полей"""
         logger.debug("DEBUG analyze_classes: Начинаем анализ классов")
@@ -4795,43 +5065,6 @@ class CCodeGenerator:
         self.indent_level -= 1
         self.add_line(f"}};")
         self.add_empty_line()
-
-    def generate_attribute_assignment(self, node: Dict):
-        """Генерирует присваивание атрибуту объекта (self.attr = value)"""
-        object_name = node.get("object", "")
-        attribute = node.get("attribute", "")
-        value_ast = node.get("value", {})
-
-        logger.debug(
-            f"generate_attribute_assignment: {object_name}.{attribute} = {value_ast}"
-        )
-
-        # Если это self внутри метода класса
-        if object_name == "self":
-            # Находим текущий класс
-            current_class = self._get_current_class()
-
-            if current_class:
-                # Генерируем выражение для значения
-                value_expr = self.generate_expression(value_ast)
-
-                # Добавляем присваивание
-                self.add_line(f"self->{attribute} = {value_expr};")
-                return
-
-        # Если это другой объект
-        var_info = self.get_variable_info(object_name)
-        if var_info:
-            obj_type = var_info.get("py_type", "")
-            if self._is_class_type(obj_type):
-                # Это объект класса
-                value_expr = self.generate_expression(value_ast)
-                self.add_line(f"{object_name}->{attribute} = {value_expr};")
-                return
-
-        # Fallback
-        value_expr = self.generate_expression(value_ast)
-        self.add_line(f"{object_name}.{attribute} = {value_expr};")
 
     def _process_attribute_assignment_in_init(self, node: Dict, param_names: List[str]):
         """Обрабатывает присваивание атрибуту в конструкторе"""
@@ -6601,129 +6834,6 @@ class CCodeGenerator:
             # Устанавливаем новое значение
             self.add_line(f"set_{struct_name}({variable}, {index_expr}, {temp_var});")
 
-    def generate_object_method_call(self, node: Dict):
-        """Генерирует вызов метода объекта (obj.method())"""
-        object_name = node.get(
-            "class_name", ""
-        )  # В JSON это поле называется class_name
-        method_name = node.get("method", "")
-        args = node.get("arguments", [])
-
-        logger.debug(
-            f"DEBUG generate_object_method_call: {object_name}.{method_name}()"
-        )
-
-        # Универсальная реализация
-        var_info = self.get_variable_info(object_name)
-        if not var_info:
-            self.add_line(f"// ERROR: Object '{object_name}' not found")
-            return
-
-        object_type = var_info.get("py_type", "")
-        if not object_type:
-            self.add_line(f"// ERROR: No type for '{object_name}'")
-            return
-
-        # ПРОВЕРЯЕМ, ЯВЛЯЕТСЯ ЛИ ОБЪЕКТ СПИСКОМ
-        if object_type.startswith("list["):
-            # Для списков используем специальные функции
-            if method_name == "append" and args:
-                # Получаем правильное имя структуры
-                struct_name = self.generate_list_struct_name(object_type)
-                logger.debug(
-                    f"DEBUG: append для {object_name} типа {object_type}, struct_name={struct_name}"
-                )
-
-                # Генерируем аргумент
-                arg = args[0]
-                if isinstance(arg, dict):
-                    arg_expr = self.generate_expression(arg)
-                else:
-                    arg_expr = str(arg)
-
-                # Генерируем правильный вызов
-                self.add_line(f"append_{struct_name}({object_name}, {arg_expr});")
-                return
-
-            # Добавляем обработку других методов списков если нужно
-            else:
-                self.add_line(f"// Метод списка '{method_name}' для типа {object_type}")
-                return
-
-        # ДЛЯ КЛАССОВ (не списков) - оригинальная логика
-        # Генерируем аргументы
-        arg_exprs = []
-        for arg in args:
-            if isinstance(arg, dict):
-                expr = self.generate_expression(arg)
-                if expr is None:
-                    expr = "0"
-                arg_exprs.append(expr)
-            else:
-                arg_exprs.append(str(arg))
-
-        # Собираем все аргументы: self + остальные
-        all_args = [object_name] + arg_exprs
-        args_str = ", ".join(all_args)
-
-        # Формируем имя функции: TypeName_methodName
-        # Но для списков это не должно использоваться!
-        self.add_line(f"{object_type}_{method_name}({args_str});")
-
-    def generate_redeclaration(self, node: Dict):
-        """Генерирует код для повторного объявления переменной"""
-        var_name = node.get("var_name", "")
-        var_type = node.get("var_type", "")
-        expression_ast = node.get("expression_ast", {})
-
-        logger.debug(f"generate_redeclaration: {var_name}: {var_type}")
-
-        # Получаем информацию о старой переменной
-        old_var_info = self.get_variable_info(var_name)
-
-        # Освобождаем старую память если нужно
-        if old_var_info:
-            old_py_type = old_var_info.get("py_type", "")
-
-            if old_py_type.startswith("list["):
-                struct_name = self.generate_list_struct_name(old_py_type)
-                self.add_line(f"if ({var_name}) {{")
-                self.indent_level += 1
-                self.add_line(f"free_{struct_name}({var_name});")
-                self.indent_level -= 1
-                self.add_line("}")
-            elif old_py_type.startswith("tuple["):
-                struct_name = self.generate_tuple_struct_name(old_py_type)
-                self.add_line(f"free_{struct_name}({var_name});")
-            elif old_py_type == "str":
-                self.add_line(f"if ({var_name}) {{")
-                self.indent_level += 1
-                self.add_line(f"free({var_name});")
-                self.indent_level -= 1
-                self.add_line("}")
-
-        # Обновляем переменную в scope
-        self.declare_variable(var_name, var_type)
-
-        # Генерируем код для нового значения
-        if expression_ast:
-            if (
-                var_type.startswith("list[")
-                and expression_ast.get("type") == "list_literal"
-            ):
-                # Генерируем код для нового списка
-                self._generate_list_redeclaration(var_name, var_type, expression_ast)
-            elif (
-                var_type.startswith("tuple[")
-                and expression_ast.get("type") == "tuple_literal"
-            ):
-                # Генерируем код для нового кортежа
-                self._generate_tuple_redeclaration(var_name, var_type, expression_ast)
-            else:
-                # Обычное присваивание
-                expr = self.generate_expression(expression_ast)
-                self.add_line(f"{var_name} = {expr};")
-
     def _generate_list_redeclaration(
         self, var_name: str, var_type: str, list_ast: Dict
     ):
@@ -6894,28 +7004,6 @@ class CCodeGenerator:
 
         # Добавляем объявление main
         self.function_declarations.append("int main(void);")
-
-    def clean_type_name_for_c(self, type_name: str) -> str:
-        """Очищает имя типа для использования в C идентификаторах"""
-        if not isinstance(type_name, str):
-            return "unknown"
-
-        # Удаляем все небуквенно-цифровые символы и заменяем на _
-        cleaned = re.sub(r"[^a-zA-Z0-9]", "_", type_name)
-        # Убираем множественные подчеркивания
-        cleaned = re.sub(r"_+", "_", cleaned)
-        # Убираем подчеркивания в начале и конце
-        cleaned = cleaned.strip("_")
-
-        # Если после очистки строка пустая, используем дефолтное имя
-        if not cleaned:
-            return "unknown"
-
-        # Делаем первую букву строчной для согласованности
-        if cleaned[0].isupper():
-            cleaned = cleaned[0].lower() + cleaned[1:]
-
-        return cleaned
 
     def collect_types_from_ast(self, json_data: List[Dict]):
         """Собирает все типы из AST для генерации структур"""
@@ -7378,51 +7466,6 @@ class CCodeGenerator:
                 return self.class_fields[obj_type].get(attr_name)
 
         return None
-
-    def _is_none_expression(self, ast: Dict) -> bool:
-        """Проверяет, является ли выражение None"""
-        if not ast:
-            return False
-
-        if ast.get("type") == "literal":
-            return ast.get("data_type") == "None" or ast.get("value") == "None"
-
-        if ast.get("type") == "variable":
-            var_name = ast.get("value", "")
-            var_info = self.get_variable_info(var_name)
-            if var_info:
-                return var_info.get("py_type") == "None"
-
-        return False
-
-    def _extract_dict_types(self, dict_type: str) -> tuple:
-        """Извлекает типы ключа и значения из dict[K, V]"""
-        if not dict_type.startswith("dict[") or not dict_type.endswith("]"):
-            return "int", "int"  # По умолчанию
-
-        # Извлекаем содержимое между скобками
-        inner = dict_type[5:-1].strip()
-
-        # Ищем запятую, которая не находится внутри вложенных скобок
-        depth = 0
-        comma_pos = -1
-
-        for i, char in enumerate(inner):
-            if char == "[":
-                depth += 1
-            elif char == "]":
-                depth -= 1
-            elif char == "," and depth == 0:
-                comma_pos = i
-                break
-
-        if comma_pos == -1:
-            return "int", "int"
-
-        key_type = inner[:comma_pos].strip()
-        value_type = inner[comma_pos + 1 :].strip()
-
-        return key_type, value_type
 
     def extract_all_types_from_ast(self, json_data: List[Dict]) -> set:
         """Извлекает все типы из AST для генерации структур"""
