@@ -2200,7 +2200,116 @@ class CCodeGenerator:
     # Index & Slice Operations
     ###############################################################################################
 
-    ###############################################################################################
+    def generate_index_assignment(self, node: Dict):
+        """Генерирует присваивание по индексу: list[index] = value или dict[key] = value"""
+        variable = node.get("variable", "")
+        index_ast = node.get("index", {})
+        value_ast = node.get("value", {})
+        node_type = node.get("node")
+
+        # Проверяем по node_type
+        if node_type == "nested_index_assignment":
+            print(
+                "  -> это nested_index_assignment, вызываем _generate_nested_index_assignment"
+            )
+            self._generate_nested_index_assignment(node)
+            return
+
+        # Проверяем, не является ли переменная словарем с индексами
+        if isinstance(variable, dict):
+            var_type = variable.get("type", "")
+            print(f"variable is dict with type: {var_type}")
+            if var_type in [
+                "nested_index_access",
+                "nested_index_assignment",
+                "index_access",
+            ]:
+                print(
+                    "  -> это вложенная индексация, вызываем _generate_nested_index_assignment"
+                )
+                self._generate_nested_index_assignment(node)
+                return
+
+        index_expr = self.generate_expression(index_ast)
+        value_expr = self.generate_expression(value_ast)
+
+        # Обработка для self.attr
+        if isinstance(variable, str) and variable.startswith("self."):
+            attr_name = variable[5:]
+            print(f"  -> обработка self.{attr_name}")
+
+            # Для атрибутов, которые могут быть списками
+            if attr_name == "data":
+                self.add_line(f"set_list_int(self->data, {index_expr}, {value_expr});")
+            else:
+                # Пробуем определить тип атрибута
+                current_class = self._get_current_class()
+                if current_class and current_class in self.class_fields:
+                    attr_type = self.class_fields[current_class].get(attr_name)
+                    if attr_type and attr_type.startswith("list["):
+                        struct_name = self.generate_list_struct_name(attr_type)
+                        self.add_line(
+                            f"set_{struct_name}(self->{attr_name}, {index_expr}, {value_expr});"
+                        )
+                    elif attr_type and attr_type.startswith("dict["):
+                        # Обработка словаря как атрибута
+                        key_type, value_type = self._extract_dict_types(attr_type)
+                        dict_struct = f"dict_{self.clean_type_name_for_c(key_type)}_{self.clean_type_name_for_c(value_type)}"
+                        self.add_line(
+                            f"set_{dict_struct}(self->{attr_name}, {index_expr}, {value_expr});"
+                        )
+                    else:
+                        self.add_line(
+                            f"self->{attr_name}[{index_expr}] = {value_expr};"
+                        )
+                else:
+                    self.add_line(f"self->{attr_name}[{index_expr}] = {value_expr};")
+            return
+
+        # Получаем информацию о переменной
+        var_info = self.get_variable_info(variable)
+
+        if var_info:
+            py_type = var_info.get("py_type", "")
+            print(f"  -> тип переменной: {py_type}")
+
+            # Обработка для словарей
+            if py_type.startswith("dict["):
+                # Извлекаем типы ключа и значения
+                key_type, value_type = self._extract_dict_types(py_type)
+
+                # Генерируем имя структуры для словаря
+                key_name = self.clean_type_name_for_c(key_type)
+                value_name = self.clean_type_name_for_c(value_type)
+                dict_struct = f"dict_{key_name}_{value_name}"
+
+                # Добавляем присваивание для словаря
+                self.add_line(
+                    f"set_{dict_struct}({variable}, {index_expr}, {value_expr});"
+                )
+
+            # Обработка для списков
+            elif py_type.startswith("list["):
+                struct_name = self.generate_list_struct_name(py_type)
+                self.add_line(
+                    f"set_{struct_name}({variable}, {index_expr}, {value_expr});"
+                )
+
+            # Обработка для кортежей (неизменяемые)
+            elif py_type.startswith("tuple["):
+                struct_name = self.generate_tuple_struct_name(py_type)
+                self.add_line(
+                    f"{variable}.data[{index_expr}] = {value_expr}; // Note: tuples are immutable in Python"
+                )
+
+            # Обычный массив или другой тип
+            else:
+                self.add_line(f"{variable}[{index_expr}] = {value_expr};")
+
+        else:
+            # Если информация о переменной не найдена, пробуем прямую генерацию
+            print(f"  -> переменная не найдена, прямая генерация")
+            self.add_line(f"{variable}[{index_expr}] = {value_expr};")
 
     def generate_nested_index_assignment(self, node: Dict):
         """Генерирует код для многомерного индексного присваивания: A_data[0][0] = 10"""
@@ -2278,6 +2387,474 @@ class CCodeGenerator:
             # Неизвестный тип
             self.add_line(f"// ERROR: Cannot assign to nested index of type {py_type}")
 
+    def _generate_nested_index_assignment(self, node: Dict):
+        """Генерирует присваивание для вложенной индексации любой глубины"""
+        logger.debug(f"_generate_nested_index_assignment: {node}")
+
+        print("\n--- _generate_nested_index_assignment ---")
+        print(f"node: {node}")
+
+        # Получаем данные из узла
+        var_name = node.get("variable", "")
+        indices_ast = node.get("indices", [])
+        value_ast = node.get("value", {})
+
+        print(f"var_name: {var_name}")
+        print(f"indices_ast: {indices_ast}")
+        print(f"value_ast: {value_ast}")
+
+        if not var_name or not indices_ast:
+            print("  ERROR: no var_name or indices")
+            return
+
+        # Генерируем выражения для всех индексов
+        indices = []
+        for idx_ast in indices_ast:
+            indices.append(self.generate_expression(idx_ast))
+
+        print(f"  indices expressions: {indices}")
+
+        var_info = self.get_variable_info(var_name)
+        if not var_info:
+            print(f"  ERROR: no var_info for {var_name}")
+            return
+
+        py_type = var_info.get("py_type", "")
+        value_expr = self.generate_expression(value_ast)
+
+        print(f"  py_type: {py_type}")
+        print(f"  value_expr: {value_expr}")
+
+        # Если глубина = 1, используем простую set_функцию
+        if len(indices) == 1:
+            if py_type.startswith("list["):
+                struct_name = self.generate_list_struct_name(py_type)
+                self.add_line(
+                    f"set_{struct_name}({var_name}, {indices[0]}, {value_expr});"
+                )
+            else:
+                self.add_line(f"{var_name}[{indices[0]}] = {value_expr};")
+            return
+
+        # Для глубины > 1 нужно дойти до последнего уровня и там установить значение
+        current_var = var_name
+        current_type = py_type
+
+        # Проходим все уровни КРОМЕ ПОСЛЕДНЕГО, чтобы получить список последнего уровня
+        for i, idx in enumerate(indices[:-1]):  # Все кроме последнего индекса
+            if current_type.startswith("list["):
+                struct_name = self.generate_list_struct_name(current_type)
+
+                # Определяем тип следующего уровня
+                inner_type = current_type[5:-1]  # list[X] -> X
+
+                # Создаем временную переменную для следующего уровня
+                temp_var = self.generate_temporary_var(f"level_{i}")
+
+                # Определяем C тип для временной переменной
+                inner_struct_name = self.generate_list_struct_name(inner_type)
+                c_type = f"{inner_struct_name}*"
+
+                # Получаем вложенный список
+                self.add_line(
+                    f"{c_type} {temp_var} = get_{struct_name}({current_var}, {idx});"
+                )
+
+                # Обновляем текущие переменные для следующей итерации
+                current_var = temp_var
+                current_type = inner_type
+            else:
+                self.add_line(f"// ERROR: Too many indices for type {py_type}")
+                return
+
+        # Теперь current_var указывает на список последнего уровня
+        # Устанавливаем значение на последнем уровне
+        last_idx = indices[-1]
+
+        if current_type.startswith("list["):
+            struct_name = self.generate_list_struct_name(current_type)
+            self.add_line(
+                f"set_{struct_name}({current_var}, {last_idx}, {value_expr});"
+            )
+        else:
+            self.add_line(f"{current_var}[{last_idx}] = {value_expr};")
+
+    def generate_slice_assignment(self, node: Dict):
+        """Генерирует присваивание среза: list[start:stop] = values"""
+        variable = node.get("variable", "")
+        start_ast = node.get("start", {})
+        stop_ast = node.get("stop", {})
+        step_ast = node.get("step", {})
+        value_ast = node.get("value", {})
+
+        start_expr = self.generate_expression(start_ast) if start_ast else "0"
+        stop_expr = (
+            self.generate_expression(stop_ast) if stop_ast else f"{variable}->size"
+        )
+
+        var_info = self.get_variable_info(variable)
+
+        if var_info and var_info.get("py_type", "").startswith("list["):
+            if value_ast.get("type") == "list_literal":
+                items = value_ast.get("items", [])
+                if items:
+                    # Присваивание списка значений срезу
+                    for i, item in enumerate(items):
+                        item_expr = self.generate_expression(item)
+                        idx = f"{start_expr} + {i}"
+                        self.add_line(
+                            f"if ({idx} < {stop_expr} && {idx} < {variable}->size) {{"
+                        )
+                        self.indent_level += 1
+                        self.add_line(
+                            f"set_{self.generate_list_struct_name(var_info['py_type'])}({variable}, {idx}, {item_expr});"
+                        )
+                        self.indent_level -= 1
+                        self.add_line("}")
+            else:
+                # Присваивание одного значения всем элементам среза
+                value_expr = self.generate_expression(value_ast)
+                temp_var = self.generate_temporary_var("int")
+                self.add_line(
+                    f"for (int {temp_var} = {start_expr}; {temp_var} < {stop_expr}; {temp_var}++) {{"
+                )
+                self.indent_level += 1
+                self.add_line(f"if ({temp_var} < {variable}->size) {{")
+                self.indent_level += 1
+                self.add_line(
+                    f"set_{self.generate_list_struct_name(var_info['py_type'])}({variable}, {temp_var}, {value_expr});"
+                )
+                self.indent_level -= 1
+                self.add_line("}")
+                self.indent_level -= 1
+                self.add_line("}")
+
+    def generate_augmented_index_assignment(self, node: Dict):
+        """Генерирует составное присваивание по индексу: list[index] += value"""
+        variable = node.get("variable", "")
+        index_ast = node.get("index", {})
+        operator = node.get("operator", "")
+        value_ast = node.get("value", {})
+
+        index_expr = self.generate_expression(index_ast)
+        value_expr = self.generate_expression(value_ast)
+
+        var_info = self.get_variable_info(variable)
+
+        if var_info and var_info.get("py_type", "").startswith("list["):
+            struct_name = self.generate_list_struct_name(var_info["py_type"])
+            # Получаем текущее значение
+            temp_var = self.generate_temporary_var("int")
+            self.add_line(
+                f"int {temp_var} = get_{struct_name}({variable}, {index_expr});"
+            )
+            # Применяем оператор
+            op_symbol = operator.replace("=", "")
+            c_op = self.operator_map.get(op_symbol, op_symbol)
+            if c_op == "pow":
+                self.add_line(f"{temp_var} = pow({temp_var}, {value_expr});")
+            else:
+                self.add_line(f"{temp_var} {operator} {value_expr};")
+            # Устанавливаем новое значение
+            self.add_line(f"set_{struct_name}({variable}, {index_expr}, {temp_var});")
+
+    def _generate_index_access(self, ast: Dict) -> str:
+        """Генерирует код для доступа по индексу"""
+        variable = ast.get("variable", "")
+        index_ast = ast.get("index", {})
+        index_expr = self.generate_expression(index_ast)
+
+        # Если variable - это attribute_access (например, self.a)
+        if isinstance(variable, dict) and variable.get("type") == "attribute_access":
+            # Генерируем выражение для доступа к атрибуту
+            obj_name = variable.get("object", "")
+            attr_name = variable.get("attribute", "")
+
+            # Получаем тип атрибута
+            attr_type = self._get_attribute_type(obj_name, attr_name)
+
+            # Генерируем выражение для доступа к атрибуту
+            attr_expr = self.generate_attribute_access(variable)
+
+            if attr_type and attr_type.startswith("list["):
+                # Для списков используем get_функцию
+                struct_name = self.generate_list_struct_name(attr_type)
+                logger.debug(
+                    f"DEBUG: Использую get_{struct_name} для {attr_expr}[{index_expr}]"
+                )
+                return f"get_{struct_name}({attr_expr}, {index_expr})"
+            else:
+                # Для других типов - обычная индексация
+                logger.debug(f"DEBUG: Обычная индексация для {attr_expr}[{index_expr}]")
+                return f"{attr_expr}[{index_expr}]"
+
+        # Если variable - обычная строка
+        elif isinstance(variable, str):
+            var_info = self.get_variable_info(variable)
+
+            if var_info:
+                py_type = var_info.get("py_type", "")
+
+                if py_type.startswith("list["):
+                    struct_name = self.generate_list_struct_name(py_type)
+                    return f"get_{struct_name}({variable}, {index_expr})"
+                elif py_type.startswith("tuple["):
+                    struct_name = self.generate_tuple_struct_name(py_type)
+                    return f"get_{struct_name}({variable}, {index_expr})"
+                elif py_type.startswith("dict["):
+                    # Это словарь
+                    key_type, value_type = self._extract_dict_types(py_type)
+                    key_name = self.clean_type_name_for_c(key_type)
+                    value_name = self.clean_type_name_for_c(value_type)
+                    struct_name = f"dict_{key_name}_{value_name}"
+
+                    # Убеждаемся, что структура сгенерирована
+                    self.generate_dict_struct(key_type, value_type)
+
+                    return f"get_{struct_name}({variable}, {index_expr})"
+
+            return f"{variable}[{index_expr}]"
+        else:
+            # Сложный случай
+            var_expr = self.generate_expression(variable)
+            return f"{var_expr}[{index_expr}]"
+
+    def _generate_nested_index_access(self, ast: Dict) -> str:
+        """Генерирует выражение для вложенной индексации (для использования в выражениях)"""
+        logger.debug(f"_generate_nested_index_access_expr: {ast}")
+
+        # Собираем все индексы
+        indices = []
+        current = ast
+        var_name = None
+
+        while True:
+            if current.get("type") == "nested_index_access":
+                # Добавляем текущий индекс
+                indices.append(self.generate_expression(current.get("index", {})))
+                # Переходим к base
+                current = current.get("base", {})
+            elif current.get("type") == "index_access":
+                # Добавляем индекс
+                indices.append(self.generate_expression(current.get("index", {})))
+                # Получаем переменную
+                var_node = current.get("variable", {})
+
+                # Извлекаем имя переменной из вложенной структуры
+                if isinstance(var_node, dict):
+                    if var_node.get("type") == "index_access":
+                        # Это вложенный index_access, продолжаем
+                        current = var_node
+                        continue
+                    elif var_node.get("type") == "variable":
+                        # Это конечная переменная
+                        var_name = var_node.get("value", "")
+                        if not var_name:
+                            var_name = var_node.get("name", "")
+                        break
+                    else:
+                        # Пробуем другие поля
+                        var_name = (
+                            var_node.get("value", "")
+                            or var_node.get("name", "")
+                            or str(var_node)
+                        )
+                        break
+                else:
+                    var_name = str(var_node)
+                    break
+            elif current.get("type") == "variable":
+                # Прямой узел переменной
+                var_name = (
+                    current.get("value", "") or current.get("name", "") or str(current)
+                )
+                break
+            else:
+                # Если ничего не подошло
+                var_name = str(current)
+                break
+
+        # Индексы собраны в обратном порядке
+        indices.reverse()
+        logger.debug(f"var_name={var_name}, indices={indices}")
+
+        if not var_name or not isinstance(var_name, str):
+            logger.error(f"Invalid var_name: {var_name}")
+            return "0"
+
+        var_info = self.get_variable_info(var_name)
+        if not var_info:
+            # Обычный массив
+            result = var_name
+            for idx in indices:
+                result += f"[{idx}]"
+            return result
+
+        # Для списков строим цепочку get_функций
+        py_type = var_info.get("py_type", "")
+        result = var_name
+        current_type = py_type
+
+        for idx in indices:
+            if current_type.startswith("list["):
+                struct_name = self.generate_list_struct_name(current_type)
+                result = f"get_{struct_name}({result}, {idx})"
+
+                # Обновляем текущий тип для следующего уровня
+                current_type = current_type[5:-1]  # list[X] -> X
+            else:
+                result += f"[{idx}]"
+
+        return result
+
+    def _generate_complex_attribute_access(self, ast: Dict) -> str:
+        """Генерирует доступ к элементу сложного атрибута (self.data[index])"""
+        obj_name = ast.get("object", "")
+        attr_name = ast.get("attribute", "")
+        index_ast = ast.get("index", {})
+
+        index_expr = self.generate_expression(index_ast)
+
+        # Получаем информацию об объекте
+        var_info = self.get_variable_info(obj_name)
+
+        if not var_info:
+            # Если переменная не найдена, возможно это self внутри метода класса
+            if obj_name == "self":
+                # Ищем текущий класс
+                current_class = self._get_current_class()
+                if current_class and current_class in self.class_fields:
+                    # Проверяем тип атрибута
+                    attr_type = self.class_fields[current_class].get(attr_name)
+                    if attr_type and attr_type.startswith("list["):
+                        # Генерируем вызов специализированной функции
+                        struct_name = self.generate_list_struct_name(attr_type)
+                        return f"get_{struct_name}(self->{attr_name}, {index_expr})"
+
+        # Если это переменная (не self)
+        if var_info:
+            obj_py_type = var_info.get("py_type", "")
+
+            # Если это класс или указатель на класс
+            if self._is_class_type(obj_py_type) or var_info.get("is_pointer", False):
+                # Получаем информацию о классе
+                class_name = obj_py_type.replace("*", "").strip()
+                if class_name in self.class_fields:
+                    attr_type = self.class_fields[class_name].get(attr_name)
+                    if attr_type and attr_type.startswith("list["):
+                        struct_name = self.generate_list_struct_name(attr_type)
+                        return (
+                            f"get_{struct_name}({obj_name}->{attr_name}, {index_expr})"
+                        )
+
+        # По умолчанию - прямой доступ к массиву
+        return f"{obj_name}->{attr_name}[{index_expr}]"
+
+    ###############################################################################################
+    # Print & Input
+    ###############################################################################################
+
+    def generate_input_expression(self, node: Dict) -> str:
+        """Генерирует выражение с input() и возвращает имя переменной с результатом"""
+        args = node.get("arguments", [])
+
+        # Создаем уникальное имя для временной переменной
+        temp_var = self.generate_temporary_var("str")
+
+        # Объявляем переменную
+        self.declare_variable(temp_var, "str")
+
+        # Получаем информацию о переменной для генерации правильного типа
+        var_info = self.get_variable_info(temp_var)
+        c_type = var_info["c_type"] if var_info else "char*"
+
+        # Объявляем переменную
+        self.add_line(f"{c_type} {temp_var} = NULL;")
+
+        # Генерируем prompt если есть аргументы
+        if args:
+            self._generate_input_prompt(args)
+
+        # Генерируем код для чтения ввода
+        self._generate_input_read_code_direct(temp_var)
+
+        return temp_var
+
+    def generate_input_statement(self, node: Dict):
+        """Генерирует вызов input() как отдельный statement (без присваивания)"""
+        args = node.get("arguments", [])
+
+        # Генерируем prompt если есть аргументы
+        if args:
+            self._generate_input_prompt(args)
+
+        # Читаем ввод, но игнорируем результат
+        temp_var = self.generate_temporary_var("str")
+        buffer_var = f"{temp_var}_buffer"
+
+        self.add_line(f"char {buffer_var}[256];")
+        self.add_line(f"fgets({buffer_var}, sizeof({buffer_var}), stdin);")
+        self.add_line(f'{buffer_var}[strcspn({buffer_var}, "\\n")] = 0;')
+        self.add_line(f"// Ввод прочитан, результат игнорируется")
+
+    def _generate_input_prompt(self, args: List):
+        """Генерирует код для вывода prompt в input()"""
+        format_parts = []
+        value_parts = []
+
+        for arg in args:
+            if isinstance(arg, dict):
+                if arg.get("type") == "literal" and arg.get("data_type") == "str":
+                    # Строковый литерал
+                    value = arg.get("value", "")
+                    format_parts.append(f"{value}")
+                else:
+                    # Другие выражения (переменные, вызовы функций и т.д.)
+                    expr = self.generate_expression(arg)
+                    format_parts.append("%s")
+                    value_parts.append(expr)
+            else:
+                # Простая строка (не должно быть в нормальном AST)
+                format_parts.append(str(arg))
+
+        # Собираем prompt строку
+        if format_parts:
+            prompt = " ".join(format_parts)
+
+            if value_parts:
+                # Если есть динамические части (переменные)
+                args_str = ", ".join(value_parts)
+                self.add_line(f'printf("{prompt}", {args_str});')
+            else:
+                # Простой строковый литерал
+                self.add_line(f'printf("{prompt}");')
+
+    def _generate_input_read_code(self, target_var: str):
+        """Генерирует код для чтения ввода с клавиатуры"""
+        # Создаем буфер для ввода
+        buffer_var = f"{target_var}_buffer"
+
+        # Выделяем память для буфера
+        self.add_line(f"char {buffer_var}[256];")
+
+        # Читаем строку с stdin
+        self.add_line(f"fgets({buffer_var}, sizeof({buffer_var}), stdin);")
+
+        # Убираем символ новой строки
+        self.add_line(f'{buffer_var}[strcspn({buffer_var}, "\\n")] = 0;')
+
+        # Выделяем память для результата и копируем
+        self.add_line(f"{target_var} = malloc(strlen({buffer_var}) + 1);")
+        self.add_line(f"if (!{target_var}) {{")
+        self.indent_level += 1
+        self.add_line(
+            f'fprintf(stderr, "Memory allocation failed for input result\\n");'
+        )
+        self.add_line(f"exit(1);")
+        self.indent_level -= 1
+        self.add_line(f"}}")
+        self.add_line(f"strcpy({target_var}, {buffer_var});")
+
     def _generate_input_read_code_direct(self, target_var: str):
         """Генерирует код для чтения ввода с клавиатуры прямо в целевую переменную"""
         buffer_var = f"{target_var}_buffer"
@@ -2318,6 +2895,57 @@ class CCodeGenerator:
         self.add_line(f"strcpy({target_var}, {buffer_var});")
         self.indent_level -= 1
         self.add_line(f"}}")
+
+    def _generate_string_concatenation(
+        self, target_var: str, left_expr: str, right_expr: str, c_type: str
+    ):
+        """Генерирует правильную конкатенацию строк"""
+        # Определяем, являются ли выражения строковыми литералами
+        left_is_literal = left_expr.startswith('"') and left_expr.endswith('"')
+        right_is_literal = right_expr.startswith('"') and right_expr.endswith('"')
+
+        if left_is_literal and right_is_literal:
+            # Оба литерала - можно вычислить на этапе компиляции
+            left_str = left_expr[1:-1]  # Убираем кавычки
+            right_str = right_expr[1:-1]
+            result_str = f'"{left_str}{right_str}"'
+
+            self.add_line(f"{c_type} {target_var} = malloc(strlen({result_str}) + 1);")
+            self.add_line(f"if (!{target_var}) {{")
+            self.indent_level += 1
+            self.add_line(f'fprintf(stderr, "Memory allocation failed\\n");')
+            self.add_line(f"exit(1);")
+            self.indent_level -= 1
+            self.add_line(f"}}")
+            self.add_line(f"strcpy({target_var}, {result_str});")
+
+        else:
+            # Одно или оба выражения - переменные или сложные выражения
+            # Создаем временные переменные для длин
+            temp_len1 = self.generate_temporary_var("int")
+            temp_len2 = self.generate_temporary_var("int")
+
+            self.add_line(f"int {temp_len1} = strlen({left_expr});")
+            self.add_line(f"int {temp_len2} = strlen({right_expr});")
+
+            # Выделяем память
+            self.add_line(
+                f"{c_type} {target_var} = malloc({temp_len1} + {temp_len2} + 1);"
+            )
+            self.add_line(f"if (!{target_var}) {{")
+            self.indent_level += 1
+            self.add_line(
+                f'fprintf(stderr, "Memory allocation failed for string concatenation\\n");'
+            )
+            self.add_line(f"exit(1);")
+            self.indent_level -= 1
+            self.add_line(f"}}")
+
+            # Копируем строки
+            self.add_line(f"strcpy({target_var}, {left_expr});")
+            self.add_line(f"strcat({target_var}, {right_expr});")
+
+    ###############################################################################################
 
     def _generate_nested_list_elements_correctly(
         self, parent_var: str, items: List, type_info: Dict, level: int
@@ -4134,198 +4762,6 @@ class CCodeGenerator:
 
         return ast_value
 
-    def _generate_index_access(self, ast: Dict) -> str:
-        """Генерирует код для доступа по индексу"""
-        variable = ast.get("variable", "")
-        index_ast = ast.get("index", {})
-        index_expr = self.generate_expression(index_ast)
-
-        # Если variable - это attribute_access (например, self.a)
-        if isinstance(variable, dict) and variable.get("type") == "attribute_access":
-            # Генерируем выражение для доступа к атрибуту
-            obj_name = variable.get("object", "")
-            attr_name = variable.get("attribute", "")
-
-            # Получаем тип атрибута
-            attr_type = self._get_attribute_type(obj_name, attr_name)
-
-            # Генерируем выражение для доступа к атрибуту
-            attr_expr = self.generate_attribute_access(variable)
-
-            if attr_type and attr_type.startswith("list["):
-                # Для списков используем get_функцию
-                struct_name = self.generate_list_struct_name(attr_type)
-                logger.debug(
-                    f"DEBUG: Использую get_{struct_name} для {attr_expr}[{index_expr}]"
-                )
-                return f"get_{struct_name}({attr_expr}, {index_expr})"
-            else:
-                # Для других типов - обычная индексация
-                logger.debug(f"DEBUG: Обычная индексация для {attr_expr}[{index_expr}]")
-                return f"{attr_expr}[{index_expr}]"
-
-        # Если variable - обычная строка
-        elif isinstance(variable, str):
-            var_info = self.get_variable_info(variable)
-
-            if var_info:
-                py_type = var_info.get("py_type", "")
-
-                if py_type.startswith("list["):
-                    struct_name = self.generate_list_struct_name(py_type)
-                    return f"get_{struct_name}({variable}, {index_expr})"
-                elif py_type.startswith("tuple["):
-                    struct_name = self.generate_tuple_struct_name(py_type)
-                    return f"get_{struct_name}({variable}, {index_expr})"
-                elif py_type.startswith("dict["):
-                    # Это словарь
-                    key_type, value_type = self._extract_dict_types(py_type)
-                    key_name = self.clean_type_name_for_c(key_type)
-                    value_name = self.clean_type_name_for_c(value_type)
-                    struct_name = f"dict_{key_name}_{value_name}"
-
-                    # Убеждаемся, что структура сгенерирована
-                    self.generate_dict_struct(key_type, value_type)
-
-                    return f"get_{struct_name}({variable}, {index_expr})"
-
-            return f"{variable}[{index_expr}]"
-        else:
-            # Сложный случай
-            var_expr = self.generate_expression(variable)
-            return f"{var_expr}[{index_expr}]"
-
-    def _generate_nested_index_access(self, ast: Dict) -> str:
-        """Генерирует выражение для вложенной индексации (для использования в выражениях)"""
-        logger.debug(f"_generate_nested_index_access_expr: {ast}")
-
-        # Собираем все индексы
-        indices = []
-        current = ast
-        var_name = None
-
-        while True:
-            if current.get("type") == "nested_index_access":
-                # Добавляем текущий индекс
-                indices.append(self.generate_expression(current.get("index", {})))
-                # Переходим к base
-                current = current.get("base", {})
-            elif current.get("type") == "index_access":
-                # Добавляем индекс
-                indices.append(self.generate_expression(current.get("index", {})))
-                # Получаем переменную
-                var_node = current.get("variable", {})
-
-                # Извлекаем имя переменной из вложенной структуры
-                if isinstance(var_node, dict):
-                    if var_node.get("type") == "index_access":
-                        # Это вложенный index_access, продолжаем
-                        current = var_node
-                        continue
-                    elif var_node.get("type") == "variable":
-                        # Это конечная переменная
-                        var_name = var_node.get("value", "")
-                        if not var_name:
-                            var_name = var_node.get("name", "")
-                        break
-                    else:
-                        # Пробуем другие поля
-                        var_name = (
-                            var_node.get("value", "")
-                            or var_node.get("name", "")
-                            or str(var_node)
-                        )
-                        break
-                else:
-                    var_name = str(var_node)
-                    break
-            elif current.get("type") == "variable":
-                # Прямой узел переменной
-                var_name = (
-                    current.get("value", "") or current.get("name", "") or str(current)
-                )
-                break
-            else:
-                # Если ничего не подошло
-                var_name = str(current)
-                break
-
-        # Индексы собраны в обратном порядке
-        indices.reverse()
-        logger.debug(f"var_name={var_name}, indices={indices}")
-
-        if not var_name or not isinstance(var_name, str):
-            logger.error(f"Invalid var_name: {var_name}")
-            return "0"
-
-        var_info = self.get_variable_info(var_name)
-        if not var_info:
-            # Обычный массив
-            result = var_name
-            for idx in indices:
-                result += f"[{idx}]"
-            return result
-
-        # Для списков строим цепочку get_функций
-        py_type = var_info.get("py_type", "")
-        result = var_name
-        current_type = py_type
-
-        for idx in indices:
-            if current_type.startswith("list["):
-                struct_name = self.generate_list_struct_name(current_type)
-                result = f"get_{struct_name}({result}, {idx})"
-
-                # Обновляем текущий тип для следующего уровня
-                current_type = current_type[5:-1]  # list[X] -> X
-            else:
-                result += f"[{idx}]"
-
-        return result
-
-    def _generate_complex_attribute_access(self, ast: Dict) -> str:
-        """Генерирует доступ к элементу сложного атрибута (self.data[index])"""
-        obj_name = ast.get("object", "")
-        attr_name = ast.get("attribute", "")
-        index_ast = ast.get("index", {})
-
-        index_expr = self.generate_expression(index_ast)
-
-        # Получаем информацию об объекте
-        var_info = self.get_variable_info(obj_name)
-
-        if not var_info:
-            # Если переменная не найдена, возможно это self внутри метода класса
-            if obj_name == "self":
-                # Ищем текущий класс
-                current_class = self._get_current_class()
-                if current_class and current_class in self.class_fields:
-                    # Проверяем тип атрибута
-                    attr_type = self.class_fields[current_class].get(attr_name)
-                    if attr_type and attr_type.startswith("list["):
-                        # Генерируем вызов специализированной функции
-                        struct_name = self.generate_list_struct_name(attr_type)
-                        return f"get_{struct_name}(self->{attr_name}, {index_expr})"
-
-        # Если это переменная (не self)
-        if var_info:
-            obj_py_type = var_info.get("py_type", "")
-
-            # Если это класс или указатель на класс
-            if self._is_class_type(obj_py_type) or var_info.get("is_pointer", False):
-                # Получаем информацию о классе
-                class_name = obj_py_type.replace("*", "").strip()
-                if class_name in self.class_fields:
-                    attr_type = self.class_fields[class_name].get(attr_name)
-                    if attr_type and attr_type.startswith("list["):
-                        struct_name = self.generate_list_struct_name(attr_type)
-                        return (
-                            f"get_{struct_name}({obj_name}->{attr_name}, {index_expr})"
-                        )
-
-        # По умолчанию - прямой доступ к массиву
-        return f"{obj_name}->{attr_name}[{index_expr}]"
-
     def generate_class_declaration(self, node: Dict):
         """Генерирует структуру для класса C динамически"""
         class_name = node.get("class_name", "")
@@ -5334,107 +5770,6 @@ class CCodeGenerator:
         # Если input() используется в выражении, нужно вернуть значение
         # Для этого создадим узел с результатом
         return temp_var
-
-    def generate_input_expression(self, node: Dict) -> str:
-        """Генерирует выражение с input() и возвращает имя переменной с результатом"""
-        args = node.get("arguments", [])
-
-        # Создаем уникальное имя для временной переменной
-        temp_var = self.generate_temporary_var("str")
-
-        # Объявляем переменную
-        self.declare_variable(temp_var, "str")
-
-        # Получаем информацию о переменной для генерации правильного типа
-        var_info = self.get_variable_info(temp_var)
-        c_type = var_info["c_type"] if var_info else "char*"
-
-        # Объявляем переменную
-        self.add_line(f"{c_type} {temp_var} = NULL;")
-
-        # Генерируем prompt если есть аргументы
-        if args:
-            self._generate_input_prompt(args)
-
-        # Генерируем код для чтения ввода
-        self._generate_input_read_code_direct(temp_var)
-
-        return temp_var
-
-    def _generate_input_prompt(self, args: List):
-        """Генерирует код для вывода prompt в input()"""
-        format_parts = []
-        value_parts = []
-
-        for arg in args:
-            if isinstance(arg, dict):
-                if arg.get("type") == "literal" and arg.get("data_type") == "str":
-                    # Строковый литерал
-                    value = arg.get("value", "")
-                    format_parts.append(f"{value}")
-                else:
-                    # Другие выражения (переменные, вызовы функций и т.д.)
-                    expr = self.generate_expression(arg)
-                    format_parts.append("%s")
-                    value_parts.append(expr)
-            else:
-                # Простая строка (не должно быть в нормальном AST)
-                format_parts.append(str(arg))
-
-        # Собираем prompt строку
-        if format_parts:
-            prompt = " ".join(format_parts)
-
-            if value_parts:
-                # Если есть динамические части (переменные)
-                args_str = ", ".join(value_parts)
-                self.add_line(f'printf("{prompt}", {args_str});')
-            else:
-                # Простой строковый литерал
-                self.add_line(f'printf("{prompt}");')
-
-    def _generate_input_read_code(self, target_var: str):
-        """Генерирует код для чтения ввода с клавиатуры"""
-        # Создаем буфер для ввода
-        buffer_var = f"{target_var}_buffer"
-
-        # Выделяем память для буфера
-        self.add_line(f"char {buffer_var}[256];")
-
-        # Читаем строку с stdin
-        self.add_line(f"fgets({buffer_var}, sizeof({buffer_var}), stdin);")
-
-        # Убираем символ новой строки
-        self.add_line(f'{buffer_var}[strcspn({buffer_var}, "\\n")] = 0;')
-
-        # Выделяем память для результата и копируем
-        self.add_line(f"{target_var} = malloc(strlen({buffer_var}) + 1);")
-        self.add_line(f"if (!{target_var}) {{")
-        self.indent_level += 1
-        self.add_line(
-            f'fprintf(stderr, "Memory allocation failed for input result\\n");'
-        )
-        self.add_line(f"exit(1);")
-        self.indent_level -= 1
-        self.add_line(f"}}")
-        self.add_line(f"strcpy({target_var}, {buffer_var});")
-
-    def generate_input_statement(self, node: Dict):
-        """Генерирует вызов input() как отдельный statement (без присваивания)"""
-        args = node.get("arguments", [])
-
-        # Генерируем prompt если есть аргументы
-        if args:
-            self._generate_input_prompt(args)
-
-        # Читаем ввод, но игнорируем результат
-        temp_var = self.generate_temporary_var("str")
-        buffer_var = f"{temp_var}_buffer"
-
-        self.add_line(f"char {buffer_var}[256];")
-        self.add_line(f"fgets({buffer_var}, sizeof({buffer_var}), stdin);")
-        self.add_line(f'{buffer_var}[strcspn({buffer_var}, "\\n")] = 0;')
-        self.add_line(f"// Ввод прочитан, результат игнорируется")
 
     def generate_tuple_creation(self, tuple_ast: Dict, tuple_type: str = None) -> str:
         """Генерирует выражение для создания кортежа"""
@@ -6552,288 +6887,6 @@ class CCodeGenerator:
         self.add_line("}")
         self.add_empty_line()
 
-    def generate_index_assignment(self, node: Dict):
-        """Генерирует присваивание по индексу: list[index] = value или dict[key] = value"""
-        variable = node.get("variable", "")
-        index_ast = node.get("index", {})
-        value_ast = node.get("value", {})
-        node_type = node.get("node")
-
-        # Проверяем по node_type
-        if node_type == "nested_index_assignment":
-            print(
-                "  -> это nested_index_assignment, вызываем _generate_nested_index_assignment"
-            )
-            self._generate_nested_index_assignment(node)
-            return
-
-        # Проверяем, не является ли переменная словарем с индексами
-        if isinstance(variable, dict):
-            var_type = variable.get("type", "")
-            print(f"variable is dict with type: {var_type}")
-            if var_type in [
-                "nested_index_access",
-                "nested_index_assignment",
-                "index_access",
-            ]:
-                print(
-                    "  -> это вложенная индексация, вызываем _generate_nested_index_assignment"
-                )
-                self._generate_nested_index_assignment(node)
-                return
-
-        index_expr = self.generate_expression(index_ast)
-        value_expr = self.generate_expression(value_ast)
-
-        # Обработка для self.attr
-        if isinstance(variable, str) and variable.startswith("self."):
-            attr_name = variable[5:]
-            print(f"  -> обработка self.{attr_name}")
-
-            # Для атрибутов, которые могут быть списками
-            if attr_name == "data":
-                self.add_line(f"set_list_int(self->data, {index_expr}, {value_expr});")
-            else:
-                # Пробуем определить тип атрибута
-                current_class = self._get_current_class()
-                if current_class and current_class in self.class_fields:
-                    attr_type = self.class_fields[current_class].get(attr_name)
-                    if attr_type and attr_type.startswith("list["):
-                        struct_name = self.generate_list_struct_name(attr_type)
-                        self.add_line(
-                            f"set_{struct_name}(self->{attr_name}, {index_expr}, {value_expr});"
-                        )
-                    elif attr_type and attr_type.startswith("dict["):
-                        # Обработка словаря как атрибута
-                        key_type, value_type = self._extract_dict_types(attr_type)
-                        dict_struct = f"dict_{self.clean_type_name_for_c(key_type)}_{self.clean_type_name_for_c(value_type)}"
-                        self.add_line(
-                            f"set_{dict_struct}(self->{attr_name}, {index_expr}, {value_expr});"
-                        )
-                    else:
-                        self.add_line(
-                            f"self->{attr_name}[{index_expr}] = {value_expr};"
-                        )
-                else:
-                    self.add_line(f"self->{attr_name}[{index_expr}] = {value_expr};")
-            return
-
-        # Получаем информацию о переменной
-        var_info = self.get_variable_info(variable)
-
-        if var_info:
-            py_type = var_info.get("py_type", "")
-            print(f"  -> тип переменной: {py_type}")
-
-            # Обработка для словарей
-            if py_type.startswith("dict["):
-                # Извлекаем типы ключа и значения
-                key_type, value_type = self._extract_dict_types(py_type)
-
-                # Генерируем имя структуры для словаря
-                key_name = self.clean_type_name_for_c(key_type)
-                value_name = self.clean_type_name_for_c(value_type)
-                dict_struct = f"dict_{key_name}_{value_name}"
-
-                # Добавляем присваивание для словаря
-                self.add_line(
-                    f"set_{dict_struct}({variable}, {index_expr}, {value_expr});"
-                )
-
-            # Обработка для списков
-            elif py_type.startswith("list["):
-                struct_name = self.generate_list_struct_name(py_type)
-                self.add_line(
-                    f"set_{struct_name}({variable}, {index_expr}, {value_expr});"
-                )
-
-            # Обработка для кортежей (неизменяемые)
-            elif py_type.startswith("tuple["):
-                struct_name = self.generate_tuple_struct_name(py_type)
-                self.add_line(
-                    f"{variable}.data[{index_expr}] = {value_expr}; // Note: tuples are immutable in Python"
-                )
-
-            # Обычный массив или другой тип
-            else:
-                self.add_line(f"{variable}[{index_expr}] = {value_expr};")
-
-        else:
-            # Если информация о переменной не найдена, пробуем прямую генерацию
-            print(f"  -> переменная не найдена, прямая генерация")
-            self.add_line(f"{variable}[{index_expr}] = {value_expr};")
-
-    def _generate_nested_index_assignment(self, node: Dict):
-        """Генерирует присваивание для вложенной индексации любой глубины"""
-        logger.debug(f"_generate_nested_index_assignment: {node}")
-
-        print("\n--- _generate_nested_index_assignment ---")
-        print(f"node: {node}")
-
-        # Получаем данные из узла
-        var_name = node.get("variable", "")
-        indices_ast = node.get("indices", [])
-        value_ast = node.get("value", {})
-
-        print(f"var_name: {var_name}")
-        print(f"indices_ast: {indices_ast}")
-        print(f"value_ast: {value_ast}")
-
-        if not var_name or not indices_ast:
-            print("  ERROR: no var_name or indices")
-            return
-
-        # Генерируем выражения для всех индексов
-        indices = []
-        for idx_ast in indices_ast:
-            indices.append(self.generate_expression(idx_ast))
-
-        print(f"  indices expressions: {indices}")
-
-        var_info = self.get_variable_info(var_name)
-        if not var_info:
-            print(f"  ERROR: no var_info for {var_name}")
-            return
-
-        py_type = var_info.get("py_type", "")
-        value_expr = self.generate_expression(value_ast)
-
-        print(f"  py_type: {py_type}")
-        print(f"  value_expr: {value_expr}")
-
-        # Если глубина = 1, используем простую set_функцию
-        if len(indices) == 1:
-            if py_type.startswith("list["):
-                struct_name = self.generate_list_struct_name(py_type)
-                self.add_line(
-                    f"set_{struct_name}({var_name}, {indices[0]}, {value_expr});"
-                )
-            else:
-                self.add_line(f"{var_name}[{indices[0]}] = {value_expr};")
-            return
-
-        # Для глубины > 1 нужно дойти до последнего уровня и там установить значение
-        current_var = var_name
-        current_type = py_type
-
-        # Проходим все уровни КРОМЕ ПОСЛЕДНЕГО, чтобы получить список последнего уровня
-        for i, idx in enumerate(indices[:-1]):  # Все кроме последнего индекса
-            if current_type.startswith("list["):
-                struct_name = self.generate_list_struct_name(current_type)
-
-                # Определяем тип следующего уровня
-                inner_type = current_type[5:-1]  # list[X] -> X
-
-                # Создаем временную переменную для следующего уровня
-                temp_var = self.generate_temporary_var(f"level_{i}")
-
-                # Определяем C тип для временной переменной
-                inner_struct_name = self.generate_list_struct_name(inner_type)
-                c_type = f"{inner_struct_name}*"
-
-                # Получаем вложенный список
-                self.add_line(
-                    f"{c_type} {temp_var} = get_{struct_name}({current_var}, {idx});"
-                )
-
-                # Обновляем текущие переменные для следующей итерации
-                current_var = temp_var
-                current_type = inner_type
-            else:
-                self.add_line(f"// ERROR: Too many indices for type {py_type}")
-                return
-
-        # Теперь current_var указывает на список последнего уровня
-        # Устанавливаем значение на последнем уровне
-        last_idx = indices[-1]
-
-        if current_type.startswith("list["):
-            struct_name = self.generate_list_struct_name(current_type)
-            self.add_line(
-                f"set_{struct_name}({current_var}, {last_idx}, {value_expr});"
-            )
-        else:
-            self.add_line(f"{current_var}[{last_idx}] = {value_expr};")
-
-    def generate_slice_assignment(self, node: Dict):
-        """Генерирует присваивание среза: list[start:stop] = values"""
-        variable = node.get("variable", "")
-        start_ast = node.get("start", {})
-        stop_ast = node.get("stop", {})
-        step_ast = node.get("step", {})
-        value_ast = node.get("value", {})
-
-        start_expr = self.generate_expression(start_ast) if start_ast else "0"
-        stop_expr = (
-            self.generate_expression(stop_ast) if stop_ast else f"{variable}->size"
-        )
-
-        var_info = self.get_variable_info(variable)
-
-        if var_info and var_info.get("py_type", "").startswith("list["):
-            if value_ast.get("type") == "list_literal":
-                items = value_ast.get("items", [])
-                if items:
-                    # Присваивание списка значений срезу
-                    for i, item in enumerate(items):
-                        item_expr = self.generate_expression(item)
-                        idx = f"{start_expr} + {i}"
-                        self.add_line(
-                            f"if ({idx} < {stop_expr} && {idx} < {variable}->size) {{"
-                        )
-                        self.indent_level += 1
-                        self.add_line(
-                            f"set_{self.generate_list_struct_name(var_info['py_type'])}({variable}, {idx}, {item_expr});"
-                        )
-                        self.indent_level -= 1
-                        self.add_line("}")
-            else:
-                # Присваивание одного значения всем элементам среза
-                value_expr = self.generate_expression(value_ast)
-                temp_var = self.generate_temporary_var("int")
-                self.add_line(
-                    f"for (int {temp_var} = {start_expr}; {temp_var} < {stop_expr}; {temp_var}++) {{"
-                )
-                self.indent_level += 1
-                self.add_line(f"if ({temp_var} < {variable}->size) {{")
-                self.indent_level += 1
-                self.add_line(
-                    f"set_{self.generate_list_struct_name(var_info['py_type'])}({variable}, {temp_var}, {value_expr});"
-                )
-                self.indent_level -= 1
-                self.add_line("}")
-                self.indent_level -= 1
-                self.add_line("}")
-
-    def generate_augmented_index_assignment(self, node: Dict):
-        """Генерирует составное присваивание по индексу: list[index] += value"""
-        variable = node.get("variable", "")
-        index_ast = node.get("index", {})
-        operator = node.get("operator", "")
-        value_ast = node.get("value", {})
-
-        index_expr = self.generate_expression(index_ast)
-        value_expr = self.generate_expression(value_ast)
-
-        var_info = self.get_variable_info(variable)
-
-        if var_info and var_info.get("py_type", "").startswith("list["):
-            struct_name = self.generate_list_struct_name(var_info["py_type"])
-            # Получаем текущее значение
-            temp_var = self.generate_temporary_var("int")
-            self.add_line(
-                f"int {temp_var} = get_{struct_name}({variable}, {index_expr});"
-            )
-            # Применяем оператор
-            op_symbol = operator.replace("=", "")
-            c_op = self.operator_map.get(op_symbol, op_symbol)
-            if c_op == "pow":
-                self.add_line(f"{temp_var} = pow({temp_var}, {value_expr});")
-            else:
-                self.add_line(f"{temp_var} {operator} {value_expr};")
-            # Устанавливаем новое значение
-            self.add_line(f"set_{struct_name}({variable}, {index_expr}, {temp_var});")
-
     def _generate_list_redeclaration(
         self, var_name: str, var_type: str, list_ast: Dict
     ):
@@ -6884,55 +6937,6 @@ class CCodeGenerator:
         else:
             # Пустой кортеж
             self.add_line(f"{var_name} = create_{struct_name}(NULL, 0);")
-
-    def _generate_string_concatenation(
-        self, target_var: str, left_expr: str, right_expr: str, c_type: str
-    ):
-        """Генерирует правильную конкатенацию строк"""
-        # Определяем, являются ли выражения строковыми литералами
-        left_is_literal = left_expr.startswith('"') and left_expr.endswith('"')
-        right_is_literal = right_expr.startswith('"') and right_expr.endswith('"')
-
-        if left_is_literal and right_is_literal:
-            # Оба литерала - можно вычислить на этапе компиляции
-            left_str = left_expr[1:-1]  # Убираем кавычки
-            right_str = right_expr[1:-1]
-            result_str = f'"{left_str}{right_str}"'
-
-            self.add_line(f"{c_type} {target_var} = malloc(strlen({result_str}) + 1);")
-            self.add_line(f"if (!{target_var}) {{")
-            self.indent_level += 1
-            self.add_line(f'fprintf(stderr, "Memory allocation failed\\n");')
-            self.add_line(f"exit(1);")
-            self.indent_level -= 1
-            self.add_line(f"}}")
-            self.add_line(f"strcpy({target_var}, {result_str});")
-
-        else:
-            # Одно или оба выражения - переменные или сложные выражения
-            # Создаем временные переменные для длин
-            temp_len1 = self.generate_temporary_var("int")
-            temp_len2 = self.generate_temporary_var("int")
-
-            self.add_line(f"int {temp_len1} = strlen({left_expr});")
-            self.add_line(f"int {temp_len2} = strlen({right_expr});")
-
-            # Выделяем память
-            self.add_line(
-                f"{c_type} {target_var} = malloc({temp_len1} + {temp_len2} + 1);"
-            )
-            self.add_line(f"if (!{target_var}) {{")
-            self.indent_level += 1
-            self.add_line(
-                f'fprintf(stderr, "Memory allocation failed for string concatenation\\n");'
-            )
-            self.add_line(f"exit(1);")
-            self.indent_level -= 1
-            self.add_line(f"}}")
-
-            # Копируем строки
-            self.add_line(f"strcpy({target_var}, {left_expr});")
-            self.add_line(f"strcat({target_var}, {right_expr});")
 
     ###############################################################################################
     # OTHER
