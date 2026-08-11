@@ -332,7 +332,37 @@ class CallsMixin:
                 if isinstance(arg, dict):
                     if arg.get("type") == "attribute_access":
                         expr = self.generate_attribute_access(arg)
-                        format_parts.append("%d")
+                        object_name = arg.get("object", "")
+                        object_info = self.get_variable_info(object_name)
+                        object_type = (
+                            self.strip_borrow_type(object_info.get("py_type", ""))
+                            if object_info
+                            else ""
+                        )
+                        if (
+                            (self.is_array_type(object_type) or self.is_tensor_type(object_type))
+                            and arg.get("attribute") in {"size", "capacity", "ndim"}
+                        ):
+                            format_parts.append("%zu")
+                        else:
+                            format_parts.append("%d")
+                        value_parts.append(expr)
+                    elif arg.get("type") == "complex_attribute_access":
+                        expr = self.generate_expression(arg)
+                        object_name = arg.get("object", "")
+                        object_info = self.get_variable_info(object_name)
+                        object_type = (
+                            self.strip_borrow_type(object_info.get("py_type", ""))
+                            if object_info
+                            else ""
+                        )
+                        if (
+                            self.is_tensor_type(object_type)
+                            and arg.get("attribute") == "shape"
+                        ):
+                            format_parts.append("%zu")
+                        else:
+                            format_parts.append("%d")
                         value_parts.append(expr)
                     elif arg.get("type") == "variable":
                         var_name = arg.get("value", "")

@@ -30,7 +30,7 @@
   "28": "Handoff.md",
   "29": "._parse_with_priorities",
   "30": "ExpressionsMixin",
-  "31": "TypeParser",
+  "31": "test_array_tensor.py",
   "32": "ImportsMixin",
   "33": "OrchestratorMixin",
   "34": "ColoredFormatter",
@@ -42,7 +42,6 @@
   "40": "What changed",
   "41": "parser.py",
   "42": "TupleCodegenMixin",
-  "43": "TypeSpec",
   "44": "Repository Guidelines",
   "45": "Ocean automatic ownership model v1",
   "46": "4. Memory model",
@@ -53,6 +52,5 @@
   "51": "30. Следующий рекомендуемый этап",
   "52": "12. Новый parser v0.2",
   "53": "15. Classes",
-  "54": "Handoff — Phils Language / Ocean backend",
-  "55": ".reset_state"
+  "54": "Handoff — Phils Language / Ocean backend"
 }

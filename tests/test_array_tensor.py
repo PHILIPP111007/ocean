@@ -200,6 +200,8 @@ def main() -> int:
     var elements: int = len(matrix)
     print(elements)
     print(matrix[1, 2])
+    print(matrix.shape[0])
+    print(matrix.size)
     return 0
 """
     )
@@ -208,3 +210,4 @@ def main() -> int:
     assert "size_t ocean_tensor_matrix_" in code
     assert "ocean_tensor_float32_set(matrix" in code
     assert "ocean_tensor_float32_free(matrix);" in code
+    assert 'printf("%zu\\n"' in code

@@ -33,8 +33,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_init",
-      "community": 0,
-      "community_name": "run",
+      "community": 31,
+      "community_name": "test_array_tensor.py",
       "norm_label": "src/__init__.py"
     },
     {
@@ -55,8 +55,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_codegen_array_codegen",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "array_codegen.py"
     },
     {
@@ -4143,8 +4143,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_compiler",
-      "community": 0,
-      "community_name": "run",
+      "community": 31,
+      "community_name": "test_array_tensor.py",
       "norm_label": "compiler.py"
     },
     {
@@ -4154,8 +4154,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_compiler_rationale_1",
-      "community": 0,
-      "community_name": "run",
+      "community": 31,
+      "community_name": "test_array_tensor.py",
       "norm_label": "compatibility facade for the phils ocean c backend v0.2. existing callers may..."
     },
     {
@@ -6695,8 +6695,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_reset_state",
-      "community": 55,
-      "community_name": ".reset_state",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".reset_state()"
     },
     {
@@ -6899,8 +6899,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_code",
-      "community": 55,
-      "community_name": ".reset_state",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".parse_code()"
     },
     {
@@ -7846,8 +7846,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "src_parser_rationale_35",
-      "community": 55,
-      "community_name": ".reset_state",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "reset all per-compilation parser state. a parser instance can safely be reused..."
     },
     {
@@ -7934,8 +7934,8 @@
       "source_location": "L356",
       "_origin": "ast",
       "id": "src_parser_rationale_356",
-      "community": 55,
-      "community_name": ".reset_state",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "parse one phils compilation unit into the legacy graph + typed metadata. the..."
     },
     {
@@ -8737,8 +8737,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_parsing_init",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "parsing/__init__.py"
     },
     {
@@ -8748,8 +8748,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_parsing_type_system",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "type_system.py"
     },
     {
@@ -8761,8 +8761,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec",
-      "community": 43,
-      "community_name": "TypeSpec",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "typespec"
     },
     {
@@ -8773,8 +8773,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_canonical",
-      "community": 43,
-      "community_name": "TypeSpec",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".canonical()"
     },
     {
@@ -8785,8 +8785,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_base_name",
-      "community": 43,
-      "community_name": "TypeSpec",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".base_name()"
     },
     {
@@ -8797,8 +8797,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_memory_kind",
-      "community": 43,
-      "community_name": "TypeSpec",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".memory_kind()"
     },
     {
@@ -8809,8 +8809,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_borrow",
-      "community": 43,
-      "community_name": "TypeSpec",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".is_borrow()"
     },
     {
@@ -8821,8 +8821,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_mut_borrow",
-      "community": 43,
-      "community_name": "TypeSpec",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".is_mut_borrow()"
     },
     {
@@ -8833,8 +8833,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_raw_pointer",
-      "community": 43,
-      "community_name": "TypeSpec",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".is_raw_pointer()"
     },
     {
@@ -8845,8 +8845,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_optional",
-      "community": 43,
-      "community_name": "TypeSpec",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".is_optional()"
     },
     {
@@ -8857,8 +8857,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_to_dict",
-      "community": 43,
-      "community_name": "TypeSpec",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".to_dict()"
     },
     {
@@ -8869,8 +8869,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_split_top_level",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "split_top_level()"
     },
     {
@@ -8894,8 +8894,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "typeparser"
     },
     {
@@ -8906,8 +8906,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser_parse",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".parse()"
     },
     {
@@ -8918,8 +8918,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser_parse_generic",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "._parse_generic()"
     },
     {
@@ -8930,8 +8930,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser_matching_outer_brackets",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "._matching_outer_brackets()"
     },
     {
@@ -8942,8 +8942,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_infer_literal_shape",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "infer_literal_shape()"
     },
     {
@@ -8953,8 +8953,8 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_47",
-      "community": 43,
-      "community_name": "TypeSpec",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "structured representation of a phils type. the parser still emits the canonical..."
     },
     {
@@ -8964,8 +8964,8 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_140",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "split text only when not nested in (), [], {}, <> or strings."
     },
     {
@@ -8986,8 +8986,8 @@
       "source_location": "L286",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_286",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "recursive parser for phils type expressions."
     },
     {
@@ -8997,8 +8997,8 @@
       "source_location": "L355",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_355",
-      "community": 31,
-      "community_name": "TypeParser",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "infer a rectangular shape from nested list literals. returns ``none`` for..."
     },
     {
@@ -9042,8 +9042,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_constants",
-      "community": 0,
-      "community_name": "run",
+      "community": 31,
+      "community_name": "test_array_tensor.py",
       "norm_label": "tests/constants.py"
     },
     {
@@ -9053,68 +9053,68 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_array_tensor",
-      "community": 0,
-      "community_name": "run",
+      "community": 31,
+      "community_name": "test_array_tensor.py",
       "norm_label": "test_array_tensor.py"
     },
     {
       "label": "generate()",
       "file_type": "code",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L6",
+      "source_location": "L5",
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_array_tensor_generate",
-      "community": 0,
-      "community_name": "run",
+      "community": 31,
+      "community_name": "test_array_tensor.py",
       "norm_label": "generate()"
     },
     {
       "label": "test_array_lowering_and_index_mutation()",
       "file_type": "code",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L11",
+      "source_location": "L10",
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_array_tensor_test_array_lowering_and_index_mutation",
-      "community": 0,
-      "community_name": "run",
+      "community": 31,
+      "community_name": "test_array_tensor.py",
       "norm_label": "test_array_lowering_and_index_mutation()"
     },
     {
       "label": "test_tensor_lowering_shape_and_index_mutation()",
       "file_type": "code",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L31",
+      "source_location": "L30",
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_array_tensor_test_tensor_lowering_shape_and_index_mutation",
-      "community": 0,
-      "community_name": "run",
+      "community": 31,
+      "community_name": "test_array_tensor.py",
       "norm_label": "test_tensor_lowering_shape_and_index_mutation()"
     },
     {
       "label": "test_tensor_the_big_code()",
       "file_type": "code",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L57",
+      "source_location": "L56",
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_array_tensor_test_tensor_the_big_code",
-      "community": 0,
-      "community_name": "run",
+      "community": 31,
+      "community_name": "test_array_tensor.py",
       "norm_label": "test_tensor_the_big_code()"
     },
     {
       "label": "test_tensor_zeros_dynamic_shape()",
       "file_type": "code",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L193",
+      "source_location": "L192",
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_array_tensor_test_tensor_zeros_dynamic_shape",
-      "community": 0,
-      "community_name": "run",
+      "community": 31,
+      "community_name": "test_array_tensor.py",
       "norm_label": "test_tensor_zeros_dynamic_shape()"
     },
     {
@@ -13187,7 +13187,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L8",
+      "source_location": "L7",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor_generate",
@@ -24192,7 +24192,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L7",
+      "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor_generate",
@@ -27676,18 +27676,6 @@
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "tests/test_array_tensor.py",
-      "source_location": "L4",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "tests_test_array_tensor",
-      "target": "tests_base",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
       "source_file": "tests/test_c_code.py",
       "source_location": "L1",
       "weight": 1.0,
@@ -27886,18 +27874,6 @@
       "_origin": "ast",
       "source": "tests_test_while_loop",
       "target": "tests_base",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "tests/test_array_tensor.py",
-      "source_location": "L4",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "tests_test_array_tensor",
-      "target": "tests_base_run",
       "confidence_score": 1.0
     },
     {
@@ -28588,7 +28564,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L6",
+      "source_location": "L5",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor",
@@ -28599,7 +28575,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L11",
+      "source_location": "L10",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor",
@@ -28610,7 +28586,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L31",
+      "source_location": "L30",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor",
@@ -28621,7 +28597,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L57",
+      "source_location": "L56",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor",
@@ -28632,7 +28608,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L193",
+      "source_location": "L192",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor",
@@ -28644,7 +28620,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L12",
+      "source_location": "L11",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor_test_array_lowering_and_index_mutation",
@@ -28656,7 +28632,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L32",
+      "source_location": "L31",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor_test_tensor_lowering_shape_and_index_mutation",
@@ -28668,7 +28644,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L181",
+      "source_location": "L180",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor_test_tensor_the_big_code",
@@ -28680,7 +28656,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_array_tensor.py",
-      "source_location": "L194",
+      "source_location": "L193",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor_test_tensor_zeros_dynamic_shape",

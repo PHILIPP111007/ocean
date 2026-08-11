@@ -1,11 +1,11 @@
 # Graph Report - phils_language  (2026-08-11)
 
 ## Corpus Check
-- 58 files · ~79,776 words
+- 58 files · ~79,772 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 934 nodes · 1682 edges · 56 communities (47 shown, 9 thin omitted)
+- 934 nodes · 1680 edges · 54 communities (47 shown, 7 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 53 edges (avg confidence: 0.68)
 - Token cost: 0 input · 0 output
 
@@ -46,7 +46,7 @@
 - Handoff.md
 - ._parse_with_priorities
 - ExpressionsMixin
-- TypeParser
+- test_array_tensor.py
 - ImportsMixin
 - OrchestratorMixin
 - ColoredFormatter
@@ -57,7 +57,6 @@
 - What changed
 - parser.py
 - TupleCodegenMixin
-- TypeSpec
 - Repository Guidelines
 - Ocean automatic ownership model v1
 - 4. Memory model
@@ -69,12 +68,11 @@
 - 12. Новый parser v0.2
 - 15. Classes
 - Handoff — Phils Language / Ocean backend
-- .reset_state
 
 ## God Nodes (most connected - your core abstractions)
 1. `Parser` - 106 edges
 2. `JSONValidator` - 90 edges
-3. `run()` - 60 edges
+3. `run()` - 59 edges
 4. `OopMixin` - 28 edges
 5. `OwnershipMixin` - 28 edges
 6. `CCodeGenerator` - 26 edges
@@ -98,11 +96,11 @@
 ## Import Cycles
 - None detected.
 
-## Communities (56 total, 9 thin omitted)
+## Communities (54 total, 7 thin omitted)
 
 ### Community 0 - "run"
-Cohesion: 0.06
-Nodes (46): Compatibility façade for the Phils Ocean C backend v0.2. Existing callers may…, run(), generate(), test_array_lowering_and_index_mutation(), test_tensor_lowering_shape_and_index_mutation(), test_tensor_the_big_code(), test_tensor_zeros_dynamic_shape(), test_c_code_math() (+38 more)
+Cohesion: 0.07
+Nodes (40): run(), test_c_code_math(), test_c_code_pthread(), test_del(), test_dict(), test_dict_get(), test_for_loop_1(), test_for_loop_2() (+32 more)
 
 ### Community 1 - "OopMixin"
 Cohesion: 0.05
@@ -220,9 +218,9 @@ Nodes (11): Парсит выражение с учетом приоритето
 Cohesion: 0.25
 Nodes (5): ExpressionsMixin, Генерирует C выражение из AST с поддержкой tuple и list, Генерирует доступ к атрибуту объекта, Генерирует выражение из AST для конструктора с подстановкой параметров, Генерирует выражение из AST с подстановкой параметров конструктора
 
-### Community 31 - "TypeParser"
-Cohesion: 0.27
-Nodes (6): infer_literal_shape(), Split text only when not nested in (), [], {}, <> or strings., Recursive parser for Phils type expressions., Infer a rectangular shape from nested list literals. Returns ``None`` for…, split_top_level(), TypeParser
+### Community 31 - "test_array_tensor.py"
+Cohesion: 0.29
+Nodes (6): Compatibility façade for the Phils Ocean C backend v0.2. Existing callers may…, generate(), test_array_lowering_and_index_mutation(), test_tensor_lowering_shape_and_index_mutation(), test_tensor_the_big_code(), test_tensor_zeros_dynamic_shape()
 
 ### Community 32 - "ImportsMixin"
 Cohesion: 0.29
@@ -245,8 +243,8 @@ Cohesion: 0.17
 Nodes (11): 1. `ocean_` C namespace, 2. Automatic ownership management, 3. Lexical hybrid borrow checker v1, 4. Deterministic scope cleanup, 5. Ownership-aware containers, 6. Safer class lowering, Important safety boundary, Module layout (+3 more)
 
 ### Community 41 - "parser.py"
-Cohesion: 0.21
-Nodes (5): CImportProcessor, ImportProcessor, Просто регистрирует C импорт без парсинга, Обрабатывает импорт и возвращает содержимое импортируемого файла, Обрабатывает все импорты в коде и вставляет содержимое файлов
+Cohesion: 0.08
+Nodes (15): CImportProcessor, ImportProcessor, Просто регистрирует C импорт без парсинга, Обрабатывает импорт и возвращает содержимое импортируемого файла, Обрабатывает все импорты в коде и вставляет содержимое файлов, Reset all per-compilation parser state. A Parser instance can safely be reused…, Parse one Phils compilation unit into the legacy graph + typed metadata. The…, infer_literal_shape() (+7 more)
 
 ### Community 42 - "TupleCodegenMixin"
 Cohesion: 0.36
@@ -287,15 +285,15 @@ Nodes (3): 30. Следующий рекомендуемый этап, Array, Te
 ## Knowledge Gaps
 - **72 isolated node(s):** `Project Structure & Module Organization`, `Build, Test, and Development Commands`, `Coding Style & Naming Conventions`, `Testing Guidelines`, `Commit & Pull Request Guidelines` (+67 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **9 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `CCodeGenerator` connect `CCodeGenerator` to `run`, `OopMixin`, `RuntimeError`, `TypesMixin`, `OwnershipMixin`, `JSONValidator`, `generator.py`, `ListCodegenMixin`, `IndexingMixin`, `IoMixin`, `StatementsMixin`, `ScopeMixin`, `HelpersMixin`, `ExpressionsMixin`, `ImportsMixin`, `OrchestratorMixin`, `TensorCodegenMixin`, `NamingMixin`, `TupleCodegenMixin`?**
+- **Why does `CCodeGenerator` connect `CCodeGenerator` to `run`, `OopMixin`, `RuntimeError`, `TypesMixin`, `OwnershipMixin`, `JSONValidator`, `generator.py`, `ListCodegenMixin`, `IndexingMixin`, `IoMixin`, `StatementsMixin`, `ScopeMixin`, `HelpersMixin`, `ExpressionsMixin`, `test_array_tensor.py`, `ImportsMixin`, `OrchestratorMixin`, `TensorCodegenMixin`, `NamingMixin`, `TupleCodegenMixin`?**
   _High betweenness centrality (0.378) - this node is a cross-community bridge._
-- **Why does `Parser` connect `Parser` to `run`, `SymbolTable`, `parser.py`, `JSONValidator`, `.parse_expression_to_ast`, `.parse_line`, `.parse_class_attribute_initialization`, `.extract_dependencies_from_ast`, `.parse_function_call`, `.parse_function_arguments_to_ast`, `.reset_state`, `.parse_object_method_call_node`, `.parse_type_annotation`, `._parse_with_priorities`, `TypeParser`?**
-  _High betweenness centrality (0.334) - this node is a cross-community bridge._
+- **Why does `Parser` connect `Parser` to `run`, `SymbolTable`, `parser.py`, `JSONValidator`, `.parse_expression_to_ast`, `.parse_line`, `.parse_class_attribute_initialization`, `.extract_dependencies_from_ast`, `.parse_function_call`, `.parse_function_arguments_to_ast`, `.parse_object_method_call_node`, `.parse_type_annotation`, `._parse_with_priorities`, `test_array_tensor.py`?**
+  _High betweenness centrality (0.335) - this node is a cross-community bridge._
 - **Why does `JSONValidator` connect `JSONValidator` to `.add_warning`, `.validate_function_return_type`, `.add_error`, `.get_type_from_ast`, `.validate_assignment`, `.get_symbol_info`?**
   _High betweenness centrality (0.294) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `Parser` (e.g. with `SymbolTable` and `TypeParser`) actually correct?**
@@ -305,4 +303,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `Project Structure & Module Organization`, `Build, Test, and Development Commands`, `Coding Style & Naming Conventions` to the rest of the system?**
   _72 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `run` be split into smaller, more focused modules?**
-  _Cohesion score 0.05706760316066725 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06836055656382335 - nodes in this community are weakly interconnected._
