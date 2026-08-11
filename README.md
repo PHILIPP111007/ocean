@@ -113,6 +113,71 @@ Use `--compiler clang` to select another C compiler, `--cflags "-O2 -g"` for a s
 group, `--no-compile` to stop after C generation, or `--run --run-arg VALUE` to execute the result.
 Run `python main.py --help` for the complete option list.
 
+This repository also contains an `ocean.toml` package manifest. Use `python main.py build` to use
+the package layout and write artifacts to `build/debug/`; the no-argument command remains available
+as a legacy single-file shortcut.
+
+## Packages and CLI
+
+For repeatable builds, create a package instead of passing every path by hand:
+
+```bash
+python main.py init my_app
+cd my_app
+python ../main.py check
+python ../main.py build --profile release
+python ../main.py run --run-arg hello
+python ../main.py test
+```
+
+`init` creates `ocean.toml` and `src/main.oc`. The CLI searches for the manifest in the current
+directory and its parents, so commands also work from subdirectories. A manifest can be selected
+explicitly with `--manifest`.
+
+The minimal package model is:
+
+```toml
+[package]
+name = "my_app"
+version = "0.1.0"
+entry = "src/main.oc"
+source = "src"
+build = "build"
+
+[build]
+compiler = "gcc"
+cflags = ["-std=c11"]
+
+[build.profiles.release]
+cflags = ["-O2"]
+```
+
+`check` validates and generates C; `build` also invokes the C compiler; `run` builds and executes;
+`test` runs pytest; and `clean` removes the package's `build/` directory. Package artifacts are
+isolated under `build/<profile>/`.
+
+## Install as a Python package
+
+Build the distributable artifacts locally with the standard Python packaging tools:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m build
+python -m twine check dist/*
+```
+
+The editable install exposes the `ocean` command:
+
+```bash
+ocean --help
+ocean check
+ocean build --profile release
+```
+
+The package metadata is defined in `pyproject.toml`. The compiler is currently distributed as an
+experimental package; uploading to PyPI should be done only after choosing the final project name
+and configuring a PyPI token.
+
 For strict manual C checks:
 
 ```bash

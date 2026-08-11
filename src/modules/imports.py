@@ -1,6 +1,8 @@
 import os
 import re
 
+from src.modules.logger import logger
+
 
 class CImportProcessor:
     def __init__(self, base_path=""):
@@ -66,7 +68,7 @@ class ImportProcessor:
 
         # Проверяем, не обрабатывали ли уже этот файл
         if full_path in self.processed_files:
-            print(f"Предупреждение: циклический импорт файла {full_path}")
+            logger.warning(f"Предупреждение: циклический импорт файла {full_path}")
             return ""
 
         self.processed_files.add(full_path)
@@ -76,13 +78,13 @@ class ImportProcessor:
             with open(full_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            print(f"Импортирован файл: {full_path}")
+            logger.debug(f"Импортирован файл: {full_path}")
             return content
         except FileNotFoundError:
-            print(f"Ошибка: файл не найден {full_path}")
+            logger.error(f"Ошибка: файл не найден {full_path}")
             return ""
         except Exception as e:
-            print(f"Ошибка при чтении файла {full_path}: {str(e)}")
+            logger.error(f"Ошибка при чтении файла {full_path}: {str(e)}")
             return ""
 
     def process_imports(self, code: str, current_file_path: str = "") -> str:

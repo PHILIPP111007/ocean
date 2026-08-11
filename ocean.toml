@@ -1,0 +1,14 @@
+[package]
+name = "ocean"
+version = "0.1.0"
+entry = "examples/main.oc"
+source = "examples"
+build = "build"
+tests = "tests"
+
+[build]
+compiler = "gcc"
+cflags = ["-std=c11"]
+
+[build.profiles.release]
+cflags = ["-O2"]

@@ -3,8 +3,9 @@
 ## Project Structure & Module Organization
 
 Ocean is a Python-like language that lowers Phils/Ocean source to C. The command-line entry point is
-`main.py`; it reads `examples/main.oc` and writes parsed JSON, generated C, and an executable in
-`examples/`. The compiler implementation is under `src/`: parsing and validation live in
+`main.py`; package commands read `ocean.toml` and write profile artifacts under `build/`, while the
+no-argument command retains the legacy `examples/` workflow. The compiler implementation is under
+`src/`: parsing and validation live in
 `src/parser.py`, `src/typed_ir.py`, and `src/debug.py`, while C generation is organized in
 `src/codegen/` (ownership, scope, types, statements, expressions, containers, tensors, and OOP).
 `src/compiler.py` provides the public generator import used by existing callers. Tests are in
@@ -32,6 +33,13 @@ testing (`-fsanitize=address,undefined`).
 The CLI accepts a custom source path plus `--base-path`, `--json-output`, `--c-output`, `-o`, and
 `--compiler`. Pass repeatable C options with `--cflag=-O2` or a group with `--cflags "-Wall -g"`;
 use `--no-compile` for generation-only checks and `--run` to execute the compiled binary.
+Package workflows use `python main.py init|check|build|run|test|clean` and configure
+`ocean.toml`; package artifacts are written to `build/<profile>/`. A source path without a command
+continues to use the legacy single-file layout.
+
+Build the Python distribution with `python -m build` and inspect it with `python -m twine check
+dist/*`. The installed console entry point is `ocean`; package metadata and the entry point live in
+`pyproject.toml`.
 
 ## Coding Style & Naming Conventions
 

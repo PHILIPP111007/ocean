@@ -1,120 +1,117 @@
-"""Command-line entry point for the Ocean-to-C compiler pipeline."""
+"""The ``ocean`` command line interface and legacy compiler entry point."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import shlex
+import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 from src.compiler import CCodeGenerator
 from src.debug import JSONValidator
 from src.modules.logger import logger
+from src.package_model import (
+    Package,
+    PackageError,
+    create_package,
+    find_manifest,
+    load_package,
+    profile_flags,
+)
 from src.parser import Parser
 from src.typed_ir import build_typed_ir
 
 
 DEFAULT_CFLAGS = ["-std=c11"]
+COMMANDS = {"init", "check", "build", "run", "test", "clean"}
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Parse Ocean source, validate it, generate C11, and optionally compile/run it."
+        prog="ocean",
+        description="Build, check, run, and test Ocean packages or single source files.",
+        epilog=(
+            "Commands: init, check, build, run, test, clean. "
+            "For compatibility, a source path without a command means build."
+        ),
     )
     parser.add_argument(
-        "source",
+        "command_or_source",
         nargs="?",
-        default="examples/main.oc",
-        help="Ocean source file (default: examples/main.oc)",
+        metavar="COMMAND|SOURCE",
+        help="command name, or a source file for the legacy single-file workflow",
     )
     parser.add_argument(
-        "--base-path",
-        type=Path,
-        help="base directory used to resolve imports (default: source directory)",
+        "source_arg",
+        nargs="?",
+        metavar="SOURCE",
+        help="source file for check/build/run, or target directory for init",
     )
-    parser.add_argument(
-        "--json-output",
-        type=Path,
-        help="path for parsed JSON (default: alongside the source)",
-    )
-    parser.add_argument(
-        "--c-output",
-        type=Path,
-        help="path for generated C (default: alongside the source)",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        dest="binary_output",
-        type=Path,
-        help="path for the compiled executable (default: alongside the source)",
-    )
-    parser.add_argument(
-        "--compiler",
-        default="gcc",
-        help="C compiler executable (default: gcc)",
-    )
+    parser.add_argument("--manifest", type=Path, help="path to ocean.toml (default: search parent directories)")
+    parser.add_argument("--source", dest="source_override", type=Path, help="entry source file")
+    parser.add_argument("--path", dest="init_path", type=Path, help="target directory for init")
+    parser.add_argument("--force", action="store_true", help="allow init to create files in an existing package")
+    parser.add_argument("--profile", choices=("debug", "release"), default="debug", help="build profile (default: debug)")
+    parser.add_argument("--base-path", type=Path, help="base directory used to resolve imports")
+    parser.add_argument("--json-output", type=Path, help="path for parsed JSON")
+    parser.add_argument("--c-output", type=Path, help="path for generated C")
+    parser.add_argument("-o", "--output", dest="binary_output", type=Path, help="path for the compiled executable")
+    parser.add_argument("--compiler", help="C compiler executable (overrides ocean.toml)")
     parser.add_argument(
         "--cflag",
         dest="cflag_list",
         action="append",
         default=[],
         metavar="FLAG",
-        help="additional compiler flag; repeat for multiple flags (for example --cflag=-O3)",
+        help="additional compiler flag; repeat for multiple flags",
     )
-    parser.add_argument(
-        "--cflags",
-        default="",
-        metavar="FLAGS",
-        help="compiler flags as one shell-style string (for example '-Wall -Wextra')",
-    )
-    parser.add_argument(
-        "--no-compile",
-        action="store_true",
-        help="stop after generating JSON and C; do not invoke the C compiler",
-    )
-    parser.add_argument(
-        "--run",
-        action="store_true",
-        help="run the compiled executable after a successful build",
-    )
-    parser.add_argument(
-        "--run-arg",
-        action="append",
-        default=[],
-        metavar="ARG",
-        help="argument passed to the executable; repeat for multiple arguments",
-    )
+    parser.add_argument("--cflags", default="", metavar="FLAGS", help="compiler flags as one shell-style string")
+    parser.add_argument("--no-compile", action="store_true", help="stop after generating JSON and C")
+    parser.add_argument("--run", action="store_true", help="run the executable after building")
+    parser.add_argument("--run-arg", action="append", default=[], metavar="ARG", help="argument passed to the executable")
+    parser.add_argument("--test-path", type=Path, help="test directory or file for the test command")
+    parser.add_argument("-q", "--quiet", action="store_true", help="suppress compiler progress output")
     return parser
 
 
+def _command(args: argparse.Namespace) -> str:
+    value = args.command_or_source
+    return value if value in COMMANDS else "build"
+
+
+def _explicit_source(args: argparse.Namespace) -> Path | None:
+    if args.source_override:
+        return args.source_override
+    if _command(args) != "build" or args.command_or_source in COMMANDS:
+        return Path(args.source_arg) if args.source_arg else None
+    return Path(args.command_or_source) if args.command_or_source else None
+
+
+def _load_package_for_args(args: argparse.Namespace, source: Path | None = None) -> Package | None:
+    if args.manifest:
+        return load_package(args.manifest)
+    if _command(args) == "build" and args.command_or_source not in COMMANDS and source is None:
+        return None
+    manifest = find_manifest(source.parent if source else Path.cwd())
+    return load_package(manifest) if manifest else None
+
+
 def default_output_paths(source_path: Path) -> tuple[Path, Path, Path]:
-    """Return JSON, C, and executable defaults without changing old main.py paths."""
+    """Return legacy JSON, C, and executable locations for one source file."""
     if source_path.name == "main.oc" and source_path.parent.name == "examples":
-        return (
-            source_path.parent / "parsed_code.json",
-            source_path.parent / "generated_code.c",
-            source_path.parent / "generated_code",
-        )
-    return (
-        source_path.with_suffix(".parsed.json"),
-        source_path.with_suffix(".generated.c"),
-        source_path.with_suffix(""),
-    )
+        return source_path.parent / "parsed_code.json", source_path.parent / "generated_code.c", source_path.parent / "generated_code"
+    return source_path.with_suffix(".parsed.json"), source_path.with_suffix(".generated.c"), source_path.with_suffix("")
 
 
 def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def compile_c(
-    c_path: Path,
-    binary_path: Path,
-    compiler: str = "gcc",
-    cflags: list[str] | None = None,
-) -> list[str]:
+def compile_c(c_path: Path, binary_path: Path, compiler: str = "gcc", cflags: list[str] | None = None) -> list[str]:
     """Compile generated C and return the exact command that was executed."""
     command = [compiler, *(cflags or DEFAULT_CFLAGS), str(c_path), "-o", str(binary_path)]
     _ensure_parent(binary_path)
@@ -124,94 +121,132 @@ def compile_c(
     return command
 
 
-def compile_pipeline(
-    base_path: str | Path,
-    p_path: str | Path,
-    json_path: str | Path,
-    c_path: str | Path,
-) -> dict:
+def compile_pipeline(base_path: str | Path, p_path: str | Path, json_path: str | Path, c_path: str | Path, quiet: bool = False) -> dict:
     """Parse, validate, and generate C while preserving the public old API."""
-    source_path = Path(p_path)
-    json_output_path = Path(json_path)
-    c_output_path = Path(c_path)
-
+    source_path, json_output_path, c_output_path = Path(p_path), Path(json_path), Path(c_path)
     code = source_path.read_text(encoding="utf-8")
 
-    print("\n=========== PARSER ===========")
-    parser = Parser(base_path=str(base_path))
-    data = parser.parse_code(code)
-
+    if not quiet:
+        print("\n=========== PARSER ===========")
+    data = Parser(base_path=str(base_path)).parse_code(code, file_path=str(source_path))
     _ensure_parent(json_output_path)
-    json_output_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False, default=str),
-        encoding="utf-8",
-    )
+    json_output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
 
-    print("\n=========== DEBUGGER ===========")
+    if not quiet:
+        print("\n=========== DEBUGGER ===========")
     typed_ir = build_typed_ir(data)
     result_validation = JSONValidator().validate(typed_ir)
-
-    print("\nРезультат валидации:")
-    print(f"Валидный: {result_validation['is_valid']}")
-    print(f"Ошибок: {result_validation['error_count']}")
-    print(f"Предупреждений: {result_validation['warning_count']}")
-
+    if not quiet:
+        print("\nРезультат валидации:")
+        print(f"Валидный: {result_validation['is_valid']}")
+        print(f"Ошибок: {result_validation['error_count']}")
+        print(f"Предупреждений: {result_validation['warning_count']}")
     for warning in result_validation["warnings"]:
         logger.warning(f"Строка {warning['line_number']}: {warning['message']}")
     for error in result_validation["errors"]:
         logger.error(f"Строка {error['line_number']}: {error['message']}")
-
     if result_validation["errors"]:
-        raise RuntimeError(
-            "Compilation stopped: validation failed; generated C was not emitted"
-        )
+        raise RuntimeError("Compilation stopped: validation failed; generated C was not emitted")
 
-    print("\n=========== CCodeGenerator ===========")
+    if not quiet:
+        print("\n=========== CCodeGenerator ===========")
     c_code = CCodeGenerator().generate_from_typed_ir(typed_ir)
     _ensure_parent(c_output_path)
     c_output_path.write_text(c_code, encoding="utf-8")
-    print(f"Generated C: {c_output_path}")
+    if not quiet:
+        print(f"Generated C: {c_output_path}")
     return result_validation
 
 
 def parse_cli_paths(args: argparse.Namespace) -> tuple[Path, Path, Path, Path, Path]:
-    source_path = Path(args.source).expanduser().resolve()
-    default_json, default_c, default_binary = default_output_paths(source_path)
-    base_path = (
-        Path(args.base_path).expanduser().resolve()
-        if args.base_path
-        else source_path.parent
-    )
-    json_path = (
-        Path(args.json_output).expanduser().resolve()
-        if args.json_output
-        else default_json
-    )
-    c_path = Path(args.c_output).expanduser().resolve() if args.c_output else default_c
-    binary_path = (
-        Path(args.binary_output).expanduser().resolve()
-        if args.binary_output
-        else default_binary
-    )
+    """Resolve paths for both package commands and the old single-file CLI."""
+    source_hint = _explicit_source(args)
+    package = _load_package_for_args(args, source_hint)
+    if source_hint:
+        source_path = source_hint.expanduser().resolve()
+    elif package:
+        source_path = package.entry_path
+    else:
+        source_path = Path("examples/main.oc").resolve()
+
+    if package:
+        default_json, default_c, default_binary = package.artifact_paths(args.profile)
+        default_base = source_path.parent
+    else:
+        default_json, default_c, default_binary = default_output_paths(source_path)
+        default_base = source_path.parent
+    base_path = args.base_path.expanduser().resolve() if args.base_path else default_base
+    json_path = args.json_output.expanduser().resolve() if args.json_output else default_json.resolve()
+    c_path = args.c_output.expanduser().resolve() if args.c_output else default_c.resolve()
+    binary_path = args.binary_output.expanduser().resolve() if args.binary_output else default_binary.resolve()
     return base_path, source_path, json_path, c_path, binary_path
 
 
-def run_cli(args: argparse.Namespace) -> int:
-    base_path, source_path, json_path, c_path, binary_path = parse_cli_paths(args)
-    compile_pipeline(base_path, source_path, json_path, c_path)
+def _compiler_settings(args: argparse.Namespace, package: Package | None) -> tuple[str, list[str]]:
+    compiler = args.compiler or (package.compiler if package else "gcc")
+    flags = list(DEFAULT_CFLAGS)
+    if package:
+        flags.extend(profile_flags(package, args.profile))
+    flags.extend(args.cflag_list)
+    flags.extend(shlex.split(args.cflags))
+    # Keep command lines readable when a manifest repeats the C11 default.
+    return compiler, list(dict.fromkeys(flags))
 
-    if args.no_compile and args.run:
-        raise ValueError("--run cannot be used with --no-compile")
-    if args.run_arg and not args.run:
-        raise ValueError("--run-arg requires --run")
-    if args.no_compile:
-        print("Compilation skipped (--no-compile).")
+
+def _run_tests(args: argparse.Namespace, package: Package | None) -> int:
+    test_path = args.test_path
+    if test_path is None and package:
+        test_path = package.root / package.tests_dir
+    command = [sys.executable, "-m", "pytest", "-v"]
+    if test_path and test_path.exists():
+        command.append(str(test_path))
+    print("$ " + " ".join(command))
+    return subprocess.run(command, cwd=str(package.root if package else Path.cwd())).returncode
+
+
+def run_cli(args: argparse.Namespace) -> int:
+    command = _command(args)
+    if args.no_compile and command not in {"build", "check"}:
+        raise ValueError("--no-compile is only valid with build or check")
+    if args.run_arg and command != "run":
+        raise ValueError("--run-arg requires the run command")
+    if args.run and command != "run":
+        raise ValueError("--run is only valid with the run command")
+
+    if command == "init":
+        target = args.init_path or (Path(args.source_arg) if args.source_arg else Path.cwd())
+        package = create_package(target, force=args.force)
+        print(f"Created package {package.name} at {package.root}")
         return 0
 
-    cflags = [*DEFAULT_CFLAGS, *args.cflag_list, *shlex.split(args.cflags)]
-    compile_c(c_path, binary_path, args.compiler, cflags)
+    source_hint = _explicit_source(args)
+    package = _load_package_for_args(args, source_hint)
+    if command == "clean":
+        if not package:
+            raise PackageError("clean requires an ocean.toml package")
+        if package.build_path.exists():
+            shutil.rmtree(package.build_path)
+            print(f"Removed {package.build_path}")
+        else:
+            print(f"Build directory does not exist: {package.build_path}")
+        return 0
+    if command == "test":
+        return _run_tests(args, package)
 
-    if args.run:
+    base_path, source_path, json_path, c_path, binary_path = parse_cli_paths(args)
+    previous_logging_disabled = logger.disabled
+    logger.disabled = args.quiet
+    try:
+        compile_pipeline(base_path, source_path, json_path, c_path, quiet=args.quiet)
+    finally:
+        logger.disabled = previous_logging_disabled
+    if command == "check" or args.no_compile:
+        print("Check passed." if command == "check" else "Compilation skipped (--no-compile).")
+        return 0
+
+    compiler, cflags = _compiler_settings(args, package)
+    compile_c(c_path, binary_path, compiler, cflags)
+    if command == "run":
         print("\n=========== Program ===========")
         subprocess.run([str(binary_path), *args.run_arg], check=True)
     return 0
@@ -222,10 +257,14 @@ def main(base_path: str, p_path: str, json_path: str, c_path: str):
     return compile_pipeline(base_path, p_path, json_path, c_path)
 
 
-if __name__ == "__main__":
-    cli_parser = build_argument_parser()
+def cli(argv: Sequence[str] | None = None) -> int:
+    """Entry point used by the installed ``ocean`` console script."""
     try:
-        raise SystemExit(run_cli(cli_parser.parse_args()))
-    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
+        return run_cli(build_argument_parser().parse_args(argv))
+    except (OSError, PackageError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
-        raise SystemExit(1)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(cli())

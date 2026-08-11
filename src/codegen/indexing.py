@@ -18,7 +18,7 @@ class IndexingMixin:
 
         # Проверяем по node_type
         if node_type == "nested_index_assignment":
-            print(
+            logger.debug(
                 "  -> это nested_index_assignment, вызываем _generate_nested_index_assignment"
             )
             self._generate_nested_index_assignment(node)
@@ -27,13 +27,13 @@ class IndexingMixin:
         # Проверяем, не является ли переменная словарем с индексами
         if isinstance(variable, dict):
             var_type = variable.get("type", "")
-            print(f"variable is dict with type: {var_type}")
+            logger.debug(f"variable is dict with type: {var_type}")
             if var_type in [
                 "nested_index_access",
                 "nested_index_assignment",
                 "index_access",
             ]:
-                print(
+                logger.debug(
                     "  -> это вложенная индексация, вызываем _generate_nested_index_assignment"
                 )
                 self._generate_nested_index_assignment(node)
@@ -45,7 +45,7 @@ class IndexingMixin:
         # Обработка для self.attr
         if isinstance(variable, str) and variable.startswith("self."):
             attr_name = variable[5:]
-            print(f"  -> обработка self.{attr_name}")
+            logger.debug(f"  -> обработка self.{attr_name}")
 
             # Для атрибутов, которые могут быть списками
             if attr_name == "data":
@@ -80,7 +80,7 @@ class IndexingMixin:
 
         if var_info:
             py_type = var_info.get("py_type", "")
-            print(f"  -> тип переменной: {py_type}")
+            logger.debug(f"  -> тип переменной: {py_type}")
 
             # Обработка для словарей
             if py_type.startswith("dict["):
@@ -124,7 +124,7 @@ class IndexingMixin:
 
         else:
             # Если информация о переменной не найдена, пробуем прямую генерацию
-            print(f"  -> переменная не найдена, прямая генерация")
+            logger.debug("  -> переменная не найдена, прямая генерация")
             self.add_line(f"{variable}[{index_expr}] = {value_expr};")
 
     def generate_nested_index_assignment(self, node: Dict):
@@ -209,9 +209,6 @@ class IndexingMixin:
         """Генерирует присваивание для вложенной индексации любой глубины"""
         logger.debug(f"_generate_nested_index_assignment: {node}")
 
-        print("\n--- _generate_nested_index_assignment ---")
-        print(f"node: {node}")
-
         # Получаем данные из узла
         var_name = node.get("variable", "")
         if isinstance(var_name, str):
@@ -219,12 +216,12 @@ class IndexingMixin:
         indices_ast = node.get("indices", [])
         value_ast = node.get("value", {})
 
-        print(f"var_name: {var_name}")
-        print(f"indices_ast: {indices_ast}")
-        print(f"value_ast: {value_ast}")
+        logger.debug(
+            f"nested assignment variable={var_name} indices={indices_ast} value={value_ast}"
+        )
 
         if not var_name or not indices_ast:
-            print("  ERROR: no var_name or indices")
+            logger.error("nested assignment has no variable or indices")
             return
 
         # Генерируем выражения для всех индексов
@@ -232,11 +229,11 @@ class IndexingMixin:
         for idx_ast in indices_ast:
             indices.append(self.generate_expression(idx_ast))
 
-        print(f"  indices expressions: {indices}")
+        logger.debug(f"nested assignment indices: {indices}")
 
         var_info = self.get_variable_info(var_name)
         if not var_info:
-            print(f"  ERROR: no var_info for {var_name}")
+            logger.error(f"nested assignment variable not found: {var_name}")
             return
 
         py_type = var_info.get("py_type", "")
@@ -246,8 +243,7 @@ class IndexingMixin:
             self.generate_tensor_index_assignment(var_name, py_type, indices_ast, value_expr)
             return
 
-        print(f"  py_type: {py_type}")
-        print(f"  value_expr: {value_expr}")
+        logger.debug(f"nested assignment type={py_type} value={value_expr}")
 
         # Если глубина = 1, используем простую set_функцию
         if len(indices) == 1:
