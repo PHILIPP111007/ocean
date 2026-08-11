@@ -1,0 +1,60 @@
+from pathlib import Path
+
+from main import build_argument_parser, parse_cli_paths
+
+
+def test_cli_preserves_legacy_default_paths():
+    args = build_argument_parser().parse_args([])
+
+    base_path, source_path, json_path, c_path, binary_path = parse_cli_paths(args)
+
+    expected_source = Path("examples/main.oc").resolve()
+    assert base_path == expected_source.parent
+    assert source_path == expected_source
+    assert json_path == expected_source.parent / "parsed_code.json"
+    assert c_path == expected_source.parent / "generated_code.c"
+    assert binary_path == expected_source.parent / "generated_code"
+
+
+def test_cli_accepts_custom_paths_flags_and_run_arguments(tmp_path):
+    source = tmp_path / "sample.oc"
+    json_output = tmp_path / "artifacts" / "sample.json"
+    c_output = tmp_path / "artifacts" / "sample.c"
+    binary_output = tmp_path / "bin" / "sample"
+
+    args = build_argument_parser().parse_args(
+        [
+            str(source),
+            "--base-path",
+            str(tmp_path / "imports"),
+            "--json-output",
+            str(json_output),
+            "--c-output",
+            str(c_output),
+            "--output",
+            str(binary_output),
+            "--compiler",
+            "clang",
+            "--cflag=-O3",
+            "--cflag=-pthread",
+            "--cflags",
+            "-Wall -Wextra",
+            "--run",
+            "--run-arg",
+            "hello",
+        ]
+    )
+
+    paths = parse_cli_paths(args)
+
+    assert paths == (
+        (tmp_path / "imports").resolve(),
+        source.resolve(),
+        json_output.resolve(),
+        c_output.resolve(),
+        binary_output.resolve(),
+    )
+    assert args.compiler == "clang"
+    assert args.cflag_list == ["-O3", "-pthread"]
+    assert args.cflags == "-Wall -Wextra"
+    assert args.run_arg == ["hello"]

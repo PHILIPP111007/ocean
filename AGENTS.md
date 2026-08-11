@@ -29,6 +29,10 @@ This parses `examples/main.oc`, emits `examples/parsed_code.json` and
 strict diagnostics; add `-pthread` for pthread examples. Sanitizers are recommended during runtime
 testing (`-fsanitize=address,undefined`).
 
+The CLI accepts a custom source path plus `--base-path`, `--json-output`, `--c-output`, `-o`, and
+`--compiler`. Pass repeatable C options with `--cflag=-O2` or a group with `--cflags "-Wall -g"`;
+use `--no-compile` for generation-only checks and `--run` to execute the compiled binary.
+
 ## Coding Style & Naming Conventions
 
 Use four-space indentation, readable snake_case for Python functions and variables, and PascalCase

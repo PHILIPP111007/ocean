@@ -91,6 +91,20 @@ python benchmarks/benchmark_main.py --runs 3
 The benchmark reports parsing, validation, generation, compilation, and runtime separately. Use
 `--json` for machine-readable output and `--keep` to preserve generated artifacts.
 
+The compiler pipeline also accepts a custom source file and build paths:
+
+```bash
+python main.py examples/threads.oc \
+    --json-output /tmp/threads.json \
+    --c-output /tmp/threads.c \
+    --output /tmp/threads \
+    --cflag=-pthread --cflag=-Wall
+```
+
+Use `--compiler clang` to select another C compiler, `--cflags "-O2 -g"` for a shell-style flag
+group, `--no-compile` to stop after C generation, or `--run --run-arg VALUE` to execute the result.
+Run `python main.py --help` for the complete option list.
+
 For strict manual C checks:
 
 ```bash
