@@ -7,6 +7,12 @@ from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOW
 from src.modules.logger import logger
 
 class OrchestratorMixin:
+    def generate_from_typed_ir(self, typed_ir) -> str:
+        """Generate C from the semantic IR while preserving the legacy backend."""
+        if not hasattr(typed_ir, "to_legacy_json"):
+            raise TypeError("generate_from_typed_ir expects a TypedModule")
+        return self.generate_from_json(typed_ir.to_legacy_json())
+
     def generate_from_json(self, json_data: List[Dict]) -> str:
         """Run semantic prepasses, instantiate runtime types, then emit C."""
         self.reset()
@@ -14,6 +20,11 @@ class OrchestratorMixin:
         self.scan_runtime_requirements(json_data)
         self.phils_function_names = {
             scope.get("function_name")
+            for scope in json_data
+            if scope.get("type") == "function" and scope.get("function_name")
+        }
+        self.function_parameters = {
+            scope.get("function_name"): scope.get("parameters", [])
             for scope in json_data
             if scope.get("type") == "function" and scope.get("function_name")
         }

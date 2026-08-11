@@ -100,8 +100,9 @@ class ScopeMixin:
         memory_kind = self.memory_kind_for_type(var_type)
         if owns_reference is None:
             owns_reference = (
-                not is_parameter
-                and memory_kind in {self.MEMORY_ARC, self.MEMORY_STRING, self.MEMORY_OWNED}
+                memory_kind == self.MEMORY_OWNED
+                if is_parameter
+                else memory_kind in {self.MEMORY_ARC, self.MEMORY_STRING, self.MEMORY_OWNED}
             )
 
         scope[name] = {

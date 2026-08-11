@@ -76,6 +76,10 @@ The backend currently enables borrows first for managed/reference objects (`list
 etc.) and immutable strings. Borrowing inline scalar/value types is intentionally deferred until
 an addressable value/struct representation is added.
 
+The parser graph is lowered into `src/typed_ir.py` before validation and code generation. Typed IR
+nodes retain the legacy graph for compatibility while exposing result types, reads/writes, and
+effects to semantic passes.
+
 ### 4. Deterministic scope cleanup
 
 Owned managed objects and owned strings are automatically released at scope exit. `del` is now an
@@ -154,8 +158,11 @@ Current deliberate boundaries:
 - scalar/value borrows are not implemented yet;
 - full integer-overflow semantics, `Shared[T]`, `Send`/`Sync`, arenas and owned `array`/`tensor` are future work.
 
-For OS/ML, the intended next layer is unique-owned `array[T]` / `tensor[T]` plus `&T` / `&mut T`,
-so hot loops do not perform reference-count operations.
+For OS/ML, `array[T]` / `tensor[T]` are now unique-owned buffers plus `&T` / `&mut T`, so hot loops
+do not perform reference-count operations. Passing one by value transfers ownership; passing a
+borrow is non-consuming. Tensor views retain the source tensor through an internal owner link and
+reuse its data with independent shape/stride metadata. Tensor arithmetic supports trailing-axis
+broadcasting with runtime shape validation; incompatible shapes terminate with a diagnostic.
 
 ## Recommended compiler flags during development
 

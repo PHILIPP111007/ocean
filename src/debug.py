@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 
 from src.modules.constants import DATA_TYPES
 from src.modules.logger import logger
+from src.typed_ir import TypedModule
 
 
 class JSONValidator:
@@ -37,8 +38,10 @@ class JSONValidator:
         self.variable_states = {}  # {(scope_level, var_name): "active"/"deleted"}
         self.classes = {}  # {class_name: class_info}
 
-    def validate(self, json_data: List[Dict]) -> list[Dict]:
+    def validate(self, json_data: List[Dict] | TypedModule) -> list[Dict]:
         """Основной метод валидации"""
+        if isinstance(json_data, TypedModule):
+            json_data = json_data.to_legacy_json()
         self.errors = []
         self.warnings = []
         self.scope_symbols = {}
@@ -731,15 +734,32 @@ class JSONValidator:
             argument_names = self._lifetime_variable_names(argument)
             for name in argument_names:
                 state = env.get(name)
-                if not state or not state.get("borrow_source"):
+                if not state:
                     continue
                 expected = parameter_types[index] if index < len(parameter_types) else ""
-                if node.get("node") == "c_call" or not expected.startswith("&"):
-                    self._lifetime_error(
-                        f"borrow '{name}' escapes through call '{function_name}'",
-                        scope_idx,
-                        node_idx,
-                    )
+                if state.get("borrow_source"):
+                    if node.get("node") == "c_call" or not expected.startswith("&"):
+                        self._lifetime_error(
+                            f"borrow '{name}' escapes through call '{function_name}'",
+                            scope_idx,
+                            node_idx,
+                        )
+                    elif expected.startswith("&mut ") and not state.get("borrow_mutable"):
+                        self._lifetime_error(
+                            f"immutable borrow '{name}' cannot be passed to mutable parameter",
+                            scope_idx,
+                            node_idx,
+                        )
+                    continue
+
+                # Passing an owned array/tensor by value transfers its owner
+                # into the callee.  The binding is dead after the call; the
+                # caller must use ``&T``/``&mut T`` for a non-consuming call.
+                if expected and not expected.startswith("&") and self._lifetime_is_unique(expected):
+                    if self._lifetime_is_unique(state.get("type", "")):
+                        self._lifetime_check_mutation(name, env, scope_idx, node_idx)
+                        if not self._lifetime_is_dead(state):
+                            state["status"] = "moved"
 
     def _lifetime_analyze_node(
         self, node: Dict, env: Dict[str, Dict], scope_idx: int, node_idx: int
@@ -1647,6 +1667,12 @@ class JSONValidator:
                 logger.debug(
                     f"    Пропускаем проверку функции '{func_name}' (игнорируемая)"
                 )
+                continue
+
+            # ``object.method(...)`` is validated by the method/type pass;
+            # the textual fallback must not treat ``method`` as a free
+            # function.
+            if re.search(rf"\.\s*{re.escape(func_name)}\s*\(", expression):
                 continue
 
             if (
@@ -2727,6 +2753,12 @@ class JSONValidator:
         elif ast_type == "method_call":
             if ast.get("object") == "tensor" and ast.get("method") == "zeros":
                 return "tensor"
+            obj_info = self.get_symbol_info(ast.get("object", ""), level)
+            obj_type = obj_info.get("type", "") if obj_info else ""
+            if obj_type.startswith("tensor[") and ast.get("method") in {
+                "row", "column", "slice", "transpose_view", "copy", "transpose", "matmul"
+            }:
+                return obj_type
 
         elif ast_type == "binary_operation":
             # Определяем тип результата бинарной операции
@@ -2740,6 +2772,10 @@ class JSONValidator:
 
             # Для арифметических операций
             if operator in ["+", "-", "*", "/", "//", "%", "**"]:
+                if left_type.startswith("tensor["):
+                    return left_type
+                if right_type.startswith("tensor["):
+                    return right_type
                 if left_type == "float" or right_type == "float":
                     return "float"
                 elif left_type == "int" and right_type == "int":
@@ -3147,6 +3183,18 @@ class JSONValidator:
         ]
 
         if operator in arithmetic_ops:
+            tensor_types = (type1.startswith("tensor["), type2.startswith("tensor["))
+            if any(tensor_types):
+                scalar_types = {
+                    "int", "float", "double", "float16", "float32", "float64",
+                    "int8", "int16", "int32", "int64", "uint8", "uint16",
+                    "uint32", "uint64",
+                }
+                return (
+                    (type1.startswith("tensor[") and type2.startswith("tensor["))
+                    or (type1.startswith("tensor[") and type2 in scalar_types)
+                    or (type2.startswith("tensor[") and type1 in scalar_types)
+                )
             # int и float могут взаимодействовать
             numeric_types = ["int", "float"]
             return type1 in numeric_types and type2 in numeric_types
@@ -3531,9 +3579,21 @@ class JSONValidator:
 
     def are_types_compatible(self, target_type: str, value_type: str) -> bool:
         """Проверяет совместимость типов"""
+        target_type = (target_type or "").strip()
+        value_type = (value_type or "").strip()
+
         # Если типы равны - совместимы
         if target_type == value_type:
             return True
+
+        # A borrow declaration binds a view to an existing compatible owner.
+        # The lifetime pass separately verifies that the source stays alive and
+        # that mutable/immutable aliases do not conflict.
+        if target_type.startswith("&mut ") and target_type[5:].strip() == value_type:
+            return True
+        if target_type.startswith("&") and not target_type.startswith("&mut "):
+            if target_type[1:].strip() == value_type:
+                return True
 
         # Null совместим с любым указателем
         if value_type == "null" and target_type.startswith("*"):
@@ -3550,6 +3610,8 @@ class JSONValidator:
         if target_type.startswith(generic_containers) and value_type in {
             "list", "dict", "tuple", "array", "tensor"
         }:
+            if value_type == "list":
+                return target_type.startswith(("list[", "array[", "tensor["))
             return target_type.startswith(f"{value_type}[")
 
         # Ошибка: если функция должна возвращать int, а возвращает str
@@ -3558,6 +3620,17 @@ class JSONValidator:
 
         if target_type == "str" and value_type == "int":
             return False
+
+        # Numeric literals are widened to the declared numeric type.
+        float_types = {"float", "double", "float16", "float32", "float64"}
+        integer_types = {
+            "int", "int8", "int16", "int32", "int64",
+            "uint8", "uint16", "uint32", "uint64", "size_t",
+        }
+        if target_type in float_types and value_type in float_types | {"int"}:
+            return True
+        if target_type in integer_types and value_type in integer_types:
+            return True
 
         # Упрощенные правила совместимости
         compatibility_rules = {
@@ -4792,6 +4865,12 @@ class JSONValidator:
             ],
             "tuple": ["count", "index"],
         }
+
+        if type_name.startswith("tensor["):
+            return method_name in {
+                "fill", "sum", "copy", "transpose", "transpose_view", "matmul",
+                "row", "column", "slice",
+            }
 
         if type_name in builtin_methods:
             return method_name in builtin_methods[type_name]

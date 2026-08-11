@@ -12,6 +12,7 @@ class CoreMixin:
         self.indent_level = 0
         self.temp_var_counter = 0
         self.function_declarations = []
+        self.function_parameters = {}
         self.c_imports = []
 
         # Улучшенная система управления переменными
@@ -109,6 +110,7 @@ class CoreMixin:
         self.indent_level = 0
         self.temp_var_counter = 0
         self.function_declarations = []
+        self.function_parameters = {}
         self.c_imports = []
         self.variable_scopes = [{}]
         self.current_scope_level = 0

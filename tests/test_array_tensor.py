@@ -1,6 +1,7 @@
 from tests.constants import base_path
 from src.parser import Parser
 from src.compiler import CCodeGenerator
+from src.debug import JSONValidator
 
 def generate(source: str) -> str:
     data = Parser(base_path=base_path).parse_code(source)
@@ -214,6 +215,59 @@ def main() -> int:
     assert "ocean_tensor_float32_set2(matrix" in code
     assert "ocean_tensor_float32_free(matrix);" in code
     assert 'printf("%zu\\n"' in code
+
+
+def test_tensor_numeric_methods_use_shape_and_stride_runtime():
+    code = generate(
+        """
+def main() -> int:
+    var left: tensor[float32] = [[1.0, 2.0], [3.0, 4.0]]
+    var right: tensor[float32] = tensor.zeros(2, 2)
+    right.fill(1.0)
+    var total: float32 = left.sum()
+    var transposed: tensor[float32] = left.transpose()
+    var product: tensor[float32] = left.matmul(transposed)
+    print(total)
+    print(product[0, 0])
+    return 0
+"""
+    )
+
+    assert "ocean_tensor_float32_fill(right, 1.0);" in code
+    assert "ocean_tensor_float32_sum(left)" in code
+    assert "ocean_tensor_float32_transpose2(left)" in code
+    assert "ocean_tensor_float32_matmul2(left, transposed)" in code
+    assert "left->strides[0]" in code
+    assert "right->strides[1]" in code
+
+
+def test_tensor_views_keep_owner_and_broadcast_shapes():
+    source = """
+def main() -> int:
+    var matrix: tensor[float32] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    var row: tensor[float32] = matrix.row(1)
+    var transposed: tensor[float32] = matrix.transpose_view()
+    var bias: tensor[float32] = [[10.0, 20.0, 30.0]]
+    var added: tensor[float32] = matrix + bias
+    var scaled: tensor[float32] = matrix * 2.0
+    print(row[0])
+    print(transposed[2, 1])
+    print(added[1, 2])
+    print(scaled[0, 1])
+    return 0
+"""
+    parsed = Parser().parse_code(source)
+    report = JSONValidator().validate(parsed)
+    assert report["is_valid"], report["errors"]
+
+    code = CCodeGenerator().generate_from_json(parsed)
+    assert "ocean_tensor_float32_view" in code
+    assert "ocean_tensor_float32_retain" in code
+    assert "ocean_tensor_float32_release" in code
+    assert "ocean_tensor_float32_row(matrix" in code
+    assert "ocean_tensor_float32_transpose_view(matrix)" in code
+    assert "ocean_tensor_float32_binary_broadcast(matrix, bias, 0)" in code
+    assert "ocean_tensor_float32_scalar_broadcast(matrix, 2.0, 2, 0)" in code
 
 
 def test_tensor_rank_specialization_is_unbounded():

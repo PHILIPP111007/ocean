@@ -112,6 +112,12 @@ class ExpressionsMixin:
             right_ast = ast.get("right", {})
             operator = ast.get("operator_symbol", "")
 
+            tensor_expression = self.generate_tensor_broadcast_binary(
+                left_ast, right_ast, operator
+            )
+            if tensor_expression is not None:
+                return tensor_expression
+
             left = self.generate_expression(left_ast)
             right = self.generate_expression(right_ast)
 
@@ -252,6 +258,7 @@ class ExpressionsMixin:
 
             args = ast.get("arguments", [])
             arg_strings = [self.generate_expression(arg_ast) for arg_ast in args]
+            self.consume_owned_call_arguments(func_name, args)
             args_str = ", ".join(arg_strings)
             return f"{c_func_name}({args_str})"
 

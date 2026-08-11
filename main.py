@@ -13,6 +13,7 @@ from src.compiler import CCodeGenerator
 from src.debug import JSONValidator
 from src.modules.logger import logger
 from src.parser import Parser
+from src.typed_ir import build_typed_ir
 
 
 DEFAULT_CFLAGS = ["-std=c11"]
@@ -147,7 +148,8 @@ def compile_pipeline(
     )
 
     print("\n=========== DEBUGGER ===========")
-    result_validation = JSONValidator().validate(data)
+    typed_ir = build_typed_ir(data)
+    result_validation = JSONValidator().validate(typed_ir)
 
     print("\nРезультат валидации:")
     print(f"Валидный: {result_validation['is_valid']}")
@@ -165,7 +167,7 @@ def compile_pipeline(
         )
 
     print("\n=========== CCodeGenerator ===========")
-    c_code = CCodeGenerator().generate_from_json(data)
+    c_code = CCodeGenerator().generate_from_typed_ir(typed_ir)
     _ensure_parent(c_output_path)
     c_output_path.write_text(c_code, encoding="utf-8")
     print(f"Generated C: {c_output_path}")

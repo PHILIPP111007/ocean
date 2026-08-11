@@ -27,6 +27,8 @@ class CallsMixin:
                 else:
                     arg_strings.append(str(arg))
 
+        self.consume_owned_call_arguments(node.get("function", ""), args)
+
         args_str = ", ".join(arg_strings)
         self.add_line(f"{func_name}({args_str});")
 
@@ -67,6 +69,10 @@ class CallsMixin:
             )
         if obj_type.startswith("tuple["):
             return self._generate_tuple_method_call(
+                object_name, obj_type, method_name, arg_strings, is_standalone, target_var
+            )
+        if self.is_tensor_type(obj_type):
+            return self._generate_tensor_method_call(
                 object_name, obj_type, method_name, arg_strings, is_standalone, target_var
             )
 

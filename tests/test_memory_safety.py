@@ -127,3 +127,37 @@ def main() -> None:
 
     assert not report["is_valid"]
     assert any("escapes through call" in error["message"] for error in report["errors"])
+
+
+def test_immutable_borrow_cannot_be_passed_to_mutable_parameter():
+    report = validate_ocean("""
+def write(values: &mut array[float32]) -> None:
+    values[0] = 2.0
+    return None
+
+def main() -> None:
+    var values: array[float32] = [1.0]
+    var view: &array[float32] = values
+    write(view)
+    return None
+""")
+
+    assert not report["is_valid"]
+    assert any("immutable borrow" in error["message"] for error in report["errors"])
+
+
+def test_owned_array_is_moved_into_by_value_parameter():
+    report = validate_ocean("""
+def consume(values: array[float32]) -> None:
+    print(values[0])
+    return None
+
+def main() -> None:
+    var values: array[float32] = [1.0]
+    consume(values)
+    print(values[0])
+    return None
+""")
+
+    assert not report["is_valid"]
+    assert any("use of moved value 'values'" in error["message"] for error in report["errors"])

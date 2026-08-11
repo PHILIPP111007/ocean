@@ -316,7 +316,7 @@ static char* ocean_strdup(const char* src) {
             return
         if info.get("is_deleted") or info.get("is_moved"):
             return
-        if info.get("is_parameter") or not info.get("owns_reference", False):
+        if not info.get("owns_reference", False):
             return
 
         kind = info.get("memory_kind")
@@ -353,6 +353,25 @@ static char* ocean_strdup(const char* src) {
                 self.emit_scope_cleanup(
                     self.variable_scopes[level], excluded, mark_state=False
                 )
+
+    def consume_owned_call_arguments(self, function_name: str, arguments: Iterable[Dict]) -> None:
+        """Transfer unique buffers passed to by-value function parameters."""
+        parameters = getattr(self, "function_parameters", {}).get(function_name, [])
+        for index, argument in enumerate(arguments):
+            if index >= len(parameters) or not isinstance(argument, dict):
+                continue
+            expected = parameters[index].get("type", "")
+            if self.is_borrow_type(expected) or not self.is_owned_type(expected):
+                continue
+            if argument.get("type") != "variable":
+                continue
+            source = argument.get("value") or argument.get("name")
+            info = self.get_variable_info(source)
+            if not info or not self.is_owned_type(info.get("py_type", "")):
+                continue
+            self.assert_can_read(source)
+            self.assert_can_move_or_delete(source)
+            self._mark_owned_move(source)
 
     def emit_cleanup_to_loop(self) -> None:
         for level in range(self.current_scope_level, 0, -1):

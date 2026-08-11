@@ -49,11 +49,19 @@ matrix[0, 1] = 3.5
 
 var rows: int = matrix.shape[0]
 var elements: int = len(matrix)
+matrix.fill(0.0)
+var total: float32 = matrix.sum()
+var row: tensor[float32] = matrix.row(0)
+var transposed: tensor[float32] = matrix.transpose_view()
+var result: tensor[float32] = matrix + transposed
 ```
 
 Tensor storage is contiguous and row-major. Indexing is bounds-checked by the generated runtime;
-provably safe hot loops can use a checked-once fast path. The current benchmark multiplies two
-`100 × 100` matrices 1,000 times.
+provably safe hot loops can use a checked-once fast path. `sum`, `fill`, `copy`, `row`, `column`,
+`slice`, `transpose_view`, and 2D `matmul` are lowered to stride-aware C helpers. Views share the
+source tensor's storage and retain its owner until the view is released. Arithmetic supports
+NumPy-style trailing-axis broadcasting for compatible shapes; `transpose()` remains an explicit
+copying operation. The current benchmark multiplies two `100 × 100` matrices 1,000 times.
 
 ## Memory model
 
@@ -126,6 +134,7 @@ Ocean source → Parser → typed JSON graph → JSONValidator → CCodeGenerato
 ```
 
 - `src/parser.py` — syntax, types, expressions, indexing, arrays, and tensors.
+- `src/typed_ir.py` — typed scopes, expression result types, data dependencies, and ownership effects.
 - `src/debug.py` — diagnostics, source locations, ownership, and borrow validation.
 - `src/codegen/` — C lowering for scopes, types, ownership, containers, tensors, and OOP.
 - `src/compiler.py` — public `CCodeGenerator` compatibility API.
@@ -134,10 +143,11 @@ Ocean source → Parser → typed JSON graph → JSONValidator → CCodeGenerato
 
 ## Honest project status
 
-Ocean is an active prototype, not a finished Rust replacement. The safe core is strongest for
-intra-function ownership and lexical borrows. The current boundaries include non-atomic ARC,
-thread-confined managed objects, possible leaks from reference cycles, incomplete integer-overflow
-semantics, and an unsafe FFI escape hatch. These limitations are documented rather than hidden.
+Ocean is an active prototype, not a finished Rust replacement. The compiler now has a typed IR and
+explicit move checks for unique arrays/tensors, while lexical borrows remain the safe zero-cost
+interface for shared access. Current boundaries include non-atomic ARC, thread-confined managed
+objects, possible leaks from reference cycles, incomplete integer-overflow semantics, broadcasting
+shape errors being runtime checks, and an unsafe FFI escape hatch.
 
 ## Contributing
 

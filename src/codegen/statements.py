@@ -47,7 +47,6 @@ class StatementsMixin:
         transfer_local_owner = bool(
             source_info
             and source_info.get("owns_reference")
-            and not source_info.get("is_parameter")
             and kind in {self.MEMORY_ARC, self.MEMORY_STRING, self.MEMORY_OWNED}
         )
 

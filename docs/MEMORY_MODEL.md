@@ -10,6 +10,7 @@
 | `dict[K,V]` | managed shared object | yes |
 | `tuple[T]` | managed shared immutable object | yes |
 | class instance | managed shared object | yes |
+| `array[T]`, `tensor[T]` | unique owned buffer | no |
 | `&T` | immutable lexical borrow | no |
 | `&mut T` | exclusive mutable lexical borrow | no |
 | raw C pointer | unsafe external ownership | no |
@@ -51,6 +52,34 @@ ocean_list_int* borrowed = owner;
 No retain/release is emitted. The validator tracks borrow state through straight-line code and
 conservatively merges states across branches and loops, preventing the owner from being invalidated
 while the borrow is alive.
+
+## Move
+
+`array[T]` and `tensor[T]` are unique owners. Initializing another variable from one of them, or
+passing one to a by-value parameter, transfers ownership and invalidates the original binding:
+
+```python
+var source: array[float32] = [1.0]
+var moved: array[float32] = source
+# source cannot be read here
+```
+
+Use `&array[T]` or `&mut array[T]` for a non-consuming call. The same rules apply to tensors. The
+validator reports moves, use-after-move, and conflicts with active borrows before C generation.
+
+## Tensor views
+
+`tensor[T]` views are non-copying tensor handles. They keep the source tensor alive through an
+internal owner reference, while carrying their own `shape` and `strides` metadata:
+
+```python
+var row: tensor[float32] = matrix.row(0)
+var transposed: tensor[float32] = matrix.transpose_view()
+```
+
+Releasing `matrix` does not invalidate these views; the backing storage is released only after the
+last view releases its owner. `transpose()` is deliberately different: it creates an independent
+owned copy. View assignment transfers the view handle rather than copying its metadata or data.
 
 ## Return ABI
 

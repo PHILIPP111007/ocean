@@ -5,10 +5,10 @@
 Ocean is a Python-like language that lowers Phils/Ocean source to C. The command-line entry point is
 `main.py`; it reads `examples/main.oc` and writes parsed JSON, generated C, and an executable in
 `examples/`. The compiler implementation is under `src/`: parsing and validation live in
-`src/parser.py` and `src/debug.py`, while C generation is organized in `src/codegen/` (ownership,
-scope, types, statements, expressions, containers, and OOP). `src/compiler.py` provides the public
-generator import used by existing callers. Tests are in `tests/`, documentation in `docs/`, and
-illustrations in `images/`.
+`src/parser.py`, `src/typed_ir.py`, and `src/debug.py`, while C generation is organized in
+`src/codegen/` (ownership, scope, types, statements, expressions, containers, tensors, and OOP).
+`src/compiler.py` provides the public generator import used by existing callers. Tests are in
+`tests/`, documentation in `docs/`, and illustrations in `images/`.
 
 ## Build, Test, and Development Commands
 
@@ -44,8 +44,8 @@ or linter configuration is currently committed, so keep changes consistent with 
 
 Tests use pytest-style functions named `test_*`. Most compiler tests call `tests.base.run`, supplying
 Ocean input and an expected C fragment. Add a focused test beside the relevant feature, and run the
-entire suite before submitting changes. Include ownership, borrow, or generated-C assertions when
-modifying memory-management behavior.
+entire suite before submitting changes. Include typed-IR metadata, ownership/move, borrow, or
+generated-C assertions when modifying these passes.
 
 ## Commit & Pull Request Guidelines
 

@@ -5090,6 +5090,13 @@ class Parser:
                         if method_found:
                             break
 
+        tensor_methods = {
+            "fill", "sum", "copy", "transpose", "transpose_view", "matmul",
+            "row", "column", "slice",
+        }
+        if obj_type.startswith("tensor[") and method_name in tensor_methods:
+            method_found = True
+
         if not method_found:
             logger.debug(
                 f"Warning: Method '{method_name}' not found in class '{obj_type}' or its parents"

@@ -27,6 +27,44 @@ class TensorCodegenMixin:
     def tensor_c_type(self, py_type: str) -> str:
         return f"{self.tensor_struct_name(py_type)}*"
 
+    def _tensor_ast_type(self, ast: Dict) -> str | None:
+        if not isinstance(ast, dict) or ast.get("type") != "variable":
+            return None
+        info = self.get_variable_info(ast.get("value") or ast.get("name", ""))
+        if not info:
+            return None
+        py_type = self.strip_borrow_type(info.get("py_type", ""))
+        return py_type if self.is_tensor_type(py_type) else None
+
+    def generate_tensor_broadcast_binary(self, left_ast: Dict, right_ast: Dict, operator: str):
+        """Lower tensor arithmetic to shape-checked broadcasting helpers."""
+        left_type = self._tensor_ast_type(left_ast)
+        right_type = self._tensor_ast_type(right_ast)
+        if not left_type and not right_type:
+            return None
+        if operator not in {"+", "-", "*", "/"}:
+            raise RuntimeError(f"tensor broadcasting does not support '{operator}'")
+
+        operation = {"+": 0, "-": 1, "*": 2, "/": 3}[operator]
+        if left_type and right_type:
+            if self.tensor_element_type(left_type) != self.tensor_element_type(right_type):
+                raise RuntimeError("tensor broadcasting requires matching element types")
+            struct_name = self.tensor_struct_name(left_type)
+            left = self.generate_expression(left_ast)
+            right = self.generate_expression(right_ast)
+            self.generate_tensor_struct(left_type)
+            return f"{struct_name}_binary_broadcast({left}, {right}, {operation})"
+
+        tensor_ast = left_ast if left_type else right_ast
+        scalar_ast = right_ast if left_type else left_ast
+        tensor_type = left_type or right_type
+        struct_name = self.tensor_struct_name(tensor_type)
+        tensor = self.generate_expression(tensor_ast)
+        scalar = self.generate_expression(scalar_ast)
+        self.generate_tensor_struct(tensor_type)
+        scalar_left = 1 if not left_type else 0
+        return f"{struct_name}_scalar_broadcast({tensor}, {scalar}, {operation}, {scalar_left})"
+
     def _flatten_tensor_items(self, ast: Dict) -> List[Dict]:
         if ast.get("type") != "list_literal":
             return [ast]
@@ -87,6 +125,227 @@ static inline void {struct_name}_set{rank}({struct_name}* tensor, {parameters}, 
 }}
 """)
         return "\n".join(helpers)
+
+    def _tensor_numeric_helpers(self, struct_name: str, c_element_type: str) -> str:
+        """Emit view-aware reductions, matrix operations, and broadcasting."""
+        return f"""
+static inline void {struct_name}_fill({struct_name}* tensor, {c_element_type} value) {{
+    if (!tensor) {{ fprintf(stderr, "Tensor fill on NULL in {struct_name}\\n"); exit(1); }}
+    for (size_t linear = 0; linear < tensor->size; ++linear) {{
+        size_t remaining = linear;
+        size_t offset = 0;
+        for (size_t axis = tensor->ndim; axis-- > 0;) {{
+            size_t coordinate = tensor->shape[axis] ? remaining % tensor->shape[axis] : 0;
+            remaining = tensor->shape[axis] ? remaining / tensor->shape[axis] : 0;
+            offset += coordinate * tensor->strides[axis];
+        }}
+        tensor->data[offset] = value;
+    }}
+}}
+
+static inline {c_element_type} {struct_name}_sum(const {struct_name}* tensor) {{
+    if (!tensor) {{ fprintf(stderr, "Tensor sum on NULL in {struct_name}\\n"); exit(1); }}
+    {c_element_type} result = ({c_element_type})0;
+    for (size_t linear = 0; linear < tensor->size; ++linear) {{
+        size_t remaining = linear;
+        size_t offset = 0;
+        for (size_t axis = tensor->ndim; axis-- > 0;) {{
+            size_t coordinate = tensor->shape[axis] ? remaining % tensor->shape[axis] : 0;
+            remaining = tensor->shape[axis] ? remaining / tensor->shape[axis] : 0;
+            offset += coordinate * tensor->strides[axis];
+        }}
+        result += tensor->data[offset];
+    }}
+    return result;
+}}
+
+static {struct_name}* {struct_name}_copy(const {struct_name}* source) {{
+    if (!source) return NULL;
+    {struct_name}* result = {struct_name}_zeros(source->shape, source->ndim);
+    for (size_t linear = 0; linear < source->size; ++linear) {{
+        size_t remaining = linear;
+        size_t offset = 0;
+        for (size_t axis = source->ndim; axis-- > 0;) {{
+            size_t coordinate = source->shape[axis] ? remaining % source->shape[axis] : 0;
+            remaining = source->shape[axis] ? remaining / source->shape[axis] : 0;
+            offset += coordinate * source->strides[axis];
+        }}
+        result->data[linear] = source->data[offset];
+    }}
+    return result;
+}}
+
+static {struct_name}* {struct_name}_transpose2(const {struct_name}* source) {{
+    if (!source || source->ndim != 2) {{
+        fprintf(stderr, "Tensor transpose() expects a 2D tensor in {struct_name}\\n"); exit(1);
+    }}
+    size_t shape[2] = {{ source->shape[1], source->shape[0] }};
+    {struct_name}* result = {struct_name}_zeros(shape, 2);
+    for (size_t i = 0; i < source->shape[0]; ++i)
+        for (size_t j = 0; j < source->shape[1]; ++j)
+            result->data[j * result->strides[0] + i * result->strides[1]] =
+                source->data[i * source->strides[0] + j * source->strides[1]];
+    return result;
+}}
+
+static {struct_name}* {struct_name}_matmul2(
+    const {struct_name}* left, const {struct_name}* right
+) {{
+    if (!left || !right || left->ndim != 2 || right->ndim != 2 ||
+        left->shape[1] != right->shape[0]) {{
+        fprintf(stderr, "Tensor matmul() expects compatible 2D tensors in {struct_name}\\n"); exit(1);
+    }}
+    size_t shape[2] = {{ left->shape[0], right->shape[1] }};
+    {struct_name}* result = {struct_name}_zeros(shape, 2);
+    for (size_t i = 0; i < left->shape[0]; ++i)
+        for (size_t j = 0; j < right->shape[1]; ++j) {{
+            {c_element_type} value = ({c_element_type})0;
+            for (size_t k = 0; k < left->shape[1]; ++k)
+                value += left->data[i * left->strides[0] + k * left->strides[1]] *
+                         right->data[k * right->strides[0] + j * right->strides[1]];
+            result->data[i * result->strides[0] + j * result->strides[1]] = value;
+        }}
+    return result;
+}}
+
+static {struct_name}* {struct_name}_binary_broadcast(
+    const {struct_name}* left, const {struct_name}* right, int operation
+) {{
+    if (!left || !right) {{
+        fprintf(stderr, "Tensor broadcast on NULL in {struct_name}\\n"); exit(1);
+    }}
+    size_t ndim = left->ndim > right->ndim ? left->ndim : right->ndim;
+    size_t* shape = ndim ? (size_t*)malloc(ndim * sizeof(size_t)) : NULL;
+    if (ndim && !shape) {{ fprintf(stderr, "Tensor broadcast shape allocation failed\\n"); exit(1); }}
+    for (size_t axis = 0; axis < ndim; ++axis) {{
+        size_t left_axis = axis + left->ndim >= ndim ? left->shape[axis + left->ndim - ndim] : 1;
+        size_t right_axis = axis + right->ndim >= ndim ? right->shape[axis + right->ndim - ndim] : 1;
+        if (left_axis != right_axis && left_axis != 1 && right_axis != 1) {{
+            free(shape);
+            fprintf(stderr, "Incompatible tensor shapes for broadcasting in {struct_name}\\n");
+            exit(1);
+        }}
+        shape[axis] = left_axis > right_axis ? left_axis : right_axis;
+    }}
+    {struct_name}* result = {struct_name}_zeros(shape, ndim);
+    for (size_t linear = 0; linear < result->size; ++linear) {{
+        size_t remaining = linear;
+        size_t left_offset = 0;
+        size_t right_offset = 0;
+        for (size_t axis = ndim; axis-- > 0;) {{
+            size_t coordinate = shape[axis] ? remaining % shape[axis] : 0;
+            remaining = shape[axis] ? remaining / shape[axis] : 0;
+            if (axis + left->ndim >= ndim) {{
+                size_t source_axis = axis + left->ndim - ndim;
+                left_offset += (left->shape[source_axis] == 1 ? 0 : coordinate) * left->strides[source_axis];
+            }}
+            if (axis + right->ndim >= ndim) {{
+                size_t source_axis = axis + right->ndim - ndim;
+                right_offset += (right->shape[source_axis] == 1 ? 0 : coordinate) * right->strides[source_axis];
+            }}
+        }}
+        {c_element_type} left_value = left->data[left_offset];
+        {c_element_type} right_value = right->data[right_offset];
+        if (operation == 0) result->data[linear] = left_value + right_value;
+        else if (operation == 1) result->data[linear] = left_value - right_value;
+        else if (operation == 2) result->data[linear] = left_value * right_value;
+        else result->data[linear] = left_value / right_value;
+    }}
+    free(shape);
+    return result;
+}}
+
+static {struct_name}* {struct_name}_scalar_broadcast(
+    const {struct_name}* tensor, {c_element_type} scalar, int operation, int scalar_left
+) {{
+    if (!tensor) {{ fprintf(stderr, "Tensor scalar broadcast on NULL in {struct_name}\\n"); exit(1); }}
+    {struct_name}* result = {struct_name}_zeros(tensor->shape, tensor->ndim);
+    for (size_t linear = 0; linear < tensor->size; ++linear) {{
+        size_t remaining = linear;
+        size_t offset = 0;
+        for (size_t axis = tensor->ndim; axis-- > 0;) {{
+            size_t coordinate = tensor->shape[axis] ? remaining % tensor->shape[axis] : 0;
+            remaining = tensor->shape[axis] ? remaining / tensor->shape[axis] : 0;
+            offset += coordinate * tensor->strides[axis];
+        }}
+        {c_element_type} value = tensor->data[offset];
+        if (operation == 0) result->data[linear] = scalar_left ? scalar + value : value + scalar;
+        else if (operation == 1) result->data[linear] = scalar_left ? scalar - value : value - scalar;
+        else if (operation == 2) result->data[linear] = scalar * value;
+        else result->data[linear] = scalar_left ? scalar / value : value / scalar;
+    }}
+    return result;
+}}
+"""
+
+    def _generate_tensor_method_call(
+        self,
+        object_name: str,
+        object_type: str,
+        method_name: str,
+        arg_strings: list[str],
+        is_standalone: bool,
+        target_var: str = "",
+    ):
+        struct_name = self.tensor_struct_name(object_type)
+        if method_name == "fill":
+            if len(arg_strings) != 1:
+                raise RuntimeError("tensor.fill() expects one value")
+            self.assert_can_mutate(object_name)
+            self.add_line(f"{struct_name}_fill({object_name}, {arg_strings[0]});")
+            return None
+
+        self.assert_can_read(object_name)
+
+        if method_name == "sum":
+            if arg_strings:
+                raise RuntimeError("tensor.sum() expects no arguments")
+            expression = f"{struct_name}_sum({object_name})"
+        elif method_name == "copy":
+            if arg_strings:
+                raise RuntimeError("tensor.copy() expects no arguments")
+            expression = f"{struct_name}_copy({object_name})"
+        elif method_name == "transpose":
+            if arg_strings:
+                raise RuntimeError("tensor.transpose() expects no arguments")
+            expression = f"{struct_name}_transpose2({object_name})"
+        elif method_name == "transpose_view":
+            if arg_strings:
+                raise RuntimeError("tensor.transpose_view() expects no arguments")
+            expression = f"{struct_name}_transpose_view({object_name})"
+        elif method_name == "row":
+            if len(arg_strings) != 1:
+                raise RuntimeError("tensor.row() expects one index")
+            expression = f"{struct_name}_row({object_name}, (size_t)({arg_strings[0]}))"
+        elif method_name == "column":
+            if len(arg_strings) != 1:
+                raise RuntimeError("tensor.column() expects one index")
+            expression = f"{struct_name}_column({object_name}, (size_t)({arg_strings[0]}))"
+        elif method_name == "slice":
+            if len(arg_strings) not in {3, 4}:
+                raise RuntimeError("tensor.slice() expects axis, start, stop[, step]")
+            step = arg_strings[3] if len(arg_strings) == 4 else "1"
+            expression = (
+                f"{struct_name}_slice({object_name}, (size_t)({arg_strings[0]}), "
+                f"(size_t)({arg_strings[1]}), (size_t)({arg_strings[2]}), "
+                f"(size_t)({step}))"
+            )
+        elif method_name == "matmul":
+            if len(arg_strings) != 1:
+                raise RuntimeError("tensor.matmul() expects one tensor")
+            expression = f"{struct_name}_matmul2({object_name}, {arg_strings[0]})"
+        else:
+            raise RuntimeError(
+                f"tensor method '{method_name}' is not implemented for '{object_type}'"
+            )
+
+        if target_var:
+            self.add_line(f"{target_var} = {expression};")
+            return None
+        if is_standalone:
+            self.add_line(f"(void){expression};")
+            return None
+        return expression
 
     def _tensor_fast_shape_expression(self, ast: Dict, declarations: Dict[str, Dict]):
         if not isinstance(ast, dict):
@@ -397,12 +656,21 @@ typedef struct {struct_name} {{
     size_t* strides;
     size_t ndim;
     size_t size;
+    size_t refcount;
+    bool is_view;
+    struct {struct_name}* owner;
 }} {struct_name};
+
+enum {{ {struct_name}_MAX_RANK = 64 }};
+static void {struct_name}_release({struct_name}* tensor);
 """)
         self.generated_helpers.append(f"""
 static {struct_name}* {struct_name}_create(const {c_element_type}* values, size_t value_count, const size_t* shape, size_t ndim) {{
     {struct_name}* tensor = ({struct_name}*)calloc(1, sizeof({struct_name}));
     if (!tensor) {{ fprintf(stderr, "Ocean allocation error: {struct_name}\\n"); exit(1); }}
+    tensor->refcount = 1;
+    tensor->is_view = false;
+    tensor->owner = NULL;
     tensor->ndim = ndim;
     tensor->size = 1;
     if (ndim == 0) tensor->size = 0;
@@ -437,12 +705,116 @@ static {struct_name}* {struct_name}_zeros(const size_t* shape, size_t ndim) {{
     return {struct_name}_create(NULL, 0, shape, ndim);
 }}
 
-static void {struct_name}_free({struct_name}* tensor) {{
+static void {struct_name}_retain({struct_name}* tensor) {{
     if (!tensor) return;
-    free(tensor->data);
+    if (tensor->refcount == (size_t)-1) {{
+        fprintf(stderr, "Tensor owner reference count overflow in {struct_name}\\n"); exit(1);
+    }}
+    tensor->refcount += 1;
+}}
+
+static void {struct_name}_destroy({struct_name}* tensor) {{
+    if (!tensor) return;
+    if (tensor->is_view) {{
+        {struct_name}_release(tensor->owner);
+    }} else {{
+        free(tensor->data);
+    }}
     free(tensor->shape);
     free(tensor->strides);
     free(tensor);
+}}
+
+static void {struct_name}_release({struct_name}* tensor) {{
+    if (!tensor) return;
+    if (tensor->refcount == 0) {{
+        fprintf(stderr, "Tensor owner release of dead object in {struct_name}\\n"); exit(1);
+    }}
+    tensor->refcount -= 1;
+    if (tensor->refcount == 0) {struct_name}_destroy(tensor);
+}}
+
+static void {struct_name}_free({struct_name}* tensor) {{
+    {struct_name}_release(tensor);
+}}
+
+static {struct_name}* {struct_name}_view(
+    const {struct_name}* source, size_t offset, const size_t* shape,
+    const size_t* strides, size_t ndim
+) {{
+    if (!source || (offset > source->size && source->size != 0)) {{
+        fprintf(stderr, "Tensor view offset out of bounds in {struct_name}\\n"); exit(1);
+    }}
+    {struct_name}* view = ({struct_name}*)calloc(1, sizeof({struct_name}));
+    if (!view) {{ fprintf(stderr, "Ocean allocation error: {struct_name} view\\n"); exit(1); }}
+    view->refcount = 1;
+    view->is_view = true;
+    view->owner = ({struct_name}*)source;
+    {struct_name}_retain(view->owner);
+    view->ndim = ndim;
+    view->shape = ndim ? (size_t*)malloc(ndim * sizeof(size_t)) : NULL;
+    view->strides = ndim ? (size_t*)malloc(ndim * sizeof(size_t)) : NULL;
+    if ((ndim && !view->shape) || (ndim && !view->strides)) {{
+        free(view->shape); free(view->strides); {struct_name}_release(view->owner); free(view);
+        fprintf(stderr, "Ocean allocation error: {struct_name} view metadata\\n"); exit(1);
+    }}
+    view->size = 1;
+    for (size_t axis = 0; axis < ndim; ++axis) {{
+        view->shape[axis] = shape[axis];
+        view->strides[axis] = strides[axis];
+        if (view->shape[axis] != 0 && view->size > (size_t)-1 / view->shape[axis]) {{
+            {struct_name}_release(view->owner); free(view->shape); free(view->strides); free(view);
+            fprintf(stderr, "Tensor view size overflow in {struct_name}\\n"); exit(1);
+        }}
+        view->size *= view->shape[axis];
+    }}
+    if (ndim == 0) view->size = 0;
+    view->data = source->data ? source->data + offset : NULL;
+    return view;
+}}
+
+static {struct_name}* {struct_name}_row(const {struct_name}* source, size_t index) {{
+    if (!source || source->ndim != 2 || index >= source->shape[0]) {{
+        fprintf(stderr, "Tensor row() expects a valid 2D row in {struct_name}\\n"); exit(1);
+    }}
+    size_t shape[1] = {{ source->shape[1] }};
+    size_t strides[1] = {{ source->strides[1] }};
+    return {struct_name}_view(source, index * source->strides[0], shape, strides, 1);
+}}
+
+static {struct_name}* {struct_name}_column(const {struct_name}* source, size_t index) {{
+    if (!source || source->ndim != 2 || index >= source->shape[1]) {{
+        fprintf(stderr, "Tensor column() expects a valid 2D column in {struct_name}\\n"); exit(1);
+    }}
+    size_t shape[1] = {{ source->shape[0] }};
+    size_t strides[1] = {{ source->strides[0] }};
+    return {struct_name}_view(source, index * source->strides[1], shape, strides, 1);
+}}
+
+static {struct_name}* {struct_name}_transpose_view(const {struct_name}* source) {{
+    if (!source || source->ndim != 2) {{
+        fprintf(stderr, "Tensor transpose_view() expects a 2D tensor in {struct_name}\\n"); exit(1);
+    }}
+    size_t shape[2] = {{ source->shape[1], source->shape[0] }};
+    size_t strides[2] = {{ source->strides[1], source->strides[0] }};
+    return {struct_name}_view(source, 0, shape, strides, 2);
+}}
+
+static {struct_name}* {struct_name}_slice(
+    const {struct_name}* source, size_t axis, size_t start, size_t stop, size_t step
+) {{
+    if (!source || axis >= source->ndim || step == 0 || start > stop || stop > source->shape[axis]) {{
+        fprintf(stderr, "Invalid tensor slice in {struct_name}\\n"); exit(1);
+    }}
+    size_t shape[{struct_name}_MAX_RANK];
+    size_t strides[{struct_name}_MAX_RANK];
+    if (source->ndim > {struct_name}_MAX_RANK) {{
+        fprintf(stderr, "Tensor rank exceeds view limit in {struct_name}\\n"); exit(1);
+    }}
+    for (size_t i = 0; i < source->ndim; ++i) {{ shape[i] = source->shape[i]; strides[i] = source->strides[i]; }}
+    shape[axis] = stop <= start ? 0 : 1 + (stop - 1 - start) / step;
+    strides[axis] *= step;
+    return {struct_name}_view(source, start * source->strides[axis], shape, strides, source->ndim);
 }}
 
 static inline size_t {struct_name}_len(const {struct_name}* tensor) {{
@@ -479,4 +851,5 @@ static inline void {struct_name}_set({struct_name}* tensor, const size_t* indice
 }}
 
 {self._tensor_rank_helpers(struct_name, c_element_type)}
+{self._tensor_numeric_helpers(struct_name, c_element_type)}
 """)
