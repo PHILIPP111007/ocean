@@ -1,4 +1,4 @@
-# Phils language v0.1.0
+# Ocean 🌊
 
 ## Info
 
