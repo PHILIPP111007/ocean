@@ -46,6 +46,15 @@ class IndexingMixin:
         if isinstance(variable, str) and variable.startswith("self."):
             attr_name = variable[5:]
             logger.debug(f"  -> обработка self.{attr_name}")
+            current_class = self._get_current_class()
+            attr_type = self.class_fields.get(current_class, {}).get(attr_name, "") if current_class else ""
+            if attr_type and self.is_tensor_type(attr_type):
+                self.add_line(
+                    self._tensor_set_call(
+                        f"self->{attr_name}", attr_type, [index_expr], value_expr
+                    )
+                )
+                return
 
             # Для атрибутов, которые могут быть списками
             if attr_name == "data":
@@ -230,6 +239,23 @@ class IndexingMixin:
             indices.append(self.generate_expression(idx_ast))
 
         logger.debug(f"nested assignment indices: {indices}")
+        value_expr = self.generate_expression(value_ast)
+
+        if isinstance(var_name, str) and var_name.startswith("self."):
+            attr_name = var_name[5:]
+            current_class = self._get_current_class()
+            attr_type = (
+                self.class_fields.get(current_class, {}).get(attr_name, "")
+                if current_class
+                else ""
+            )
+            if attr_type and self.is_tensor_type(attr_type):
+                self.add_line(
+                    self._tensor_set_call(
+                        f"self->{attr_name}", attr_type, indices, value_expr
+                    )
+                )
+                return
 
         var_info = self.get_variable_info(var_name)
         if not var_info:
@@ -237,7 +263,6 @@ class IndexingMixin:
             return
 
         py_type = var_info.get("py_type", "")
-        value_expr = self.generate_expression(value_ast)
 
         if self.is_tensor_type(py_type):
             self.generate_tensor_index_assignment(var_name, py_type, indices_ast, value_expr)
@@ -546,9 +571,9 @@ class IndexingMixin:
         """Генерирует доступ к элементу сложного атрибута (self.data[index])"""
         obj_name = ast.get("object", "")
         attr_name = ast.get("attribute", "")
-        index_ast = ast.get("index", {})
-
-        index_expr = self.generate_expression(index_ast)
+        index_asts = ast.get("indices") or [ast.get("index", {})]
+        index_exprs = [self.generate_expression(index_ast) for index_ast in index_asts]
+        index_expr = index_exprs[0] if len(index_exprs) == 1 else ", ".join(index_exprs)
 
         # Получаем информацию об объекте
         var_info = self.get_variable_info(obj_name)
@@ -561,6 +586,10 @@ class IndexingMixin:
                 if current_class and current_class in self.class_fields:
                     # Проверяем тип атрибута
                     attr_type = self.class_fields[current_class].get(attr_name)
+                    if attr_type and self.is_tensor_type(attr_type):
+                        return self._tensor_index_call(
+                            f"self->{attr_name}", attr_type, index_exprs
+                        )
                     if attr_type and attr_type.startswith("list["):
                         # Генерируем вызов специализированной функции
                         struct_name = self.generate_list_struct_name(attr_type)
@@ -580,6 +609,10 @@ class IndexingMixin:
                 class_name = obj_py_type.replace("*", "").strip()
                 if class_name in self.class_fields:
                     attr_type = self.class_fields[class_name].get(attr_name)
+                    if attr_type and self.is_tensor_type(attr_type):
+                        return self._tensor_index_call(
+                            f"{obj_name}->{attr_name}", attr_type, index_exprs
+                        )
                     if attr_type and attr_type.startswith("list["):
                         struct_name = self.generate_list_struct_name(attr_type)
                         return (

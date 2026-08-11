@@ -3195,15 +3195,26 @@ class JSONValidator:
                     or (type1.startswith("tensor[") and type2 in scalar_types)
                     or (type2.startswith("tensor[") and type1 in scalar_types)
                 )
-            # int и float могут взаимодействовать
-            numeric_types = ["int", "float"]
+            # Все встроенные целочисленные и floating-point типы могут
+            # участвовать в арифметике. Это важно для scalar access к
+            # tensor[float32], который возвращает именно float32.
+            numeric_types = [
+                "int", "float", "double", "float16", "float32", "float64",
+                "int8", "int16", "int32", "int64",
+                "uint8", "uint16", "uint32", "uint64",
+            ]
             return type1 in numeric_types and type2 in numeric_types
 
         # Операции сравнения
         comparison_ops = ["<", ">", "<=", ">=", "==", "!="]
         if operator in comparison_ops:
             # Можно сравнивать числовые типы между собой
-            if type1 in ["int", "float"] and type2 in ["int", "float"]:
+            numeric_types = {
+                "int", "float", "double", "float16", "float32", "float64",
+                "int8", "int16", "int32", "int64",
+                "uint8", "uint16", "uint32", "uint64",
+            }
+            if type1 in numeric_types and type2 in numeric_types:
                 return True
             # Можно сравнивать строки со строками
             if type1 == "str" and type2 == "str":

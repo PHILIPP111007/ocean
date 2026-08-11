@@ -1,0 +1,113 @@
+# A small fully connected neural network implemented in Ocean.
+#
+# The example intentionally keeps the model compact, but demonstrates the
+# important pieces of a real training loop: tensor-backed parameters, an
+# object with methods, a ReLU hidden layer, forward propagation, and a
+# gradient-descent update for one training sample.
+
+class NeuralNetwork:
+    def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
+        self.input_size: int = input_size
+        self.hidden_size: int = hidden_size
+        self.output_size: int = output_size
+
+        self.w1: tensor[float32] = tensor.zeros(input_size, hidden_size)
+        self.b1: tensor[float32] = tensor.zeros(1, hidden_size)
+        self.w2: tensor[float32] = tensor.zeros(hidden_size, output_size)
+        self.b2: tensor[float32] = tensor.zeros(1, output_size)
+
+    def initialize(self) -> None:
+        # Deterministic initialization keeps the example reproducible.
+        for i in range(self.input_size):
+            for h in range(self.hidden_size):
+                self.w1[i, h] = 0.1
+
+        for h in range(self.hidden_size):
+            self.b1[0, h] = 0.0
+            self.w2[h, 0] = 0.1
+
+        self.b2[0, 0] = 0.0
+        return None
+
+    def forward(self, inputs: &tensor[float32]) -> tensor[float32]:
+        var hidden: tensor[float32] = tensor.zeros(1, self.hidden_size)
+        var output: tensor[float32] = tensor.zeros(1, self.output_size)
+
+        # Dense layer 1 followed by ReLU.
+        for h in range(self.hidden_size):
+            var hidden_value: float32 = self.b1[0, h]
+
+            for i in range(self.input_size):
+                hidden_value = hidden_value + inputs[0, i] * self.w1[i, h]
+
+            if hidden_value > 0.0:
+                hidden[0, h] = hidden_value
+            else:
+                hidden[0, h] = 0.0
+
+        # Dense layer 2.
+        for j in range(self.output_size):
+            var output_value: float32 = self.b2[0, j]
+
+            for h in range(self.hidden_size):
+                output_value = output_value + hidden[0, h] * self.w2[h, j]
+
+            output[0, j] = output_value
+
+        return output
+
+    def train_step(self, inputs: &tensor[float32], target: &tensor[float32], learning_rate: float32) -> float32:
+        # Keep the hidden activation for the backward pass.
+        var hidden: tensor[float32] = tensor.zeros(1, self.hidden_size)
+        for h in range(self.hidden_size):
+            var activation: float32 = self.b1[0, h]
+
+            for i in range(self.input_size):
+                activation = activation + inputs[0, i] * self.w1[i, h]
+
+            if activation > 0.0:
+                hidden[0, h] = activation
+            else:
+                hidden[0, h] = 0.0
+
+        var prediction: tensor[float32] = self.forward(inputs)
+        var error: float32 = prediction[0, 0] + target[0, 0] * -1.0
+
+        # Backpropagation through the output layer and ReLU hidden layer.
+        for h in range(self.hidden_size):
+            var hidden_value: float32 = hidden[0, h]
+            var output_weight: float32 = self.w2[h, 0]
+
+            self.w2[h, 0] = output_weight + learning_rate * error * hidden_value * -1.0
+
+            if hidden_value > 0.0:
+                var hidden_gradient: float32 = error * output_weight
+                for i in range(self.input_size):
+                    self.w1[i, h] = self.w1[i, h] + learning_rate * hidden_gradient * inputs[0, i] * -1.0
+                self.b1[0, h] = self.b1[0, h] + learning_rate * hidden_gradient * -1.0
+
+        self.b2[0, 0] = self.b2[0, 0] + learning_rate * error * -1.0
+
+        return error * error
+
+    def predict(self, inputs: &tensor[float32]) -> float32:
+        var output: tensor[float32] = self.forward(inputs)
+        var result: float32 = output[0, 0]
+        return result
+
+
+def main() -> int:
+    var network: NeuralNetwork = NeuralNetwork(2, 4, 1)
+    network.initialize()
+
+    var inputs: tensor[float32] = [[1.0, 0.0]]
+    var target: tensor[float32] = [[1.0]]
+    var loss: float32 = 0.0
+
+    for _ in range(20):
+        loss = network.train_step(inputs, target, 0.1)
+
+    var prediction: float32 = network.predict(inputs)
+    print("prediction =", prediction)
+    print("loss =", loss)
+    return 0

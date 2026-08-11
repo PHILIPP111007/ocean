@@ -492,9 +492,45 @@ class Parser:
                 f"Найдено присваивание self.{attr_name}[{index_expr}] = {value}"
             )
 
-            # Парсим индекс и значение
-            index_ast = self.parse_expression_to_ast(index_expr)
+            # A class tensor uses comma-separated coordinates (self.w[i, j]).
+            # Preserve every coordinate instead of turning the whole text into
+            # one opaque expression.
+            index_parts = split_top_level(index_expr) or [index_expr]
+            index_asts = [self.parse_expression_to_ast(part) for part in index_parts]
             value_ast = self.parse_expression_to_ast(value)
+
+            if len(index_asts) > 1:
+                scope["graph"].append(
+                    {
+                        "node": "nested_index_assignment",
+                        "content": line,
+                        "variable": f"self.{attr_name}",
+                        "indices": index_asts,
+                        "value": value_ast,
+                        "operations": [
+                            {
+                                "type": "NESTED_INDEX_ASSIGN",
+                                "variable": f"self.{attr_name}",
+                                "indices": index_asts,
+                                "value": value_ast,
+                                "depth": len(index_asts),
+                            }
+                        ],
+                        "dependencies": list(
+                            dict.fromkeys(
+                                [
+                                    dependency
+                                    for index_ast in index_asts
+                                    for dependency in self.extract_dependencies_from_ast(index_ast)
+                                ]
+                                + self.extract_dependencies_from_ast(value_ast)
+                            )
+                        ),
+                    }
+                )
+                return current_index + 1
+
+            index_ast = index_asts[0]
 
             # Создаем узел для присваивания
             operations = [
@@ -2478,12 +2514,14 @@ class Parser:
         complex_attr_match = re.match(complex_attr_pattern, expression)
         if complex_attr_match:
             obj_name, attr_name, index_expr = complex_attr_match.groups()
-            index_ast = self.parse_expression_to_ast(index_expr)
+            index_parts = split_top_level(index_expr) or [index_expr]
+            index_asts = [self.parse_expression_to_ast(part) for part in index_parts]
             return {
                 "type": "complex_attribute_access",
                 "object": obj_name,
                 "attribute": attr_name,
-                "index": index_ast,
+                "index": index_asts[0],
+                "indices": index_asts,
             }
 
         # 4.2 Проверяем индексацию

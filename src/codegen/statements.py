@@ -7,6 +7,12 @@ from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOW
 from src.modules.logger import logger
 
 class StatementsMixin:
+    @staticmethod
+    def _normalize_loop_expression(value) -> str:
+        """Lower attribute references in range bounds to their C form."""
+        text = str(value)
+        return re.sub(r"\bself\.([A-Za-z_][A-Za-z0-9_]*)", r"self->\1", text)
+
     def generate_break(self, node: Dict):
         """Release loop-local owners before transferring control."""
         self.emit_cleanup_to_loop()
@@ -164,9 +170,9 @@ class StatementsMixin:
         if iterable.get("type") != "RANGE_CALL":
             return
         args = iterable.get("arguments", {})
-        start = args.get("start", "0")
-        stop = args.get("stop", "10")
-        step = args.get("step", "1")
+        start = self._normalize_loop_expression(args.get("start", "0"))
+        stop = self._normalize_loop_expression(args.get("stop", "10"))
+        step = self._normalize_loop_expression(args.get("step", "1"))
         if str(step).strip() in {"0", "+0", "-0"}:
             raise RuntimeError("range() step cannot be zero")
 

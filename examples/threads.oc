@@ -1,0 +1,15 @@
+cimport <pthread.h>
+
+def worker(arg: None) -> None:
+    @printf("worker: started, arg=%p\n", arg)
+    return None
+
+
+def main() -> int:
+    var thread: pthread_t = None
+
+    @pthread_create(&thread, NULL, worker, NULL)
+    @pthread_join(thread, NULL)
+
+    print("main: worker joined")
+    return 0

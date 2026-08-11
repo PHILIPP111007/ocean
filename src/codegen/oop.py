@@ -405,8 +405,13 @@ class OopMixin:
                         value_ast = node.get("value", {})
 
                         if obj_name == "self":
-                            # Определяем тип значения
-                            field_type = self._infer_field_type_from_ast(
+                            # Explicit annotations are authoritative. Inferring
+                            # tensor.zeros(...) from an expression falls back
+                            # to int and corrupts the generated class layout.
+                            field_type = node.get("attribute_type") or node.get(
+                                "attribute_type_info", {}
+                            ).get("canonical")
+                            field_type = field_type or self._infer_field_type_from_ast(
                                 value_ast, param_types
                             )
                             if field_type:
@@ -559,7 +564,33 @@ class OopMixin:
             return
         class_name = getattr(self, "_constructing_class", None)
         field_type = self.class_fields.get(class_name, {}).get(attribute) if class_name else None
-        value_expr = self._generate_expression_from_ast_for_init(value_ast, param_names)
+        if field_type and self.is_tensor_type(field_type) and value_ast.get("type") == "method_call":
+            if value_ast.get("object") != "tensor" or value_ast.get("method") != "zeros":
+                raise RuntimeError(
+                    f"unsupported tensor initializer for class field '{attribute}'"
+                )
+            arguments = [
+                self._generate_expression_from_ast_for_init(argument, param_names)
+                for argument in value_ast.get("arguments", [])
+            ]
+            if not arguments:
+                raise RuntimeError("tensor.zeros expects at least one dimension")
+            self.generate_tensor_struct(field_type)
+            shape_name = f"ocean_ctor_{attribute}_{self.temp_var_counter}_shape"
+            self.temp_var_counter += 1
+            self.add_line(
+                f"size_t {shape_name}[{len(arguments)}] = {{ "
+                + ", ".join(f"(size_t)({argument})" for argument in arguments)
+                + " };"
+            )
+            value_expr = (
+                f"{self.tensor_struct_name(field_type)}_zeros({shape_name}, "
+                f"{len(arguments)})"
+            )
+        elif field_type and self.is_tensor_type(field_type) and value_ast.get("type") == "list_literal":
+            value_expr = self._generate_tensor_literal_expr(attribute, field_type, value_ast)
+        else:
+            value_expr = self._generate_expression_from_ast_for_init(value_ast, param_names)
         if not value_expr:
             return
         if not field_type:
@@ -734,6 +765,16 @@ class OopMixin:
                     value_ast = node.get("value", {})
 
                     if obj == "self":
+                        explicit_type = node.get("attribute_type") or node.get(
+                            "attribute_type_info", {}
+                        ).get("canonical")
+                        if explicit_type:
+                            self.class_fields[class_name][attr] = explicit_type
+                            logger.debug(
+                                f"Поле {attr} <- явная аннотация: {explicit_type}"
+                            )
+                            continue
+
                         # 1. Проверяем, является ли значение параметром конструктора
                         if value_ast.get("type") == "variable":
                             var_name = value_ast.get("value", "")
@@ -801,11 +842,14 @@ class OopMixin:
                     attr = node.get("attribute", "")
 
                     if obj == "self":
-                        # Определяем тип поля
-                        # Пока просто ставим int для всех полей
-                        # Позже можно улучшить определение типов
-                        self.class_fields[class_name][attr] = "int"
-                        logger.debug(f"Добавлено поле {class_name}.{attr} = int")
+                        field_type = node.get("attribute_type") or node.get(
+                            "attribute_type_info", {}
+                        ).get("canonical")
+                        if field_type:
+                            self.class_fields[class_name][attr] = field_type
+                            logger.debug(
+                                f"Добавлено поле {class_name}.{attr} = {field_type}"
+                            )
 
         logger.debug(f"Всего классов с полями: {len(self.class_fields)}")
         for class_name, fields in self.class_fields.items():
