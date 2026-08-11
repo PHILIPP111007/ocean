@@ -47,7 +47,8 @@ class IndexingMixin:
             attr_name = variable[5:]
             logger.debug(f"  -> обработка self.{attr_name}")
             current_class = self._get_current_class()
-            attr_type = self.class_fields.get(current_class, {}).get(attr_name, "") if current_class else ""
+            field = self.class_registry.field(current_class, attr_name) if current_class else None
+            attr_type = field.py_type if field else ""
             if attr_type and self.is_tensor_type(attr_type):
                 self.add_line(
                     self._tensor_set_call(
@@ -62,8 +63,9 @@ class IndexingMixin:
             else:
                 # Пробуем определить тип атрибута
                 current_class = self._get_current_class()
-                if current_class and current_class in self.class_fields:
-                    attr_type = self.class_fields[current_class].get(attr_name)
+                if current_class:
+                    field = self.class_registry.field(current_class, attr_name)
+                    attr_type = field.py_type if field else None
                     if attr_type and attr_type.startswith("list["):
                         struct_name = self.generate_list_struct_name(attr_type)
                         self.add_line(
@@ -244,11 +246,8 @@ class IndexingMixin:
         if isinstance(var_name, str) and var_name.startswith("self."):
             attr_name = var_name[5:]
             current_class = self._get_current_class()
-            attr_type = (
-                self.class_fields.get(current_class, {}).get(attr_name, "")
-                if current_class
-                else ""
-            )
+            field = self.class_registry.field(current_class, attr_name) if current_class else None
+            attr_type = field.py_type if field else ""
             if attr_type and self.is_tensor_type(attr_type):
                 self.add_line(
                     self._tensor_set_call(
@@ -583,9 +582,10 @@ class IndexingMixin:
             if obj_name == "self":
                 # Ищем текущий класс
                 current_class = self._get_current_class()
-                if current_class and current_class in self.class_fields:
+                if current_class:
                     # Проверяем тип атрибута
-                    attr_type = self.class_fields[current_class].get(attr_name)
+                    field = self.class_registry.field(current_class, attr_name)
+                    attr_type = field.py_type if field else None
                     if attr_type and self.is_tensor_type(attr_type):
                         return self._tensor_index_call(
                             f"self->{attr_name}", attr_type, index_exprs
@@ -607,17 +607,17 @@ class IndexingMixin:
             if self._is_class_type(obj_py_type) or var_info.get("is_pointer", False):
                 # Получаем информацию о классе
                 class_name = obj_py_type.replace("*", "").strip()
-                if class_name in self.class_fields:
-                    attr_type = self.class_fields[class_name].get(attr_name)
-                    if attr_type and self.is_tensor_type(attr_type):
-                        return self._tensor_index_call(
-                            f"{obj_name}->{attr_name}", attr_type, index_exprs
-                        )
-                    if attr_type and attr_type.startswith("list["):
-                        struct_name = self.generate_list_struct_name(attr_type)
-                        return (
-                            f"get_{struct_name}({obj_name}->{attr_name}, {index_expr})"
-                        )
+                field = self.class_registry.field(class_name, attr_name)
+                attr_type = field.py_type if field else None
+                if attr_type and self.is_tensor_type(attr_type):
+                    return self._tensor_index_call(
+                        f"{obj_name}->{attr_name}", attr_type, index_exprs
+                    )
+                if attr_type and attr_type.startswith("list["):
+                    struct_name = self.generate_list_struct_name(attr_type)
+                    return (
+                        f"get_{struct_name}({obj_name}->{attr_name}, {index_expr})"
+                    )
 
         # По умолчанию - прямой доступ к массиву
         return f"{obj_name}->{attr_name}[{index_expr}]"

@@ -70,7 +70,7 @@ def main() -> int:
     generator = CCodeGenerator()
     generator.generate_from_json(Parser().parse_code(source))
 
-    box = generator.class_models["Box"]
+    box = generator.class_registry.get("Box")
     assert box.bases == []
     assert box.direct_field("counter").py_type == "Counter"
     assert box.direct_method("__init__").scope is not None

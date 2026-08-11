@@ -815,10 +815,9 @@ class TypesMixin:
 
                     # Если это класс, ищем тип атрибута
                     if self._is_class_type(obj_type):
-                        if obj_type in self.class_fields:
-                            attr_type = self.class_fields[obj_type].get(attr_name)
-                            if attr_type:
-                                return attr_type
+                        field_model = self.class_registry.field(obj_type, attr_name)
+                        if field_model:
+                            return field_model.py_type
 
                 return "int"
 
@@ -988,8 +987,9 @@ class TypesMixin:
             for scope in reversed(self.variable_scopes):
                 if "class_name" in scope:
                     class_name = scope.get("class_name")
-                    if class_name in self.class_fields:
-                        return self.class_fields[class_name].get(attr_name)
+                    field_model = self.class_registry.field(class_name, attr_name)
+                    if field_model:
+                        return field_model.py_type
             return None
 
         # Получаем информацию об объекте
@@ -1001,8 +1001,9 @@ class TypesMixin:
 
         # Если это класс, ищем в его полях
         if self._is_class_type(obj_type):
-            if obj_type in self.class_fields:
-                return self.class_fields[obj_type].get(attr_name)
+            field_model = self.class_registry.field(obj_type, attr_name)
+            if field_model:
+                return field_model.py_type
 
         return None
 
@@ -1060,18 +1061,17 @@ class TypesMixin:
                 raise RuntimeError(f"inheritance cycle involving {class_name}")
             visited.add(current)
 
-            model = self.class_models.get(current)
+            model = self.class_registry.get(current)
             field_model = model.direct_field(attribute) if model else None
-            fields = self.class_fields.get(current, {})
-            if field_model or attribute in fields:
-                field_type = field_model.py_type if field_model else fields[attribute]
+            if field_model:
+                field_type = field_model.py_type
                 if current == class_name:
                     expression = f"{path}->{attribute}"
                 else:
                     expression = f"{path}.{attribute}"
                 return field_type, expression
 
-            parents = self.class_hierarchy.get(current, [])
+            parents = self.class_registry.bases_for(current)
             if not parents:
                 break
             if len(parents) > 1:

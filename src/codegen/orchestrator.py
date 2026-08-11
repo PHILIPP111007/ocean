@@ -41,14 +41,12 @@ class OrchestratorMixin:
 
         # Semantic class prepasses are non-emitting and must happen before the
         # helper section so every field type is known in time.
-        self.collect_class_fields_from_init_parameters(json_data)
-        self.analyze_classes(json_data)
-        self.build_class_models(json_data)
-        self.analyze_class_inheritance(json_data)
+        self.build_class_registry(json_data)
 
         all_types = self.extract_all_types_from_ast(json_data)
-        for fields in self.class_fields.values():
-            for py_type in fields.values():
+        for model in self.class_registry.models.values():
+            for field in model.fields.values():
+                py_type = field.py_type
                 all_types.add(py_type)
                 self._add_nested_types(py_type, all_types)
         sorted_types = sorted(all_types, key=lambda x: (x.count("["), x))
@@ -164,7 +162,8 @@ class OrchestratorMixin:
         elif node_type == "c_call":  # ДОБАВЬТЕ ЭТО
             self.generate_c_call(node)
         elif node_type == "class_declaration":
-            self.generate_class_declaration(node)
+            # Class layouts are emitted by the semantic OOP prepass above.
+            pass
         elif node_type == "attribute_assignment":
             self.generate_attribute_assignment(node)
         elif node_type == "method_call":

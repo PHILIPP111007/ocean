@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
 from src.modules.logger import logger
+from src.codegen.class_model import ClassRegistry
 
 class CoreMixin:
     def __init__(self):
@@ -29,8 +30,7 @@ class CoreMixin:
         # Типы, которые являются указателями (используют ->)
         self.pointer_types = set()
 
-        self.class_fields = {}  # {class_name: {field_name: field_type}}
-        self.class_models = {}
+        self.class_registry = ClassRegistry()
 
         # Расширенный маппинг типов Python -> C
         self.type_map = {
@@ -85,10 +85,6 @@ class CoreMixin:
             "not": "!",
         }
 
-        self.class_hierarchy = {}  # {class_name: [parent_classes]}
-        self.inherited_methods = {}  # {class_name: {method_name: origin_class}}
-        self.all_class_methods = {}  # {class_name: {method_name: method_info}}
-
         # Для отслеживания уже сгенерированных функций
         self.generated_functions = set()  # Имена уже сгенерированных функций
         self.generated_structures = set()  # Имена уже сгенерированных структур
@@ -121,11 +117,7 @@ class CoreMixin:
         self.class_types = set()
         self.struct_types = set()
         self.pointer_types = set()
-        self.class_fields = {}
-        self.class_models = {}
-        self.class_hierarchy = {}
-        self.inherited_methods = {}
-        self.all_class_methods = {}
+        self.class_registry = ClassRegistry()
         self.generated_functions = set()
         self.generated_structures = set()
         self.global_init_nodes = []
