@@ -59,6 +59,10 @@ class ScopeMixin:
         params_str = ", ".join(param_decls) if param_decls else "void"
         self.add_line(f"{c_return_type} {func_name}({params_str}) {{")
         self.indent_level += 1
+        self.tensor_fast_access = {}
+        self.tensor_fast_loop_bounds = {}
+        self.tensor_fast_patterns = set()
+        self._prepare_tensor_fast_path(scope)
 
         processed_declarations = set()
         for node in scope.get("graph", []):
@@ -76,6 +80,9 @@ class ScopeMixin:
         self.indent_level -= 1
         self.add_line("}")
         self.add_empty_line()
+        self.tensor_fast_access = {}
+        self.tensor_fast_loop_bounds = {}
+        self.tensor_fast_patterns = set()
         self.current_function_return_type = None
         self.current_function_name = None
 

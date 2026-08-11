@@ -157,6 +157,17 @@ gcc -O3 -std=c11 -Wall -Wextra -Wpedantic \
     examples/generated_code.c -o /tmp/ocean_generated
 ```
 
+Run the baseline benchmark for `examples/main.oc` without `-O3`:
+
+```bash
+python benchmarks/benchmark_main.py --runs 1
+```
+
+The benchmark measures parsing, validation, C generation, compilation, and
+runtime separately. Generated artifacts are temporary by default. Use
+`--runs 3` for a more stable runtime median or `--keep` to save the generated
+C and executable under `benchmarks/artifacts/`.
+
 ## Arrays and Tensors
 
 `array[T]` is a one-dimensional, owned contiguous buffer:

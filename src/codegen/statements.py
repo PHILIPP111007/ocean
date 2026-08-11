@@ -180,8 +180,18 @@ class StatementsMixin:
         self.indent_level += 1
         self.enter_scope("loop")
         self.declare_variable(loop_var, "int")
-        for body_node in node.get("body", []):
-            self.generate_graph_node(body_node)
+        previous_bounds = self.tensor_fast_loop_bounds
+        self.tensor_fast_loop_bounds = dict(previous_bounds)
+        self.tensor_fast_loop_bounds[loop_var] = {
+            "start": str(start).strip(),
+            "stop": str(stop).strip(),
+            "step": str(step).strip(),
+        }
+        try:
+            for body_node in node.get("body", []):
+                self.generate_graph_node(body_node)
+        finally:
+            self.tensor_fast_loop_bounds = previous_bounds
         self.exit_scope()
         self.indent_level -= 1
         self.add_line("}")
@@ -495,4 +505,3 @@ class StatementsMixin:
 
             info["is_deleted"] = True
             info["owns_reference"] = False
-

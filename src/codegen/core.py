@@ -99,6 +99,9 @@ class CoreMixin:
         self.runtime_needs_string_helpers = False
         self.runtime_needs_int_helpers = False
         self.tensor_index_ranks = set()
+        self.tensor_fast_access = {}
+        self.tensor_fast_loop_bounds = {}
+        self.tensor_fast_patterns = set()
 
     def reset(self):
         """Reset all per-compilation mutable state."""
@@ -130,6 +133,9 @@ class CoreMixin:
         self.runtime_needs_string_helpers = False
         self.runtime_needs_int_helpers = False
         self.tensor_index_ranks = set()
+        self.tensor_fast_access = {}
+        self.tensor_fast_loop_bounds = {}
+        self.tensor_fast_patterns = set()
         self.known_c_types = set(KNOWN_C_TYPES)
         logger.debug("CCodeGenerator state reset")
 

@@ -1,4 +1,6 @@
 from tests.base import run
+from src.compiler import CCodeGenerator
+from src.parser import Parser
 
 
 def test_matmul_1():
@@ -528,8 +530,8 @@ int main(void) {
     run(P, C)
 
 
-def test_matmul_4():
-    P = r"""
+def test_matmul_4_uses_checked_once_tensor_fast_path():
+    source = r"""
 def matmul(A: &tensor[float32], B: &tensor[float32], C: &mut tensor[float32]) -> None:
     var rows_A: int = A.shape[0]
     var cols_A: int = A.shape[1]
@@ -538,89 +540,19 @@ def matmul(A: &tensor[float32], B: &tensor[float32], C: &mut tensor[float32]) ->
     for i in range(rows_A):
         for j in range(cols_B):
             var sum_value: float32 = 0.0
-
             for k in range(cols_A):
                 sum_value = sum_value + A[i, k] * B[k, j]
-
             C[i, j] = sum_value
 
     return None
-
-
-def main() -> int:
-    var size: int = 100
-
-    var A: tensor[float32] = tensor.zeros(size, size)
-    var B: tensor[float32] = tensor.zeros(size, size)
-    var C: tensor[float32] = tensor.zeros(size, size)
-
-    # Заполняем диагонали тестовыми значениями.
-    for i in range(size):
-        A[i, i] = 1.0
-        B[i, i] = 2.0
-
-    # Перемножение матриц 100 x 100 тысячу раз.
-    for _ in range(1000):
-        matmul(A, B, C)
-
-    print("C[0, 0] =", C[0, 0])
-    print("C.shape[0] =", C.shape[0])
-    print("C.shape[1] =", C.shape[1])
-    print("C.size =", C.size)
-
-    return 0
 """
+    output = CCodeGenerator().generate_from_json(Parser().parse_code(source))
+    matmul = output.split("void* ocean_matmul", 1)[1].split("int main", 1)[0]
 
-    C = r"""
-void* ocean_matmul(ocean_tensor_float32* A, ocean_tensor_float32* B, ocean_tensor_float32* C) {
-    int rows_A = ocean_tensor_float32_shape_at(A, (size_t)(0));
-    int cols_A = ocean_tensor_float32_shape_at(A, (size_t)(1));
-    int cols_B = ocean_tensor_float32_shape_at(B, (size_t)(1));
-    for (int i = 0; ((1) > 0 ? i < rows_A : i > rows_A); i += 1) {
-        for (int j = 0; ((1) > 0 ? j < cols_B : j > cols_B); j += 1) {
-            float sum_value = 0.0;
-            for (int k = 0; ((1) > 0 ? k < cols_A : k > cols_A); k += 1) {
-                sum_value = (sum_value + (ocean_tensor_float32_get2(A, i, k) * ocean_tensor_float32_get2(B, k, j)));
-            }
-            ocean_tensor_float32_set2(C, i, j, sum_value);
-        }
-    }
-    return NULL;
-}
-
-int main(void) {
-    int size = 100;
-    size_t ocean_tensor_A_0_shape[2] = { (size_t)(size), (size_t)(size) };
-    ocean_tensor_float32* A = ocean_tensor_float32_zeros(ocean_tensor_A_0_shape, 2);
-    size_t ocean_tensor_B_1_shape[2] = { (size_t)(size), (size_t)(size) };
-    ocean_tensor_float32* B = ocean_tensor_float32_zeros(ocean_tensor_B_1_shape, 2);
-    size_t ocean_tensor_C_2_shape[2] = { (size_t)(size), (size_t)(size) };
-    ocean_tensor_float32* C = ocean_tensor_float32_zeros(ocean_tensor_C_2_shape, 2);
-    for (int i = 0; ((1) > 0 ? i < size : i > size); i += 1) {
-        ocean_tensor_float32_set2(A, i, i, 1.0);
-        ocean_tensor_float32_set2(B, i, i, 2.0);
-    }
-    for (int _ = 0; ((1) > 0 ? _ < 1000 : _ > 1000); _ += 1) {
-        ocean_matmul(A, B, C);
-    }
-    printf("%f\n", ocean_tensor_float32_get2(C, 0, 0));
-    printf("%zu\n", ocean_tensor_float32_shape_at(C, (size_t)(0)));
-    printf("%zu\n", ocean_tensor_float32_shape_at(C, (size_t)(1)));
-    printf("%zu\n", C->size);
-    int ocean_return_3 = 0;
-    ocean_tensor_float32_free(C);
-    C = NULL;
-    ocean_tensor_float32_free(B);
-    B = NULL;
-    ocean_tensor_float32_free(A);
-    A = NULL;
-    return ocean_return_3;
-    ocean_tensor_float32_free(C);
-    C = NULL;
-    ocean_tensor_float32_free(B);
-    B = NULL;
-    ocean_tensor_float32_free(A);
-    A = NULL;
-}
-"""
-    run(P, C)
+    assert "Tensor fast-path shape check failed" in matmul
+    assert "ocean_fast_a_data" in matmul
+    assert "ocean_fast_b_data" in matmul
+    assert "ocean_fast_c_data" in matmul
+    assert "ocean_tensor_float32_get2(A" not in matmul
+    assert "ocean_tensor_float32_get2(B" not in matmul
+    assert "ocean_tensor_float32_set2(C" not in matmul

@@ -6,6 +6,21 @@ from typing import Dict, Iterable, List
 class TensorCodegenMixin:
     """Lower dense row-major ``tensor[T]`` values with owned storage."""
 
+    def _tensor_fast_index_expression(self, tensor_expr: str, indices: Iterable[str]):
+        values = list(indices)
+        aliases = getattr(self, "tensor_fast_access", {})
+        if tensor_expr not in aliases or len(values) != 2:
+            return None
+        if (tensor_expr, tuple(value.strip() for value in values)) not in self.tensor_fast_patterns:
+            return None
+        if any(value.strip() not in self.tensor_fast_loop_bounds for value in values):
+            return None
+        alias = aliases[tensor_expr]
+        return (
+            f"{alias['data']}[(size_t)({values[0]}) * {alias['stride0']} + "
+            f"(size_t)({values[1]}) * {alias['stride1']}]"
+        )
+
     def tensor_struct_name(self, py_type: str) -> str:
         return f"ocean_tensor_{self.clean_type_name_for_c(self.tensor_element_type(py_type))}"
 
@@ -22,6 +37,9 @@ class TensorCodegenMixin:
 
     def _tensor_index_call(self, tensor_expr: str, py_type: str, indices: Iterable[str]) -> str:
         values = list(indices)
+        fast_expression = self._tensor_fast_index_expression(tensor_expr, values)
+        if fast_expression is not None:
+            return fast_expression
         struct_name = self.tensor_struct_name(py_type)
         if len(values) in getattr(self, "tensor_index_ranks", set()):
             arguments = ", ".join(values)
@@ -31,6 +49,9 @@ class TensorCodegenMixin:
 
     def _tensor_set_call(self, tensor_expr: str, py_type: str, indices: Iterable[str], value: str) -> str:
         values = list(indices)
+        fast_expression = self._tensor_fast_index_expression(tensor_expr, values)
+        if fast_expression is not None:
+            return f"{fast_expression} = {value};"
         struct_name = self.tensor_struct_name(py_type)
         if len(values) in getattr(self, "tensor_index_ranks", set()):
             arguments = ", ".join(values)
@@ -66,6 +87,172 @@ static inline void {struct_name}_set{rank}({struct_name}* tensor, {parameters}, 
 }}
 """)
         return "\n".join(helpers)
+
+    def _tensor_fast_shape_expression(self, ast: Dict, declarations: Dict[str, Dict]):
+        if not isinstance(ast, dict):
+            return None
+        if ast.get("type") == "complex_attribute_access" and ast.get("attribute") == "shape":
+            index = ast.get("index", {})
+            if index.get("type") == "literal":
+                return f"{ast.get('object', '')}->shape[{index.get('value')}]"
+        if ast.get("type") == "variable":
+            name = ast.get("value")
+            declaration = declarations.get(name)
+            if declaration:
+                return self._tensor_fast_shape_expression(
+                    declaration.get("expression_ast"), declarations
+                )
+        return None
+
+    def _collect_tensor_fast_accesses(self, nodes, tensor_types, declarations):
+        accesses = []
+
+        def visit(node, loop_bounds):
+            if not isinstance(node, dict):
+                return
+            if node.get("node") == "for_loop":
+                iterable = node.get("iterable", {})
+                arguments = iterable.get("arguments", {})
+                start = str(arguments.get("start", "0")).strip()
+                step = str(arguments.get("step", "1")).strip()
+                stop = str(arguments.get("stop", "")).strip()
+                if iterable.get("type") != "RANGE_CALL" or start != "0" or step != "1":
+                    return
+                nested_bounds = dict(loop_bounds)
+                nested_bounds[node.get("loop_variable", "i")] = stop
+                for child in node.get("body", []):
+                    visit(child, nested_bounds)
+                return
+
+            def visit_ast(value):
+                if not isinstance(value, dict):
+                    return
+                if value.get("type") in {"tensor_index_access", "nested_index_access"}:
+                    variable = value.get("variable", "")
+                    indices = value.get("indices", [])
+                    if variable in tensor_types and len(indices) == 2:
+                        index_names = [item.get("value") for item in indices]
+                        if all(name in loop_bounds for name in index_names):
+                            accesses.append(
+                                (variable, tensor_types[variable], index_names, dict(loop_bounds))
+                            )
+                for child in value.values():
+                    if isinstance(child, dict):
+                        visit_ast(child)
+                    elif isinstance(child, list):
+                        for item in child:
+                            visit_ast(item)
+
+            if node.get("node") == "nested_index_assignment":
+                variable = node.get("variable", "")
+                indices = node.get("indices", [])
+                if variable in tensor_types and len(indices) == 2:
+                    index_names = [item.get("value") for item in indices]
+                    if all(name in loop_bounds for name in index_names):
+                        accesses.append(
+                            (variable, tensor_types[variable], index_names, dict(loop_bounds))
+                        )
+
+            for key, value in node.items():
+                if key in {"body", "iterable"}:
+                    continue
+                if isinstance(value, dict):
+                    visit_ast(value)
+                elif isinstance(value, list):
+                    for item in value:
+                        visit_ast(item)
+
+            for child in node.get("body", []):
+                visit(child, loop_bounds)
+
+        for node in nodes:
+            visit(node, {})
+        return accesses
+
+    def _prepare_tensor_fast_path(self, scope: Dict) -> None:
+        """Prepare checked-once direct access for provably bounded 2D loops."""
+        symbol_table = scope.get("symbol_table", {}) or {}
+        parameter_names = {
+            parameter.get("name")
+            for parameter in scope.get("parameters", []) or []
+            if parameter.get("name")
+        }
+        tensor_types = {
+            name: self.strip_borrow_type(info.get("type", ""))
+            for name, info in symbol_table.items()
+            if name in parameter_names
+            and isinstance(info, dict)
+            and self.is_tensor_type(self.strip_borrow_type(info.get("type", "")))
+        }
+        if not tensor_types:
+            return
+
+        declarations = {
+            node.get("var_name"): node
+            for node in scope.get("graph", [])
+            if isinstance(node, dict) and node.get("node") == "declaration"
+        }
+        accesses = self._collect_tensor_fast_accesses(
+            scope.get("graph", []), tensor_types, declarations
+        )
+        if not accesses:
+            return
+
+        constraints = set()
+        fast_variables = set()
+        fast_patterns = set()
+        for variable, _, index_names, loop_bounds in accesses:
+            resolved_bounds = []
+            for axis, index_name in enumerate(index_names):
+                bound = self._tensor_fast_shape_expression(
+                    {"type": "variable", "value": loop_bounds[index_name]},
+                    declarations,
+                )
+                if bound is None:
+                    bound = loop_bounds[index_name]
+                    if not bound.isdigit():
+                        break
+                if bound == f"{variable}->shape[{axis}]":
+                    continue
+                resolved_bounds.append((axis, bound))
+            else:
+                fast_variables.add(variable)
+                fast_patterns.add((variable, tuple(index_names)))
+                constraints.update(
+                    (variable, axis, bound) for axis, bound in resolved_bounds
+                )
+
+        check_parts = []
+        for variable in sorted(fast_variables):
+            check_parts.extend([f"{variable} == NULL", f"{variable}->ndim != 2"])
+        for variable, axis, bound in sorted(constraints):
+            check_parts.append(f"{variable}->shape[{axis}] < ({bound})")
+        if check_parts:
+            self.add_line("if (" + " || ".join(check_parts) + ") {")
+            self.indent_level += 1
+            self.add_line('fprintf(stderr, "Tensor fast-path shape check failed\\n");')
+            self.add_line("exit(1);")
+            self.indent_level -= 1
+            self.add_line("}")
+
+        for variable in sorted(fast_variables):
+            py_type = tensor_types[variable]
+            alias_base = f"ocean_fast_{self.clean_type_name_for_c(variable)}"
+            original_type = next(
+                info.get("type", "")
+                for name, info in symbol_table.items()
+                if name == variable and isinstance(info, dict)
+            )
+            qualifier = "" if self.is_mut_borrow_type(original_type) or not self.is_borrow_type(original_type) else "const "
+            self.add_line(f"{qualifier}{self.map_type_to_c(self.tensor_element_type(py_type))}* {alias_base}_data = {variable}->data;")
+            self.add_line(f"const size_t {alias_base}_stride0 = {variable}->strides[0];")
+            self.add_line(f"const size_t {alias_base}_stride1 = {variable}->strides[1];")
+            self.tensor_fast_access[variable] = {
+                "data": f"{alias_base}_data",
+                "stride0": f"{alias_base}_stride0",
+                "stride1": f"{alias_base}_stride1",
+            }
+        self.tensor_fast_patterns = fast_patterns
 
     def generate_tensor_index_access(self, ast: Dict) -> str:
         variable = ast.get("variable", "")
