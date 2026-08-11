@@ -1,306 +1,138 @@
 # Ocean 🌊
 
-<img src="images/ocean.jpg" alt="Ocean project illustration" width="500"/>
+> Python-like syntax. Native C11 output. Explicit ownership for systems and ML-oriented code.
 
-Ocean is a Python-like language that compiles to C11. The project targets systems programming and ML-oriented computation, with explicit borrow parameters and ownership checks during code generation.
+<img src="images/ocean.jpg" alt="Ocean project illustration" width="560" />
 
-## Memory Model Overview
+Ocean is an experimental programming language and compiler for people who want the readability of
+Python with a direct path to C. Ocean lowers source code to readable C11, adds ownership and borrow
+checks before code generation, and provides contiguous `array[T]` and N-dimensional `tensor[T]`
+types for numerical workloads.
 
-Ocean uses a hybrid model: automatic ownership, reference counting, and static borrow checks.
+## Why Ocean?
 
-### Data Types
+- **Familiar syntax** — functions, loops, classes, and type annotations stay lightweight.
+- **Predictable memory** — values, ARC-managed objects, owned buffers, and borrows have distinct
+  rules.
+- **C when it matters** — generated symbols use the `ocean_` namespace and can interoperate with
+  C/POSIX APIs through an explicit `unsafe:` boundary.
+- **Numerical foundations** — dense arrays and row-major tensors with shape metadata, strides, and
+  bounds-checked indexing.
+- **Inspectable output** — the compiler emits C you can read, compile, profile, and debug.
 
-- `int`, `float`, `bool` — regular value types without memory management.
-- `list[T]`, `dict[K, V]`, `tuple[T]`, class instances — ARC objects with reference counting.
-- `str` — a dedicated C string, copied when creating an alias.
-- `array[T]`, `tensor[T]` — unique-owned buffers with separate `free`.
-- `&T` — immutable borrow.
-- `&mut T` — exclusive mutable borrow.
-- raw C pointers — completely unsafe ownership.
-
-### Reference Counting
-
-An ARC object has a header:
-
-```c
-typedef struct ocean_object_header {
-    size_t refcount;
-    void (*destroy)(void*);
-} ocean_object_header;
-```
-
-When creating an object:
-
-```text
-refcount = 1
-```
-
-When creating a new alias, the following is called:
-
-```c
-ocean_retain(object);
-```
-
-When the owner leaves the scope:
-
-```c
-ocean_release(object);
-```
-
-When the counter reaches zero, the object's destructor is called.
+## A small example
 
 ```python
-var a: list[int] = [1, 2, 3]
-var b: list[int] = a
+def scale(values: &mut array[float32], factor: float32) -> None:
+    for i in range(len(values)):
+        values[i] = values[i] * factor
+    return None
+
+
+def main() -> int:
+    var values: array[float32] = [1.0, 2.0, 3.0]
+    scale(values, 2.0)
+    print(values[0])
+    return 0
 ```
 
-`a` and `b` point to the same object, but each owner maintains its own reference.
+`&mut` is an exclusive mutable borrow. It does not add reference-count operations to the generated
+code and prevents conflicting access during validation.
 
-### Arrays and Tensors
+## Arrays and tensors
 
-`array[T]` and `tensor[T]` do not use ARC. They have a single owner:
+Use `array[T]` for a one-dimensional numeric buffer and `tensor[T]` for dense N-dimensional data:
 
 ```python
 var matrix: tensor[float32] = tensor.zeros(100, 100)
+matrix[0, 1] = 3.5
+
+var rows: int = matrix.shape[0]
+var elements: int = len(matrix)
 ```
 
-When the scope ends, the generator calls:
+Tensor storage is contiguous and row-major. Indexing is bounds-checked by the generated runtime;
+provably safe hot loops can use a checked-once fast path. The current benchmark multiplies two
+`100 × 100` matrices 1,000 times.
 
-```c
-ocean_tensor_float32_free(matrix);
-```
+## Memory model
 
-Assigning an owned value usually transfers ownership:
+| Ocean type | Runtime model |
+| --- | --- |
+| `int`, `float`, `bool` | plain value |
+| `list[T]`, `dict[K,V]`, tuples, classes | non-atomic reference counting |
+| `str` | owned C string with copied aliases |
+| `array[T]`, `tensor[T]` | unique-owned buffer |
+| `&T` / `&mut T` | lexical immutable / exclusive borrow |
+| raw pointers and direct C calls | explicit `unsafe:` boundary |
 
-```python
-var first: tensor[float32] = tensor.zeros(10, 10)
-var second: tensor[float32] = first
-```
+Owned objects are released at scope exit. `del` can release a value early, while borrows do not
+retain or free their source. Read the full model in [docs/MEMORY_MODEL.md](docs/MEMORY_MODEL.md).
 
-After moving, `first` can no longer be used.
-
-### Borrowing
-
-Borrow does not increase the reference count or free memory:
-
-```python
-def read(matrix: &tensor[float32]) -> float32:
-    return matrix[0, 0]
-```
-
-`&mut` allows modification:
-
-```python
-def clear(matrix: &mut tensor[float32]) -> None:
-    matrix[0, 0] = 0.0
-    return None
-```
-
-The compiler prohibits deleting or modifying the object while borrowing is active.
-
-### Manual Management
-
-For explicit deletion, use:
-
-```python
-del value
-```
-
-This is usually not necessary: owned objects are automatically freed at the end of the scope. Direct C calls via `@` are only permitted inside an explicit `unsafe:` block and may violate ownership rules.
-
-Reference counting in the current version is non-atomic, so ARC objects are intended primarily for thread-confined use.
-
-Details: [docs/MEMORY_MODEL.md](docs/MEMORY_MODEL.md).
-
-## Architecture
-
-The main pipeline is:
-
-`Parser → JSON AST → JSONValidator → CCodeGenerator → C11`
-
-- `main.py` — demonstration pipeline: reads `examples/main.oc` and writes parsed JSON and generated C.
-- `src/parser.py` — parses the language, types, functions, indexing, and `array`/`tensor` literals.
-- `src/debug.py` — validates the JSON AST.
-- `src/compiler.py` — compatibility import for the public `CCodeGenerator` API.
-- `src/codegen/` — backend mixins for types, expressions, statements, scopes, ownership, containers, and OOP.
-- `src/codegen/array_codegen.py` — uniquely owned contiguous `array[T]`.
-- `src/codegen/tensor_codegen.py` — contiguous row-major `tensor[T]` with shape, strides, and bounds checks.
-- `tests/` — pytest tests for code generation; `docs/` — handoff notes and the memory model description.
-
-## Quick Start
-
-Create or activate a local environment:
+## Quick start
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt  # if requirements.txt is present
-```
+python -m pip install -r requirements.txt
 
-Run the full test suite:
-
-```bash
 pytest -v
-```
-
-Run the demonstration compiler pipeline:
-
-```bash
 python main.py
 ```
 
-The command updates `examples/parsed_code.json` and `examples/generated_code.c`, then builds the C program as `examples/generated_code`. For manual generated-C checks, use C11 and strict warnings:
+`python main.py` parses `examples/main.oc`, validates it, generates
+`examples/generated_code.c`, and builds the executable with GCC. For a reproducible baseline
+without optimization flags:
 
 ```bash
-gcc -O3 -std=c11 -Wall -Wextra -Wpedantic \
-    -fsanitize=address,undefined \
+python benchmarks/benchmark_main.py --runs 3
+```
+
+The benchmark reports parsing, validation, generation, compilation, and runtime separately. Use
+`--json` for machine-readable output and `--keep` to preserve generated artifacts.
+
+For strict manual C checks:
+
+```bash
+gcc -std=c11 -Wall -Wextra -Wpedantic \
+    -fsanitize=address,undefined -fno-omit-frame-pointer \
     examples/generated_code.c -o /tmp/ocean_generated
 ```
 
-Run the baseline benchmark for `examples/main.oc` without `-O3`:
+## Performance snapshot
+
+On the development machine, the current `examples/main.oc` benchmark runs in roughly **3 seconds
+without compiler optimization** and **under 1 second with `-O3`**. These numbers are hardware- and
+compiler-dependent; the benchmark is the source of truth for comparisons.
+
+## Compiler pipeline
+
+```text
+Ocean source → Parser → typed JSON graph → JSONValidator → CCodeGenerator → C11
+```
+
+- `src/parser.py` — syntax, types, expressions, indexing, arrays, and tensors.
+- `src/debug.py` — diagnostics, source locations, ownership, and borrow validation.
+- `src/codegen/` — C lowering for scopes, types, ownership, containers, tensors, and OOP.
+- `src/compiler.py` — public `CCodeGenerator` compatibility API.
+- `tests/` — pytest regression and generated-C tests.
+- `docs/` — memory model and backend design notes.
+
+## Honest project status
+
+Ocean is an active prototype, not a finished Rust replacement. The safe core is strongest for
+intra-function ownership and lexical borrows. The current boundaries include non-atomic ARC,
+thread-confined managed objects, possible leaks from reference cycles, incomplete integer-overflow
+semantics, and an unsafe FFI escape hatch. These limitations are documented rather than hidden.
+
+## Contributing
+
+Keep Python code readable with four-space indentation and focused backend modules. Add a regression
+test for every compiler or memory-model change, then run:
 
 ```bash
-python benchmarks/benchmark_main.py --runs 1
+pytest -v
+git diff --check
 ```
 
-The benchmark measures parsing, validation, C generation, compilation, and
-runtime separately. Generated artifacts are temporary by default. Use
-`--runs 3` for a more stable runtime median or `--keep` to save the generated
-C and executable under `benchmarks/artifacts/`.
-
-## Arrays and Tensors
-
-`array[T]` is a one-dimensional, owned contiguous buffer:
-
-```python
-def scale(values: &mut array[float32], factor: float32) -> None:
-    for i in range(len(values)):
-        values[i] = values[i] * factor
-    return None
-```
-
-`tensor[T]` provides N-dimensional row-major storage:
-
-```python
-var A: tensor[float32] = [[1.0, 2.0], [3.0, 4.0]]
-var value: float32 = A[0, 1]
-A[1, 0] = value
-var rows: int = A.shape[0]
-var elements: int = len(A)
-```
-
-For a dynamic shape, use the zero-filled constructor:
-
-```python
-var rows: int = 100
-var cols: int = 100
-var A: tensor[float32] = tensor.zeros(rows, cols)
-```
-
-`tensor.zeros(d0, d1, ...)` evaluates the shape at runtime, allocates contiguous storage, and initializes every element to zero.
-
-A larger example with dot products, matrix multiplication, bias, and a 3D tensor is available in [examples/arrays_tensors.oc](examples/arrays_tensors.oc). Run its backend test with:
-
-```bash
-./.venv/bin/pytest -v tests/test_array_tensor.py
-```
-
-## Borrowing and Ownership
-
-`array[T]` and `tensor[T]` own their allocated storage and are released automatically at the end of the scope. `&T` parameters are immutable borrows; `&mut T` parameters are exclusive mutable borrows. Borrow paths do not add ARC retain/release operations to generated C.
-
-Direct C calls use `@` and must be placed in an explicit `unsafe:` block:
-
-```python
-cimport <math.h>
-
-def main() -> float:
-    unsafe:
-        var result: float = @sqrt(16.0)
-    return result
-```
-
-## Legacy Examples Using Current Patterns
-
-### Matrix: `list[list[int]]` → `tensor[float32]`
-
-The old `Matrix` class from `examples/main.oc` is no longer needed for numerical code. Storage and shape now belong to the tensor, while computational functions receive borrowed parameters:
-
-```python
-def matmul(A: &tensor[float32], B: &tensor[float32], C: &mut tensor[float32]) -> None:
-    var rows: int = A.shape[0]
-    var shared: int = A.shape[1]
-    var cols: int = B.shape[1]
-
-    for i in range(rows):
-        for j in range(cols):
-            var total: float32 = 0.0
-            for k in range(shared):
-                total = total + A[i, k] * B[k, j]
-            C[i, j] = total
-
-    return None
-
-
-def main() -> int:
-    var A: tensor[float32] = [[1.0, 2.0], [3.0, 4.0]]
-    var B: tensor[float32] = [[5.0, 6.0], [7.0, 8.0]]
-    var C: tensor[float32] = [[0.0, 0.0], [0.0, 0.0]]
-    matmul(A, B, C)
-    print(C[0, 0], C[1, 1])
-    return 0
-```
-
-### One-Dimensional List → Owned `array`
-
-For a numeric vector, use `array[T]` instead of the general list runtime. The function mutates the buffer through an exclusive borrow:
-
-```python
-def scale(values: &mut array[float32], factor: float32) -> None:
-    for i in range(len(values)):
-        values[i] = values[i] * factor
-    return None
-
-
-def dot(left: &array[float32], right: &array[float32]) -> float32:
-    var result: float32 = 0.0
-    for i in range(len(left)):
-        result = result + left[i] * right[i]
-    return result
-
-
-def main() -> int:
-    var values: array[float32] = [1.0, 2.0, 3.0]
-    var weights: array[float32] = [0.5, 1.0, 1.5]
-    scale(values, 2.0)
-    print(dot(values, weights))
-    return 0
-```
-
-### Legacy Basic Examples
-
-Input and loops remain simple, while computational data is best passed through typed borrows:
-
-```python
-def main() -> int:
-    var name: str = input("Enter your name: ")
-    var values: array[float32] = [1.0, 2.0, 3.0]
-    scale(values, 2.0)
-    print("Hello, ", name, values[0])
-    return 0
-```
-
-C/POSIX calls remain explicitly separated from safe code with `unsafe:` and `@`:
-
-```python
-cimport <math.h>
-
-def main() -> float:
-    unsafe:
-        var result: float32 = @sqrt(16.0)
-    return result
-```
-
-## Development
-
-Use four spaces in Python code, `snake_case` for functions, and `PascalCase` for classes. Add new backend passes to the appropriate `src/codegen/` module, and add a focused pytest regression test for ownership or generated-C changes. Generated Ocean symbols use the `ocean_` prefix.
+The project roadmap and deeper backend rationale are available in `docs/`.
