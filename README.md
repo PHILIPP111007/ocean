@@ -102,7 +102,7 @@ def main() -> float:
 
 ### Matrix: `list[list[int]]` → `tensor[float32]`
 
-Старый класс `Matrix` из `examples/main.oc` больше не нужен для плотной математики. Storage и shape теперь принадлежат tensor, а вычислительные функции получают borrow-параметры:
+Старый класс `Matrix` из `examples/main.oc` больше не нужен для математики. Storage и shape теперь принадлежат tensor, а вычислительные функции получают borrow-параметры:
 
 ```python
 def matmul(A: &tensor[float32], B: &tensor[float32], C: &mut tensor[float32]) -> None:
