@@ -32,6 +32,7 @@ class OwnershipMixin:
     MEMORY_BORROW = "borrow"
     MEMORY_MUT_BORROW = "mut_borrow"
     MEMORY_RAW = "raw"
+    MEMORY_OWNED = "owned"
 
     def generate_ownership_runtime(self) -> None:
         """Register the common ``ocean_`` ARC runtime in generated helpers."""
@@ -117,6 +118,10 @@ static char* ocean_strdup(const char* src) {
             return True
         return self._is_class_type(base)
 
+    def is_owned_type(self, py_type: str) -> bool:
+        base = self.strip_borrow_type(py_type)
+        return self.is_owned_buffer_type(base)
+
     def is_raw_pointer_type(self, py_type: str) -> bool:
         value = (py_type or "").strip()
         if value in {"pointer", "void*", "null"}:
@@ -132,6 +137,8 @@ static char* ocean_strdup(const char* src) {
             return self.MEMORY_BORROW
         if self.is_string_type(py_type):
             return self.MEMORY_STRING
+        if self.is_owned_type(py_type):
+            return self.MEMORY_OWNED
         if self.is_arc_type(py_type):
             return self.MEMORY_ARC
         if self.is_raw_pointer_type(py_type):
@@ -142,6 +149,7 @@ static char* ocean_strdup(const char* src) {
         return self.memory_kind_for_type(py_type) in {
             self.MEMORY_ARC,
             self.MEMORY_STRING,
+            self.MEMORY_OWNED,
         }
 
     # ------------------------------------------------------------------
@@ -319,6 +327,11 @@ static char* ocean_strdup(const char* src) {
                 info["is_deleted"] = True
         elif kind == self.MEMORY_STRING:
             self.add_line(f"free({name});")
+            self.add_line(f"{name} = NULL;")
+            if mark_state:
+                info["is_deleted"] = True
+        elif kind == self.MEMORY_OWNED:
+            self.add_line(self._owned_free_call(name, info["py_type"]))
             self.add_line(f"{name} = NULL;")
             if mark_state:
                 info["is_deleted"] = True

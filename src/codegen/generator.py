@@ -13,6 +13,8 @@ from .io import IoMixin
 from .list_codegen import ListCodegenMixin
 from .tuple_codegen import TupleCodegenMixin
 from .dict_codegen import DictCodegenMixin
+from .array_codegen import ArrayCodegenMixin
+from .tensor_codegen import TensorCodegenMixin
 from .helpers import HelpersMixin
 from .imports import ImportsMixin
 from .expressions import ExpressionsMixin
@@ -33,6 +35,8 @@ class CCodeGenerator(
     ListCodegenMixin,
     TupleCodegenMixin,
     DictCodegenMixin,
+    ArrayCodegenMixin,
+    TensorCodegenMixin,
     HelpersMixin,
     ImportsMixin,
     ExpressionsMixin,

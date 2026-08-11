@@ -542,6 +542,8 @@ class OopMixin:
                 self.add_line(f"ocean_release({access});")
             elif kind == self.MEMORY_STRING:
                 self.add_line(f"free({access});")
+            elif kind == self.MEMORY_OWNED:
+                self.add_line(self._owned_free_call(access, field_type))
         self.add_line("free(self);")
         self.indent_level -= 1
         self.add_line("}")

@@ -103,6 +103,13 @@ class IndexingMixin:
                 self.add_line(
                     f"set_{struct_name}({variable}, {index_expr}, {value_expr});"
                 )
+            elif self.is_array_type(py_type):
+                self.generate_array_struct(py_type)
+                self.add_line(
+                    f"{self.array_struct_name(py_type)}_set({variable}, (size_t)({index_expr}), {value_expr});"
+                )
+            elif self.is_tensor_type(py_type):
+                self.generate_tensor_index_assignment(variable, py_type, [index_ast], value_expr)
 
             # Обработка для кортежей (неизменяемые)
             elif py_type.startswith("tuple["):
@@ -234,6 +241,10 @@ class IndexingMixin:
 
         py_type = var_info.get("py_type", "")
         value_expr = self.generate_expression(value_ast)
+
+        if self.is_tensor_type(py_type):
+            self.generate_tensor_index_assignment(var_name, py_type, indices_ast, value_expr)
+            return
 
         print(f"  py_type: {py_type}")
         print(f"  value_expr: {value_expr}")
@@ -416,6 +427,12 @@ class IndexingMixin:
                 if py_type.startswith("list["):
                     struct_name = self.generate_list_struct_name(py_type)
                     return f"get_{struct_name}({variable}, {index_expr})"
+                elif self.is_array_type(py_type):
+                    self.generate_array_struct(py_type)
+                    return f"{self.array_struct_name(py_type)}_get({variable}, (size_t)({index_expr}))"
+                elif self.is_tensor_type(py_type):
+                    self.generate_tensor_struct(py_type)
+                    return self._tensor_index_call(variable, py_type, [index_expr])
                 elif py_type.startswith("tuple["):
                     struct_name = self.generate_tuple_struct_name(py_type)
                     return f"get_{struct_name}({variable}, {index_expr})"
@@ -514,6 +531,9 @@ class IndexingMixin:
         result = var_name
         current_type = py_type
 
+        if self.is_tensor_type(current_type):
+            return self._tensor_index_call(result, current_type, indices)
+
         for idx in indices:
             if current_type.startswith("list["):
                 struct_name = self.generate_list_struct_name(current_type)
@@ -553,6 +573,10 @@ class IndexingMixin:
         # Если это переменная (не self)
         if var_info:
             obj_py_type = var_info.get("py_type", "")
+
+            if self.is_tensor_type(obj_py_type) and attr_name == "shape":
+                self.generate_tensor_struct(obj_py_type)
+                return f"{self.tensor_struct_name(obj_py_type)}_shape_at({obj_name}, (size_t)({index_expr}))"
 
             # Если это класс или указатель на класс
             if self._is_class_type(obj_py_type) or var_info.get("is_pointer", False):

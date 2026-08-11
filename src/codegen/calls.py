@@ -339,10 +339,10 @@ class CallsMixin:
                         var_info = self.get_variable_info(var_name)
                         if var_info:
                             var_type = var_info.get("py_type", "")
-                            if var_type == "int":
+                            if var_type in {"int", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
                                 format_parts.append("%d")
                                 value_parts.append(var_name)
-                            elif var_type in ["float", "double"]:
+                            elif var_type in {"float", "float16", "float32", "float64", "double"}:
                                 format_parts.append("%f")
                                 value_parts.append(var_name)
                             elif var_type == "str":
@@ -360,9 +360,25 @@ class CallsMixin:
                         if data_type == "str":
                             format_parts.append("%s")
                             value_parts.append(f'"{value}"')
+                        elif data_type in {"float", "float16", "float32", "float64", "double"}:
+                            format_parts.append("%f")
+                            value_parts.append(str(value))
                         else:
                             format_parts.append("%d")
                             value_parts.append(str(value))
+                    elif arg.get("type") in {"index_access", "tensor_index_access"}:
+                        expr = self.generate_expression(arg)
+                        source = arg.get("variable", "")
+                        source_info = self.get_variable_info(source)
+                        element_type = "int"
+                        if source_info:
+                            source_type = self.strip_borrow_type(source_info.get("py_type", ""))
+                            if self.is_array_type(source_type):
+                                element_type = self.array_element_type(source_type)
+                            elif self.is_tensor_type(source_type):
+                                element_type = self.tensor_element_type(source_type)
+                        format_parts.append("%f" if element_type in {"float", "float16", "float32", "float64", "double"} else "%d")
+                        value_parts.append(expr)
                     else:
                         expr = self.generate_expression(arg)
                         format_parts.append("%d")
@@ -721,6 +737,12 @@ class CallsMixin:
             if arg_type.startswith("list["):
                 struct_name = self.generate_list_struct_name(arg_type)
                 func_call = f"builtin_len_{struct_name}({arg_expr})"
+            elif self.is_array_type(arg_type):
+                self.generate_array_struct(arg_type)
+                func_call = f"{self.array_struct_name(arg_type)}_len({arg_expr})"
+            elif self.is_tensor_type(arg_type):
+                self.generate_tensor_struct(arg_type)
+                func_call = f"{self.tensor_struct_name(arg_type)}_len({arg_expr})"
             elif arg_type.startswith("dict["):
                 key_type, value_type = self._extract_dict_types(arg_type)
                 key_name = self.clean_type_name_for_c(key_type)

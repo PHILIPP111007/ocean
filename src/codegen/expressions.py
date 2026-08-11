@@ -17,6 +17,9 @@ class ExpressionsMixin:
         if node_type == "nested_index_access":
             return self._generate_nested_index_access(ast)
 
+        if node_type == "tensor_index_access":
+            return self.generate_tensor_index_access(ast)
+
         if node_type == "index_access":
             return self._generate_index_access(ast)
 
@@ -227,6 +230,12 @@ class ExpressionsMixin:
                                 struct_name = self.generate_list_struct_name(py_type)
                                 # Используем специализированную функцию для списков
                                 c_func_name = f"builtin_len_{struct_name}"
+                            elif self.is_array_type(py_type):
+                                self.generate_array_struct(py_type)
+                                c_func_name = f"{self.array_struct_name(py_type)}_len"
+                            elif self.is_tensor_type(py_type):
+                                self.generate_tensor_struct(py_type)
+                                c_func_name = f"{self.tensor_struct_name(py_type)}_len"
                             else:
                                 c_func_name = "builtin_len"
                         else:
@@ -332,6 +341,9 @@ class ExpressionsMixin:
             return f"self->{attr_name}"
         elif var_info:
             obj_type = var_info.get("py_type", "")
+
+            if self.is_array_type(obj_type) or self.is_tensor_type(obj_type):
+                return f"{obj_name}->{attr_name}"
 
             # Проверяем, является ли это классом или указателем
             if self._is_class_type(obj_type):

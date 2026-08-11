@@ -1,5 +1,7 @@
 # Ocean 🌊
 
+<img src="images/ocean.jpg" alt="alt text" width="500"/>
+
 ## Info
 
 This program is a Python-like implementation of the C language.

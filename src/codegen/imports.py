@@ -9,7 +9,10 @@ from src.modules.logger import logger
 class ImportsMixin:
     def generate_c_imports(self):
         """Генерирует #include директивы"""
-        for lib in DEFAULT_C_IMPORTS:
+        imports = list(DEFAULT_C_IMPORTS)
+        if any(name.startswith(("ocean_array_", "ocean_tensor_")) for name in self.generated_structures):
+            imports.extend(["#include <stdint.h>", "#include <stddef.h>"])
+        for lib in imports:
             self.add_line(lib)
 
         seen = set()

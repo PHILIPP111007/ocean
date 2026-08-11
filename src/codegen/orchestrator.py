@@ -57,6 +57,10 @@ class OrchestratorMixin:
         for py_type in sorted_types:
             if py_type.startswith("list["):
                 self.generate_list_struct(py_type)
+            elif self.is_array_type(py_type):
+                self.generate_array_struct(py_type)
+            elif self.is_tensor_type(py_type):
+                self.generate_tensor_struct(py_type)
         for py_type in sorted_types:
             if py_type.startswith("tuple["):
                 self.generate_tuple_struct(py_type)
@@ -178,7 +182,7 @@ class OrchestratorMixin:
             return
 
         c_type = var_info["c_type"]
-        if var_info.get("memory_kind") in {self.MEMORY_ARC, self.MEMORY_STRING}:
+        if var_info.get("memory_kind") in {self.MEMORY_ARC, self.MEMORY_STRING, self.MEMORY_OWNED}:
             raise RuntimeError(
                 f"managed global '{var_name}' is not enabled in Ocean ownership v1; "
                 "use a local owner or add an explicit module initializer"

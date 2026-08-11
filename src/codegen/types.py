@@ -40,6 +40,12 @@ class TypesMixin:
             self.generate_tuple_struct(py_type)
             struct_name = self.generate_tuple_struct_name(py_type)
             return f"{struct_name}*"
+        elif py_type.startswith("array["):
+            self.generate_array_struct(py_type)
+            return self.array_c_type(py_type)
+        elif py_type.startswith("tensor["):
+            self.generate_tensor_struct(py_type)
+            return self.tensor_c_type(py_type)
         elif py_type.startswith("list["):
             # Генерируем структуру для list
             self.generate_list_struct(py_type)
@@ -443,9 +449,11 @@ class TypesMixin:
                     # Если это сложный тип, добавляем все вложенные типы
                     self._add_nested_types(var_type, all_types)
 
-                # Обрабатываем выражение инициализации
+                # Array/tensor literals are consumed by their dedicated
+                # runtime generators, not by the generic list runtime.
                 expr_ast = node.get("expression_ast", {})
-                process_value(expr_ast)
+                if not (self.is_array_type(var_type) or self.is_tensor_type(var_type)):
+                    process_value(expr_ast)
 
             # Обрабатываем присваивания
             elif node_type == "assignment":

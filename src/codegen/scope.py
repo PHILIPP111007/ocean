@@ -94,7 +94,7 @@ class ScopeMixin:
         if owns_reference is None:
             owns_reference = (
                 not is_parameter
-                and memory_kind in {self.MEMORY_ARC, self.MEMORY_STRING}
+                and memory_kind in {self.MEMORY_ARC, self.MEMORY_STRING, self.MEMORY_OWNED}
             )
 
         scope[name] = {

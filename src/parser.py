@@ -931,6 +931,11 @@ class Parser:
             logger.debug(f"Error: Некорректное индексное выражение: {indices_str}")
             return False
 
+        expanded_indices = []
+        for index in indices:
+            expanded_indices.extend(split_top_level(index) or [index])
+        indices = expanded_indices
+
         # Парсим значение
         value_ast = self.parse_expression_to_ast(value)
 
@@ -2726,6 +2731,13 @@ class Parser:
                 }
             else:
                 # Обычная индексация
+                tensor_indices = split_top_level(index_expr)
+                if len(tensor_indices) > 1:
+                    return {
+                        "type": "tensor_index_access",
+                        "variable": base_name,
+                        "indices": [self.parse_expression_to_ast(item) for item in tensor_indices],
+                    }
                 index_ast = self.parse_expression_to_ast(index_expr)
                 return {
                     "type": "index_access",

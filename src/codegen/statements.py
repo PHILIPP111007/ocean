@@ -48,10 +48,14 @@ class StatementsMixin:
             source_info
             and source_info.get("owns_reference")
             and not source_info.get("is_parameter")
-            and kind in {self.MEMORY_ARC, self.MEMORY_STRING}
+            and kind in {self.MEMORY_ARC, self.MEMORY_STRING, self.MEMORY_OWNED}
         )
 
-        if kind == self.MEMORY_STRING and ownership == "borrowed" and not transfer_local_owner:
+        if kind == self.MEMORY_OWNED:
+            self.add_line(f"{c_type} {temp} = {expr};")
+            if transfer_local_owner and source:
+                self._mark_owned_move(source)
+        elif kind == self.MEMORY_STRING and ownership == "borrowed" and not transfer_local_owner:
             self.add_line(f"{c_type} {temp} = ocean_strdup({expr});")
         else:
             self.add_line(f"{c_type} {temp} = {expr};")
@@ -251,6 +255,12 @@ class StatementsMixin:
 
         self.assert_can_move_or_delete(target)
         kind = info.get("memory_kind")
+        if kind == self.MEMORY_OWNED:
+            if self.is_array_type(info.get("py_type", "")):
+                self.generate_array_assignment(node)
+            else:
+                self.generate_tensor_assignment(node)
+            return
         if kind in {self.MEMORY_BORROW, self.MEMORY_MUT_BORROW}:
             raise RuntimeError(
                 f"borrow variable '{target}' cannot be rebound in borrow-checker v1"
@@ -360,6 +370,13 @@ class StatementsMixin:
             self.register_borrow(var_name, source, self.is_mut_borrow_type(var_type))
             return
 
+        if self.is_array_type(var_type):
+            self.generate_array_declaration(node)
+            return
+        if self.is_tensor_type(var_type):
+            self.generate_tensor_declaration(node)
+            return
+
         if var_type.startswith("dict["):
             self._generate_dict_declaration(var_name, var_type, expression_ast, node)
             return
@@ -457,6 +474,10 @@ class StatementsMixin:
             elif kind == self.MEMORY_STRING:
                 if info.get("owns_reference"):
                     self.add_line(f"free({target});")
+                self.add_line(f"{target} = NULL;")
+            elif kind == self.MEMORY_OWNED:
+                if info.get("owns_reference"):
+                    self.add_line(self._owned_free_call(target, info["py_type"]))
                 self.add_line(f"{target} = NULL;")
             elif kind in {self.MEMORY_BORROW, self.MEMORY_MUT_BORROW}:
                 self._unregister_borrow_info(info)
