@@ -45,6 +45,7 @@ class Parser:
         self.indent_size = None
         self.indent_char = None
         self.unsafe_depth = 0
+        self.current_source_line = None
 
     def _mark_unsafe_nodes(self, value) -> None:
         """Mark graph nodes parsed inside an explicit ``unsafe:`` block."""
@@ -436,6 +437,21 @@ class Parser:
         return _parse_processed_code(processed_code)
 
     def parse_line(
+        self, line: str, scope: dict, all_lines: list, current_index: int, indent: int
+    ):
+        """Parse one line and attach its source location to emitted nodes."""
+        previous_source_line = self.current_source_line
+        self.current_source_line = current_index + 1
+        graph_start = len(scope.get("graph", []))
+        try:
+            return self._parse_line_impl(line, scope, all_lines, current_index, indent)
+        finally:
+            for node in scope.get("graph", [])[graph_start:]:
+                if isinstance(node, dict):
+                    node.setdefault("source_line", current_index + 1)
+            self.current_source_line = previous_source_line
+
+    def _parse_line_impl(
         self, line: str, scope: dict, all_lines: list, current_index: int, indent: int
     ):
         """Основной метод парсинга строки с поддержкой всех конструкций"""

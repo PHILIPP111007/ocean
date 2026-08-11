@@ -117,11 +117,11 @@ class JSONValidator:
                     "scope_level": level,
                     "scope_type": scope.get("type", "unknown"),
                     "node_idx": node_idx,
-                    "global_line_number": global_line_counter,
+                    "global_line_number": node.get("source_line") or global_line_counter,
                 }
 
                 # Увеличиваем счетчик только если строка не пустая
-                if content.strip():
+                if content.strip() and not node.get("source_line"):
                     global_line_counter += 1
 
     def build_variable_history(self, json_data: List[Dict]):
@@ -274,11 +274,23 @@ class JSONValidator:
             return self.variable_history[key][-1]
         return None
 
-    def add_error(self, message: str, scope_idx: int = None, node_idx: int = None):
+    def add_error(
+        self,
+        message: str,
+        scope_idx: int = None,
+        node_idx: int = None,
+        source_line: int = None,
+        source_content: str = None,
+    ):
         """Добавляет ошибку с информацией о строке"""
         full_message = message
 
-        if scope_idx is not None and node_idx is not None:
+        if source_line is not None:
+            if source_content:
+                full_message = f"Строка {source_line} '{source_content}': {message}"
+            else:
+                full_message = f"Строка {source_line}: {message}"
+        elif scope_idx is not None and node_idx is not None:
             node_id = f"{scope_idx}.{node_idx}"
             if node_id in self.source_map:
                 content = self.source_map[node_id]["content"]
@@ -290,7 +302,7 @@ class JSONValidator:
                 "message": full_message,
                 "scope_idx": scope_idx,
                 "node_idx": node_idx,
-                "line_number": self.get_line_number(scope_idx, node_idx),
+                "line_number": source_line or self.get_line_number(scope_idx, node_idx),
             }
         )
 
@@ -324,9 +336,7 @@ class JSONValidator:
         if node_id in self.source_map:
             content = self.source_map[node_id]["content"]
             if content:
-                # Считаем строки в исходном коде
-                # Для простоты, можно использовать индекс узла + 1
-                return node_idx + 1
+                return self.source_map[node_id].get("global_line_number") or node_idx + 1
 
         return None
 
@@ -569,7 +579,13 @@ class JSONValidator:
         return names
 
     def _lifetime_error(self, message: str, scope_idx: int, node_idx: int) -> None:
-        self.add_error(message, scope_idx, node_idx)
+        self.add_error(
+            message,
+            scope_idx,
+            node_idx,
+            source_line=getattr(self, "_lifetime_source_line", None),
+            source_content=getattr(self, "_lifetime_source_content", None),
+        )
 
     def _lifetime_check_reads(
         self, names: set[str], env: Dict[str, Dict], scope_idx: int, node_idx: int
@@ -702,6 +718,8 @@ class JSONValidator:
     def _lifetime_analyze_node(
         self, node: Dict, env: Dict[str, Dict], scope_idx: int, node_idx: int
     ) -> None:
+        self._lifetime_source_line = node.get("source_line")
+        self._lifetime_source_content = node.get("content")
         node_type = node.get("node", "")
         reads = self._lifetime_node_reads(node)
 
@@ -835,6 +853,8 @@ class JSONValidator:
     ) -> None:
         outer_names = set(env)
         for node_idx, node in enumerate(nodes):
+            self._lifetime_source_line = node.get("source_line")
+            self._lifetime_source_content = node.get("content")
             node_type = node.get("node", "")
             if node_type == "if_statement":
                 self._lifetime_check_reads(self._lifetime_node_reads(node), env, scope_idx, node_idx)

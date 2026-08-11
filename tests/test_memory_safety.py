@@ -66,6 +66,11 @@ def main() -> None:
 
     assert not report["is_valid"]
     assert any("while it is borrowed" in error["message"] for error in report["errors"])
+    lifetime_error = next(
+        error for error in report["errors"] if "while it is borrowed" in error["message"]
+    )
+    assert lifetime_error["line_number"] == 5
+    assert "del values" in lifetime_error["message"]
 
 
 def test_mutable_and_immutable_borrows_are_exclusive():
