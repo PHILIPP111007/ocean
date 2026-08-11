@@ -94,6 +94,11 @@ def _explicit_source(args: argparse.Namespace) -> Path | None:
 def _load_package_for_args(args: argparse.Namespace, source: Path | None = None) -> Package | None:
     if args.manifest:
         return load_package(args.manifest)
+    # A positional source path selects the single-file workflow. The package
+    # manifest must not silently replace it with its configured entry file.
+    # ``--source`` remains an explicit package-level override.
+    if source is not None and not args.source_override:
+        return None
     if _command(args) == "build" and args.command_or_source not in COMMANDS and source is None:
         return None
     manifest = find_manifest(source.parent if source else Path.cwd())

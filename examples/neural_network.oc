@@ -1,104 +1,105 @@
-# A small fully connected neural network implemented in Ocean.
+# Universal fully connected layers composed through ordinary Ocean objects.
 #
-# The example intentionally keeps the model compact, but demonstrates the
-# important pieces of a real training loop: tensor-backed parameters, an
-# object with methods, a ReLU hidden layer, forward propagation, and a
-# gradient-descent update for one training sample.
+# DenseLayer is reusable: its input/output sizes and activation are supplied
+# to the constructor. NeuralNetwork owns two independent DenseLayer objects
+# and composes their forward/backward methods without touching their storage.
 
-class NeuralNetwork:
-    def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
+class DenseLayer:
+    def __init__(self, input_size: int, output_size: int, activation: int) -> None:
         self.input_size: int = input_size
-        self.hidden_size: int = hidden_size
         self.output_size: int = output_size
+        self.activation: int = activation
+        self.weights: tensor[float32] = tensor.zeros(input_size, output_size)
+        self.bias: tensor[float32] = tensor.zeros(1, output_size)
 
-        self.w1: tensor[float32] = tensor.zeros(input_size, hidden_size)
-        self.b1: tensor[float32] = tensor.zeros(1, hidden_size)
-        self.w2: tensor[float32] = tensor.zeros(hidden_size, output_size)
-        self.b2: tensor[float32] = tensor.zeros(1, output_size)
-
-    def initialize(self) -> None:
-        # Deterministic initialization keeps the example reproducible.
+    def initialize(self, initial_weight: float32) -> None:
         for i in range(self.input_size):
-            for h in range(self.hidden_size):
-                self.w1[i, h] = 0.1
+            for j in range(self.output_size):
+                self.weights[i, j] = initial_weight
 
-        for h in range(self.hidden_size):
-            self.b1[0, h] = 0.0
-            self.w2[h, 0] = 0.1
+        for j in range(self.output_size):
+            self.bias[0, j] = 0.0
 
-        self.b2[0, 0] = 0.0
         return None
 
     def forward(self, inputs: &tensor[float32]) -> tensor[float32]:
-        var hidden: tensor[float32] = tensor.zeros(1, self.hidden_size)
-        var output: tensor[float32] = tensor.zeros(1, self.output_size)
+        var outputs: tensor[float32] = tensor.zeros(1, self.output_size)
 
-        # Dense layer 1 followed by ReLU.
-        for h in range(self.hidden_size):
-            var hidden_value: float32 = self.b1[0, h]
+        for j in range(self.output_size):
+            var value: float32 = self.bias[0, j]
+            for i in range(self.input_size):
+                value = value + inputs[0, i] * self.weights[i, j]
+
+            if self.activation == 1:
+                if value > 0.0:
+                    outputs[0, j] = value
+                else:
+                    outputs[0, j] = 0.0
+            else:
+                outputs[0, j] = value
+
+        return outputs
+
+    def backward(self, inputs: &tensor[float32], outputs: &tensor[float32], upstream: &tensor[float32], learning_rate: float32) -> tensor[float32]:
+        var input_gradient: tensor[float32] = tensor.zeros(1, self.input_size)
+
+        for j in range(self.output_size):
+            var gradient: float32 = upstream[0, j]
+
+            if self.activation == 1:
+                if outputs[0, j] <= 0.0:
+                    gradient = 0.0
 
             for i in range(self.input_size):
-                hidden_value = hidden_value + inputs[0, i] * self.w1[i, h]
+                var previous_weight: float32 = self.weights[i, j]
+                var propagated: float32 = input_gradient[0, i]
+                propagated = propagated + gradient * previous_weight
+                input_gradient[0, i] = propagated
+                self.weights[i, j] = previous_weight + learning_rate * gradient * inputs[0, i] * -1.0
 
-            if hidden_value > 0.0:
-                hidden[0, h] = hidden_value
-            else:
-                hidden[0, h] = 0.0
+            self.bias[0, j] = self.bias[0, j] + learning_rate * gradient * -1.0
 
-        # Dense layer 2.
-        for j in range(self.output_size):
-            var output_value: float32 = self.b2[0, j]
+        return input_gradient
 
-            for h in range(self.hidden_size):
-                output_value = output_value + hidden[0, h] * self.w2[h, j]
 
-            output[0, j] = output_value
+class NeuralNetwork:
+    def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
+        # Fields are objects, not duplicated parameter buffers. This is the
+        # composition point that makes DenseLayer independently reusable.
+        self.hidden: DenseLayer = DenseLayer(input_size, hidden_size, 1)
+        self.output: DenseLayer = DenseLayer(hidden_size, output_size, 0)
 
-        return output
+    def initialize(self, initial_weight: float32) -> None:
+        self.hidden.initialize(initial_weight)
+        self.output.initialize(initial_weight)
+        return None
+
+    def forward(self, inputs: &tensor[float32]) -> tensor[float32]:
+        var hidden_outputs: tensor[float32] = self.hidden.forward(inputs)
+        var outputs: tensor[float32] = self.output.forward(hidden_outputs)
+        return outputs
 
     def train_step(self, inputs: &tensor[float32], target: &tensor[float32], learning_rate: float32) -> float32:
-        # Keep the hidden activation for the backward pass.
-        var hidden: tensor[float32] = tensor.zeros(1, self.hidden_size)
-        for h in range(self.hidden_size):
-            var activation: float32 = self.b1[0, h]
+        var hidden_outputs: tensor[float32] = self.hidden.forward(inputs)
+        var outputs: tensor[float32] = self.output.forward(hidden_outputs)
+        var output_gradient: tensor[float32] = tensor.zeros(1, self.output.output_size)
+        var error: float32 = outputs[0, 0] + target[0, 0] * -1.0
+        output_gradient[0, 0] = error
 
-            for i in range(self.input_size):
-                activation = activation + inputs[0, i] * self.w1[i, h]
-
-            if activation > 0.0:
-                hidden[0, h] = activation
-            else:
-                hidden[0, h] = 0.0
-
-        var prediction: tensor[float32] = self.forward(inputs)
-        var error: float32 = prediction[0, 0] + target[0, 0] * -1.0
-
-        # Backpropagation through the output layer and ReLU hidden layer.
-        for h in range(self.hidden_size):
-            var hidden_value: float32 = hidden[0, h]
-            var output_weight: float32 = self.w2[h, 0]
-
-            self.w2[h, 0] = output_weight + learning_rate * error * hidden_value * -1.0
-
-            if hidden_value > 0.0:
-                var hidden_gradient: float32 = error * output_weight
-                for i in range(self.input_size):
-                    self.w1[i, h] = self.w1[i, h] + learning_rate * hidden_gradient * inputs[0, i] * -1.0
-                self.b1[0, h] = self.b1[0, h] + learning_rate * hidden_gradient * -1.0
-
-        self.b2[0, 0] = self.b2[0, 0] + learning_rate * error * -1.0
+        var hidden_gradient: tensor[float32] = self.output.backward(hidden_outputs, outputs, output_gradient, learning_rate)
+        var input_gradient: tensor[float32] = self.hidden.backward(inputs, hidden_outputs, hidden_gradient, learning_rate)
 
         return error * error
 
     def predict(self, inputs: &tensor[float32]) -> float32:
-        var output: tensor[float32] = self.forward(inputs)
-        var result: float32 = output[0, 0]
+        var outputs: tensor[float32] = self.forward(inputs)
+        var result: float32 = outputs[0, 0]
         return result
 
 
 def main() -> int:
     var network: NeuralNetwork = NeuralNetwork(2, 4, 1)
-    network.initialize()
+    network.initialize(0.1)
 
     var inputs: tensor[float32] = [[1.0, 0.0]]
     var target: tensor[float32] = [[1.0]]

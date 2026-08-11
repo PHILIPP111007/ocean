@@ -11,7 +11,11 @@ class StatementsMixin:
     def _normalize_loop_expression(value) -> str:
         """Lower attribute references in range bounds to their C form."""
         text = str(value)
-        return re.sub(r"\bself\.([A-Za-z_][A-Za-z0-9_]*)", r"self->\1", text)
+        return re.sub(
+            r"\bself((?:\.[A-Za-z_][A-Za-z0-9_]*)+)",
+            lambda match: "self" + match.group(1).replace(".", "->"),
+            text,
+        )
 
     def generate_break(self, node: Dict):
         """Release loop-local owners before transferring control."""

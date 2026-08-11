@@ -1005,3 +1005,38 @@ class TypesMixin:
                 return self.class_fields[obj_type].get(attr_name)
 
         return None
+
+    def resolve_object_path(self, object_path: str):
+        """Resolve an object receiver and its C expression.
+
+        Besides local variables and ``self``, methods may be invoked through
+        object-valued fields, for example ``self.hidden.forward(x)``.  Keep
+        this resolution in the type layer so calls, attributes, and future
+        dispatch mechanisms share one implementation.
+        """
+        parts = [part for part in str(object_path).split(".") if part]
+        if not parts:
+            return "", object_path
+
+        first = parts[0]
+        if first == "self":
+            current_type = self._get_current_class() or ""
+            c_expression = "self"
+        else:
+            info = self.get_variable_info(first)
+            if not info:
+                return "", object_path
+            current_type = self.strip_borrow_type(info.get("py_type", ""))
+            c_expression = first
+
+        for attribute in parts[1:]:
+            current_type = self.strip_borrow_type(current_type)
+            if not self._is_class_type(current_type):
+                return "", c_expression
+            field_type = self.class_fields.get(current_type, {}).get(attribute)
+            if not field_type:
+                return "", c_expression
+            c_expression = f"{c_expression}->{attribute}"
+            current_type = field_type
+
+        return current_type, c_expression

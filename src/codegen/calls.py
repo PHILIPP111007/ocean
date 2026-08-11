@@ -40,15 +40,13 @@ class CallsMixin:
         is_standalone = node.get("is_standalone", False)
         target_var = node.get("target", "")
 
-        if object_name == "self":
-            obj_type = self._get_current_class() or ""
-        else:
+        obj_type, object_expression = self.resolve_object_path(object_name)
+        if not obj_type:
+            raise RuntimeError(f"unknown object '{object_name}'")
+        if "." not in object_name and object_name != "self":
             info = self.get_variable_info(object_name)
-            if not info:
-                raise RuntimeError(f"unknown object '{object_name}'")
-            if info.get("is_deleted") or info.get("is_moved"):
+            if info and (info.get("is_deleted") or info.get("is_moved")):
                 raise RuntimeError(f"use of dead value '{object_name}'")
-            obj_type = self.strip_borrow_type(info.get("py_type", ""))
 
         arg_strings = [
             self.generate_expression(arg) if isinstance(arg, dict) else str(arg)
@@ -57,27 +55,27 @@ class CallsMixin:
 
         if obj_type.startswith("list["):
             return self._generate_list_method_call(
-                object_name, obj_type, method_name, arg_strings, is_standalone, target_var
+                object_expression, obj_type, method_name, arg_strings, is_standalone, target_var
             )
         if obj_type == "str":
             return self._generate_string_method_call(
-                object_name, method_name, arg_strings, is_standalone, target_var
+                object_expression, method_name, arg_strings, is_standalone, target_var
             )
         if obj_type.startswith("dict["):
             return self._generate_dict_method_call(
-                object_name, obj_type, method_name, arg_strings, is_standalone, target_var
+                object_expression, obj_type, method_name, arg_strings, is_standalone, target_var
             )
         if obj_type.startswith("tuple["):
             return self._generate_tuple_method_call(
-                object_name, obj_type, method_name, arg_strings, is_standalone, target_var
+                object_expression, obj_type, method_name, arg_strings, is_standalone, target_var
             )
         if self.is_tensor_type(obj_type):
             return self._generate_tensor_method_call(
-                object_name, obj_type, method_name, arg_strings, is_standalone, target_var
+                object_expression, obj_type, method_name, arg_strings, is_standalone, target_var
             )
 
         if self._is_class_type(obj_type):
-            full_args = object_name
+            full_args = object_expression
             if arg_strings:
                 full_args += ", " + ", ".join(arg_strings)
             expr = f"{obj_type}_{method_name}({full_args})"

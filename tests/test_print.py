@@ -20,3 +20,27 @@ int main(void) {
 }
 """
     run(P, C)
+
+
+def test_print_preserves_string_labels_containing_equals():
+    P = r'''
+def main() -> int:
+    var prediction: float32 = 0.5
+    var loss: float32 = 0.25
+    print("prediction =", prediction)
+    print("loss =", loss)
+
+    return 0
+'''
+
+    C = r'''
+int main(void) {
+    float prediction = 0.5;
+    float loss = 0.25;
+    printf("%s %f\n", "prediction =", prediction);
+    printf("%s %f\n", "loss =", loss);
+    int ocean_return_0 = 0;
+    return ocean_return_0;
+}
+'''
+    run(P, C)

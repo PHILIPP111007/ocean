@@ -785,7 +785,8 @@ class Parser:
 
         # 1. Вызов метода объекта: obj.method(args)
         object_method_pattern = (
-            r"^([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"
+            r"^([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\."
+            r"([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"
         )
         object_method_match = re.match(object_method_pattern, line)
 
@@ -2530,7 +2531,8 @@ class Parser:
 
         # 4.3 Вызов метода объекта: obj.method(args)
         obj_method_pattern = (
-            r"^([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"
+            r"^([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\."
+            r"([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"
         )
         obj_method_match = re.match(obj_method_pattern, expression)
         if obj_method_match:
@@ -2577,7 +2579,10 @@ class Parser:
             return {"type": "function_call", "function": func_name, "arguments": args}
 
         # 4.6 Доступ к атрибуту: obj.attr
-        simple_attr_pattern = r"^([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)$"
+        simple_attr_pattern = (
+            r"^([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\."
+            r"([a-zA-Z_][a-zA-Z0-9_]*)$"
+        )
         simple_attr_match = re.match(simple_attr_pattern, expression)
         if simple_attr_match:
             obj_name, attr_name = simple_attr_match.groups()
@@ -3513,12 +3518,16 @@ class Parser:
 
         # Парсим каждую часть
         for part in parts:
-            # Проверяем, является ли часть опцией (содержит "=")
-            if "=" in part and not self._is_inside_brackets(part):
+            # Проверяем, является ли часть именованной опцией. Равенство
+            # внутри строкового литерала, например в ``print("loss =", x)``,
+            # не является синтаксисом ``key=value``.
+            keyword_match = re.match(
+                r"^([a-zA-Z_][a-zA-Z0-9_]*)\s*=(?!=)(.*)$", part
+            )
+            if keyword_match and not self._is_inside_brackets(part):
                 # Это опция
-                key, value = part.split("=", 1)
-                key = key.strip()
-                value = value.strip()
+                key = keyword_match.group(1)
+                value = keyword_match.group(2).strip()
 
                 # Парсим значение опции
                 value_info = self._parse_option_value(value)
@@ -5091,15 +5100,22 @@ class Parser:
             args = self.parse_function_arguments_to_ast(args_str)
 
         # Находим объект и его тип
-        obj_symbol, found_scope = self.find_symbol_recursive(scope, obj_name)
-        if not obj_symbol:
+        # A receiver may be a field path such as ``self.hidden``.  The
+        # complete type is resolved by the backend; parsing only needs to
+        # preserve the path so the call is not mistaken for a free function.
+        obj_symbol, found_scope = (
+            self.find_symbol_recursive(scope, obj_name)
+            if "." not in obj_name
+            else (None, None)
+        )
+        if not obj_symbol and "." not in obj_name:
             logger.debug(f"Error: Object '{obj_name}' not found")
             return False
 
         # ИНИЦИАЛИЗИРУЕМ ПЕРЕМЕННЫЕ ПО УМОЛЧАНИЮ
         is_inherited = False
         inherited_from = None
-        obj_type = obj_symbol.get("type", "")
+        obj_type = obj_symbol.get("type", "") if obj_symbol else ""
         method_found = False
 
         # Проверяем, есть ли такой метод в классе или его родителях
@@ -5149,6 +5165,18 @@ class Parser:
                 self.resolve_method_info(obj_type, method_name) if obj_type else {}
             )
 
+        # A standalone call must be emitted for void-like object methods. A
+        # dotted receiver is resolved later by the backend, so preserve it as
+        # standalone there as well (for example ``self.hidden.initialize()``).
+        builtin_receiver = (
+            obj_type == "str"
+            or obj_type.startswith(("list[", "dict[", "tuple[", "tensor["))
+        )
+        is_standalone = "." in obj_name or (
+            not builtin_receiver
+            and method_info.get("return_type") in {None, "None", "void"}
+        )
+
         operations = [
             {
                 "type": "METHOD_CALL",
@@ -5186,6 +5214,7 @@ class Parser:
                 "method": method_name,
                 "method_info": method_info,  # Сохраняем полную информацию
                 "arguments": args,
+                "is_standalone": is_standalone,
                 "operations": operations,
                 "dependencies": list(set(dependencies)),
                 "expression_ast": method_ast,

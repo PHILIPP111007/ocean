@@ -77,3 +77,15 @@ def test_cli_accepts_custom_paths_flags_and_run_arguments(tmp_path):
     assert args.cflag_list == ["-O3", "-pthread"]
     assert args.cflags == "-Wall -Wextra"
     assert args.run_arg == ["hello"]
+
+
+def test_positional_source_does_not_use_package_entry():
+    args = build_argument_parser().parse_args(["build", "examples/neural_network.oc"])
+
+    _, source_path, json_path, c_path, binary_path = parse_cli_paths(args)
+
+    source = (Path("examples") / "neural_network.oc").resolve()
+    assert source_path == source
+    assert json_path == source.with_suffix(".parsed.json")
+    assert c_path == source.with_suffix(".generated.c")
+    assert binary_path == source.with_suffix("")

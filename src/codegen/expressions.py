@@ -338,32 +338,21 @@ class ExpressionsMixin:
         obj_name = ast.get("object", "")
         attr_name = ast.get("attribute", "")
 
-        # Проверяем, является ли объект классом
-        if obj_name != "self":
+        if obj_name != "self" and "." not in obj_name:
             self.assert_can_read(obj_name)
+
+        _, object_expression = self.resolve_object_path(obj_name)
+        if object_expression != obj_name or obj_name == "self":
+            return f"{object_expression}->{attr_name}"
+
         var_info = self.get_variable_info(obj_name)
-
-        if obj_name == "self":
-            # self всегда является указателем на структуру класса
-            return f"self->{attr_name}"
-        elif var_info:
-            obj_type = var_info.get("py_type", "")
-
-            if self.is_array_type(obj_type) or self.is_tensor_type(obj_type):
-                return f"{obj_name}->{attr_name}"
-
-            # Проверяем, является ли это классом или указателем
-            if self._is_class_type(obj_type):
-                # Для классов используем стрелочку
-                return f"{obj_name}->{attr_name}"
-            elif var_info.get("is_pointer", False):
-                # Для указателей используем стрелочку
-                return f"{obj_name}->{attr_name}"
-            else:
-                # Для обычных структур используем точку
-                return f"{obj_name}.{attr_name}"
-
-        # По умолчанию используем точку
+        if var_info and (
+            var_info.get("is_pointer", False)
+            or self._is_class_type(var_info.get("py_type", ""))
+            or self.is_array_type(var_info.get("py_type", ""))
+            or self.is_tensor_type(var_info.get("py_type", ""))
+        ):
+            return f"{obj_name}->{attr_name}"
         return f"{obj_name}.{attr_name}"
 
     def _generate_expression_from_ast_for_init(
@@ -398,6 +387,14 @@ class ExpressionsMixin:
             # Если это не параметр, возможно это атрибут self
             logger.debug(f"Not a constructor parameter")
             return var_name
+
+        elif node_type == "constructor_call":
+            class_name = ast.get("class_name", "")
+            arguments = [
+                self._generate_expression_from_ast_for_init(argument, param_names)
+                for argument in ast.get("arguments", [])
+            ]
+            return f"create_{class_name}({', '.join(arguments)})"
 
         elif node_type == "binary_operation":
             left_ast = ast.get("left", {})
@@ -472,6 +469,14 @@ class ExpressionsMixin:
                 return f'"{value}"'
             else:
                 return str(value)
+
+        elif node_type == "constructor_call":
+            class_name = ast.get("class_name", "")
+            arguments = [
+                self._generate_expression_from_ast(argument, param_names)
+                for argument in ast.get("arguments", [])
+            ]
+            return f"create_{class_name}({', '.join(arguments)})"
 
         elif node_type == "binary_operation":
             left_ast = ast.get("left", {})
