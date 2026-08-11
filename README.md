@@ -2,146 +2,172 @@
 
 <img src="images/ocean.jpg" alt="alt text" width="500"/>
 
-## Info
+Ocean — Python-подобный язык, который компилируется в C11. Проект ориентирован на системное программирование и вычисления для ML, с явными borrow-параметрами и проверками владения на этапе генерации.
 
-This program is a Python-like implementation of the C language.
+## Архитектура
 
-Because it's similar to Python, the entry barrier is low. My goal is to make it as memory-safe as possible, which is something C lacks.
+Основной pipeline выглядит так:
 
-I'm creating this language for specialists working primarily with neural networks. But it can be used anywhere, as it's almost a complete copy of C.
+`Parser → JSON AST → JSONValidator → CCodeGenerator → C11`
 
-## Tests
+- `main.py` — демонстрационный pipeline: читает `examples/main.oc`, сохраняет parsed JSON и generated C.
+- `src/parser.py` — разбор языка, типов, функций, индексации и `array/tensor` literals.
+- `src/debug.py` — проверка JSON AST.
+- `src/compiler.py` — совместимый публичный импорт `CCodeGenerator`.
+- `src/codegen/` — backend, разделённый на mixins: типы, выражения, statements, scopes, ownership, containers и OOP.
+- `src/codegen/array_codegen.py` — unique-owned contiguous `array[T]`.
+- `src/codegen/tensor_codegen.py` — contiguous row-major `tensor[T]` с shape, strides и bounds checks.
+- `tests/` — pytest-тесты генератора; `docs/` — handoff и описание memory model.
+
+## Быстрый запуск
+
+Создайте или используйте локальное окружение:
 
 ```bash
-pytest  --verbose
+python -m venv .venv
+./.venv/bin/pip install -r requirements.txt  # если requirements.txt присутствует
 ```
 
-## Benchmarks
+Запустить весь тестовый набор:
 
-### Matmul
+```bash
+./.venv/bin/pytest -v
+```
 
-<img src="images/matmul.png" alt="alt text" width="1000"/>
+Запустить демонстрационный compiler pipeline:
 
-## Examples
+```bash
+./.venv/bin/python main.py
+```
 
-For more information about language syntax fell free to see `./tests` folder
+Команда обновит `examples/parsed_code.json` и `examples/generated_code.c`, затем соберёт C-программу в `examples/generated_code`. Для ручной проверки generated C используйте C11 и строгие предупреждения:
 
-### Imports
+```bash
+gcc -std=c11 -Wall -Wextra -Wpedantic \
+    -fsanitize=address,undefined \
+    examples/generated_code.c -o /tmp/ocean_generated
+```
+
+## Array и tensor
+
+`array[T]` — одномерный owned contiguous buffer:
 
 ```python
-cimport "my_header.h" # your module in C
-cimport <my_header.h> # system import
-import "./module.p" # your module
+def scale(values: &mut array[float32], factor: float32) -> None:
+    for i in range(len(values)):
+        values[i] = values[i] * factor
+    return None
 ```
 
-### Input
+`tensor[T]` — N-dimensional row-major storage:
 
 ```python
-def main() -> int:
-    var name: str = input("Enter your name: ")
-    print("Hello, ", name)
-    return 0
+var A: tensor[float32] = [[1.0, 2.0], [3.0, 4.0]]
+var value: float32 = A[0, 1]
+A[1, 0] = value
+var rows: int = A.shape[0]
+var elements: int = len(A)
 ```
 
-### Cycles
+Большой пример с dot product, matmul, bias и 3D tensor находится в [examples/arrays_tensors.oc](examples/arrays_tensors.oc). Его backend-проверка:
 
-```python
-def main() -> int:
-    for i in range(0, 10, -1):
-        print("i = ", i)
-    return 0
+```bash
+./.venv/bin/pytest -v tests/test_array_tensor.py
 ```
 
-### C code -> function should starts with @
+## Borrow и ownership
+
+`array[T]` и `tensor[T]` владеют выделенным storage и автоматически освобождаются в конце scope. Параметры `&T` — immutable borrow, `&mut T` — exclusive mutable borrow. Borrow-пути не добавляют ARC retain/release в generated C.
+
+Прямые вызовы C обозначаются через `@` и остаются unsafe FFI-границей:
 
 ```python
 cimport <math.h>
 
 def main() -> float:
-    var a: float = @sqrt(16)   # C code -> function should starts with @
-    return a
+    return @sqrt(16.0)
 ```
 
-### OOP
+## Старые примеры в новых паттернах
+
+### Matrix: `list[list[int]]` → `tensor[float32]`
+
+Старый класс `Matrix` из `examples/main.oc` больше не нужен для плотной математики. Storage и shape теперь принадлежат tensor, а вычислительные функции получают borrow-параметры:
 
 ```python
-class Object:
-    def __init__(self, age: int) -> None:
-        pass
+def matmul(A: &tensor[float32], B: &tensor[float32], C: &mut tensor[float32]) -> None:
+    var rows: int = A.shape[0]
+    var shared: int = A.shape[1]
+    var cols: int = B.shape[1]
 
-class User(Object):
-    def __init__(self, age: int, a: int) -> None:
-        self.age = age
-    
-    def get_age(self) -> int:
-        return self.age
+    for i in range(rows):
+        for j in range(cols):
+            var total: float32 = 0.0
+            for k in range(shared):
+                total = total + A[i, k] * B[k, j]
+            C[i, j] = total
 
-
-def main() -> int:
-    var u: User = User(10, 1)
-    print(u.age)
-
-    var age: int = u.get_age()
-    print(age)
-
-    return 0
-```
-
-```python
-class A:
-    def get_age_2(self) -> int:
-        return 1
-
-class B:
-    def get_age(self) -> int:
-        return 1
-    
-    def get_age_1(self) -> int:
-        return 10
-
-class User(A, B):
-    def __init__(self, age: int, a: int) -> None:
-        self.age = age
-    
-    def get_age(self) -> int:
-        return self.age
-
-def main() -> int:
-    var u: User = User(10, 1)
-    var age: int = u.get_age_2()
-
-    print(age)
-
-    return 0
-```
-
-### Pthread (Multiprocessing)
-
-```python
-cimport <stdio.h>
-cimport <stdlib.h>
-cimport <string.h>
-cimport <stdbool.h>
-cimport <pthread.h>
-
-class Object:
-    def __init__(self, a: int):
-        self.a = a
-    
-    def get_a(self) -> int:
-        return self.a
-
-def backward_worker(arg: None) -> None:
-    var a: Object = arg
-    var b: int = a.get_a()
-    print(b)
     return None
 
-def main() -> int:
-    var thread: pthread_t = None
-    var backward_thread_data: Object = Object(100)
 
-    @pthread_create(&thread, NULL, backward_worker, backward_thread_data)
-    @pthread_join(thread, NULL)
+def main() -> int:
+    var A: tensor[float32] = [[1.0, 2.0], [3.0, 4.0]]
+    var B: tensor[float32] = [[5.0, 6.0], [7.0, 8.0]]
+    var C: tensor[float32] = [[0.0, 0.0], [0.0, 0.0]]
+    matmul(A, B, C)
+    print(C[0, 0], C[1, 1])
     return 0
 ```
+
+### Одномерный список → owned `array`
+
+Для вектора чисел используйте `array[T]`, а не общий list runtime. Функция изменяет буфер через exclusive borrow:
+
+```python
+def scale(values: &mut array[float32], factor: float32) -> None:
+    for i in range(len(values)):
+        values[i] = values[i] * factor
+    return None
+
+
+def dot(left: &array[float32], right: &array[float32]) -> float32:
+    var result: float32 = 0.0
+    for i in range(len(left)):
+        result = result + left[i] * right[i]
+    return result
+
+
+def main() -> int:
+    var values: array[float32] = [1.0, 2.0, 3.0]
+    var weights: array[float32] = [0.5, 1.0, 1.5]
+    scale(values, 2.0)
+    print(dot(values, weights))
+    return 0
+```
+
+### Старые базовые примеры
+
+Input и циклы остаются простыми, но вычислительные данные лучше передавать через typed borrow:
+
+```python
+def main() -> int:
+    var name: str = input("Enter your name: ")
+    var values: array[float32] = [1.0, 2.0, 3.0]
+    scale(values, 2.0)
+    print("Hello, ", name, values[0])
+    return 0
+```
+
+C/POSIX-вызовы по-прежнему явно отделены от безопасного кода через `@`:
+
+```python
+cimport <math.h>
+
+def main() -> float:
+    var result: float32 = @sqrt(16.0)
+    return result
+```
+
+## Разработка
+
+Соблюдайте четыре пробела в Python-коде, snake_case для функций и PascalCase для классов. Новые backend-проходы добавляйте в соответствующий модуль `src/codegen/`, а для изменений ownership или generated C — отдельный pytest-регрессионный тест. Generated Ocean symbols используют префикс `ocean_`.
