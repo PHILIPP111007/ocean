@@ -55,8 +55,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_codegen_array_codegen",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "array_codegen.py"
     },
     {
@@ -715,8 +715,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_dictcodegenmixin",
-      "community": 31,
-      "community_name": "DictCodegenMixin",
+      "community": 27,
+      "community_name": "CCodeGenerator",
       "norm_label": "dictcodegenmixin"
     },
     {
@@ -727,8 +727,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_dictcodegenmixin_generate_dict_struct",
-      "community": 31,
-      "community_name": "DictCodegenMixin",
+      "community": 27,
+      "community_name": "CCodeGenerator",
       "norm_label": ".generate_dict_struct()"
     },
     {
@@ -739,8 +739,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_dictcodegenmixin_generate_dict_declaration",
-      "community": 31,
-      "community_name": "DictCodegenMixin",
+      "community": 27,
+      "community_name": "CCodeGenerator",
       "norm_label": "._generate_dict_declaration()"
     },
     {
@@ -750,8 +750,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_rationale_11",
-      "community": 31,
-      "community_name": "DictCodegenMixin",
+      "community": 27,
+      "community_name": "CCodeGenerator",
       "norm_label": "generate an arc-owned chained hash table."
     },
     {
@@ -761,8 +761,8 @@
       "source_location": "L255",
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_rationale_255",
-      "community": 31,
-      "community_name": "DictCodegenMixin",
+      "community": 27,
+      "community_name": "CCodeGenerator",
       "norm_label": "\u0433\u0435\u043d\u0435\u0440\u0438\u0440\u0443\u0435\u0442 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0441\u043b\u043e\u0432\u0430\u0440\u044f"
     },
     {
@@ -1744,8 +1744,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_codegen_naming",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": "naming.py"
     },
     {
@@ -1757,8 +1757,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_codegen_naming_namingmixin",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": "namingmixin"
     },
     {
@@ -1769,8 +1769,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_naming_namingmixin_discover_generated_identifiers",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": "._discover_generated_identifiers()"
     },
     {
@@ -1781,8 +1781,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_naming_namingmixin_rewrite_identifiers_outside_literals",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": "._rewrite_identifiers_outside_literals()"
     },
     {
@@ -1793,8 +1793,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_naming_namingmixin_apply_ocean_namespace",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": ".apply_ocean_namespace()"
     },
     {
@@ -1804,8 +1804,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "src_codegen_naming_rationale_8",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": "namespace every phils-generated c type/function with ``ocean_``. the pass first..."
     },
     {
@@ -3431,10 +3431,34 @@
       "norm_label": ".generate_tensor_index_assignment()"
     },
     {
-      "label": ".generate_tensor_declaration()",
+      "label": "._is_tensor_zeros_expression()",
       "file_type": "code",
       "source_file": "src/codegen/tensor_codegen.py",
       "source_location": "L49",
+      "_callable": true,
+      "_origin": "ast",
+      "id": "src_codegen_tensor_codegen_tensorcodegenmixin_is_tensor_zeros_expression",
+      "community": 35,
+      "community_name": "TensorCodegenMixin",
+      "norm_label": "._is_tensor_zeros_expression()"
+    },
+    {
+      "label": "._generate_tensor_zeros_expr()",
+      "file_type": "code",
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L57",
+      "_callable": true,
+      "_origin": "ast",
+      "id": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_zeros_expr",
+      "community": 35,
+      "community_name": "TensorCodegenMixin",
+      "norm_label": "._generate_tensor_zeros_expr()"
+    },
+    {
+      "label": ".generate_tensor_declaration()",
+      "file_type": "code",
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L72",
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_declaration",
@@ -3446,7 +3470,7 @@
       "label": ".generate_tensor_assignment()",
       "file_type": "code",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L75",
+      "source_location": "L100",
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_assignment",
@@ -3458,7 +3482,7 @@
       "label": "._generate_tensor_literal_expr()",
       "file_type": "code",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L82",
+      "source_location": "L116",
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_literal_expr",
@@ -3470,7 +3494,7 @@
       "label": "._infer_tensor_shape()",
       "file_type": "code",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L105",
+      "source_location": "L139",
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_tensor_codegen_tensorcodegenmixin_infer_tensor_shape",
@@ -3482,7 +3506,7 @@
       "label": ".generate_tensor_struct()",
       "file_type": "code",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L125",
+      "source_location": "L159",
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_struct",
@@ -4226,8 +4250,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_get_variable_state",
-      "community": 5,
-      "community_name": ".add_error",
+      "community": 14,
+      "community_name": ".validate_assignment",
       "norm_label": ".get_variable_state()"
     },
     {
@@ -4454,8 +4478,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_declaration",
-      "community": 14,
-      "community_name": ".validate_assignment",
+      "community": 5,
+      "community_name": ".add_error",
       "norm_label": ".validate_declaration()"
     },
     {
@@ -5253,8 +5277,8 @@
       "source_location": "L260",
       "_origin": "ast",
       "id": "src_debug_rationale_260",
-      "community": 5,
-      "community_name": ".add_error",
+      "community": 14,
+      "community_name": ".validate_assignment",
       "norm_label": "\u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442 \u0442\u0435\u043a\u0443\u0449\u0435\u0435 \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438"
     },
     {
@@ -5462,8 +5486,8 @@
       "source_location": "L1090",
       "_origin": "ast",
       "id": "src_debug_rationale_1090",
-      "community": 14,
-      "community_name": ".validate_assignment",
+      "community": 5,
+      "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438"
     },
     {
@@ -6671,8 +6695,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_reset_state",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 55,
+      "community_name": ".reset_state",
       "norm_label": ".reset_state()"
     },
     {
@@ -6875,8 +6899,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_code",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 55,
+      "community_name": ".reset_state",
       "norm_label": ".parse_code()"
     },
     {
@@ -7571,7 +7595,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_class_attribute_initialization",
-      "community": 36,
+      "community": 48,
       "community_name": ".parse_class_attribute_initialization",
       "norm_label": ".parse_class_attribute_initialization()"
     },
@@ -7607,7 +7631,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_extract_container_info",
-      "community": 36,
+      "community": 48,
       "community_name": ".parse_class_attribute_initialization",
       "norm_label": "._extract_container_info()"
     },
@@ -7739,7 +7763,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_infer_type_from_ast",
-      "community": 36,
+      "community": 48,
       "community_name": ".parse_class_attribute_initialization",
       "norm_label": "._infer_type_from_ast()"
     },
@@ -7822,8 +7846,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "src_parser_rationale_35",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 55,
+      "community_name": ".reset_state",
       "norm_label": "reset all per-compilation parser state. a parser instance can safely be reused..."
     },
     {
@@ -7910,8 +7934,8 @@
       "source_location": "L356",
       "_origin": "ast",
       "id": "src_parser_rationale_356",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 55,
+      "community_name": ".reset_state",
       "norm_label": "parse one phils compilation unit into the legacy graph + typed metadata. the..."
     },
     {
@@ -8482,7 +8506,7 @@
       "source_location": "L5142",
       "_origin": "ast",
       "id": "src_parser_rationale_5142",
-      "community": 36,
+      "community": 48,
       "community_name": ".parse_class_attribute_initialization",
       "norm_label": "parse ``self.attr [: type] = value`` in a constructor."
     },
@@ -8515,7 +8539,7 @@
       "source_location": "L5428",
       "_origin": "ast",
       "id": "src_parser_rationale_5428",
-      "community": 36,
+      "community": 48,
       "community_name": ".parse_class_attribute_initialization",
       "norm_label": "\u0438\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u0442 \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044e \u043e \u043a\u043e\u043d\u0442\u0435\u0438\u043d\u0435\u0440\u0435 \u0438\u0437 ast"
     },
@@ -8636,7 +8660,7 @@
       "source_location": "L5846",
       "_origin": "ast",
       "id": "src_parser_rationale_5846",
-      "community": 36,
+      "community": 48,
       "community_name": ".parse_class_attribute_initialization",
       "norm_label": "\u0432\u044b\u0432\u043e\u0434\u0438\u0442 \u0442\u0438\u043f \u0438\u0437 ast \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u044f"
     },
@@ -8713,8 +8737,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_parsing_init",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "parsing/__init__.py"
     },
     {
@@ -8724,8 +8748,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_parsing_type_system",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "type_system.py"
     },
     {
@@ -8737,8 +8761,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 43,
+      "community_name": "TypeSpec",
       "norm_label": "typespec"
     },
     {
@@ -8749,8 +8773,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_canonical",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 43,
+      "community_name": "TypeSpec",
       "norm_label": ".canonical()"
     },
     {
@@ -8761,8 +8785,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_base_name",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 43,
+      "community_name": "TypeSpec",
       "norm_label": ".base_name()"
     },
     {
@@ -8773,8 +8797,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_memory_kind",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 43,
+      "community_name": "TypeSpec",
       "norm_label": ".memory_kind()"
     },
     {
@@ -8785,8 +8809,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_borrow",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 43,
+      "community_name": "TypeSpec",
       "norm_label": ".is_borrow()"
     },
     {
@@ -8797,8 +8821,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_mut_borrow",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 43,
+      "community_name": "TypeSpec",
       "norm_label": ".is_mut_borrow()"
     },
     {
@@ -8809,8 +8833,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_raw_pointer",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 43,
+      "community_name": "TypeSpec",
       "norm_label": ".is_raw_pointer()"
     },
     {
@@ -8821,8 +8845,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_optional",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 43,
+      "community_name": "TypeSpec",
       "norm_label": ".is_optional()"
     },
     {
@@ -8833,8 +8857,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_to_dict",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 43,
+      "community_name": "TypeSpec",
       "norm_label": ".to_dict()"
     },
     {
@@ -8845,8 +8869,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_split_top_level",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "split_top_level()"
     },
     {
@@ -8870,8 +8894,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "typeparser"
     },
     {
@@ -8882,8 +8906,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser_parse",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": ".parse()"
     },
     {
@@ -8894,8 +8918,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser_parse_generic",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "._parse_generic()"
     },
     {
@@ -8906,8 +8930,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser_matching_outer_brackets",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "._matching_outer_brackets()"
     },
     {
@@ -8918,8 +8942,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_infer_literal_shape",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "infer_literal_shape()"
     },
     {
@@ -8929,8 +8953,8 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_47",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 43,
+      "community_name": "TypeSpec",
       "norm_label": "structured representation of a phils type. the parser still emits the canonical..."
     },
     {
@@ -8940,8 +8964,8 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_140",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "split text only when not nested in (), [], {}, <> or strings."
     },
     {
@@ -8962,8 +8986,8 @@
       "source_location": "L286",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_286",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "recursive parser for phils type expressions."
     },
     {
@@ -8973,8 +8997,8 @@
       "source_location": "L355",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_355",
-      "community": 41,
-      "community_name": "parser.py",
+      "community": 31,
+      "community_name": "TypeParser",
       "norm_label": "infer a rectangular shape from nested list literals. returns ``none`` for..."
     },
     {
@@ -9068,6 +9092,30 @@
       "community": 0,
       "community_name": "run",
       "norm_label": "test_tensor_lowering_shape_and_index_mutation()"
+    },
+    {
+      "label": "test_tensor_the_big_code()",
+      "file_type": "code",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L57",
+      "_callable": true,
+      "_origin": "ast",
+      "id": "tests_test_array_tensor_test_tensor_the_big_code",
+      "community": 0,
+      "community_name": "run",
+      "norm_label": "test_tensor_the_big_code()"
+    },
+    {
+      "label": "test_tensor_zeros_dynamic_shape()",
+      "file_type": "code",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L193",
+      "_callable": true,
+      "_origin": "ast",
+      "id": "tests_test_array_tensor_test_tensor_zeros_dynamic_shape",
+      "community": 0,
+      "community_name": "run",
+      "norm_label": "test_tensor_zeros_dynamic_shape()"
     },
     {
       "label": "test_c_code.py",
@@ -9820,7 +9868,7 @@
       "_origin": "ast",
       "id": "readme",
       "community": 39,
-      "community_name": "Examples",
+      "community_name": "Ocean \ud83c\udf0a",
       "norm_label": "readme.md"
     },
     {
@@ -9831,129 +9879,107 @@
       "_origin": "ast",
       "id": "readme_ocean",
       "community": 39,
-      "community_name": "Examples",
+      "community_name": "Ocean \ud83c\udf0a",
       "norm_label": "ocean \ud83c\udf0a"
     },
     {
-      "label": "Info",
+      "label": "\u0410\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L5",
+      "source_location": "L7",
       "_origin": "ast",
-      "id": "readme_info",
+      "id": "readme_\u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "info"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430"
     },
     {
-      "label": "Tests",
+      "label": "\u0411\u044b\u0441\u0442\u0440\u044b\u0439 \u0437\u0430\u043f\u0443\u0441\u043a",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L13",
+      "source_location": "L22",
       "_origin": "ast",
-      "id": "readme_tests",
+      "id": "readme_\u0431\u044b\u0441\u0442\u0440\u044b\u0439_\u0437\u0430\u043f\u0443\u0441\u043a",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "tests"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u0431\u044b\u0441\u0442\u0440\u044b\u0438 \u0437\u0430\u043f\u0443\u0441\u043a"
     },
     {
-      "label": "Benchmarks",
+      "label": "Array \u0438 tensor",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L19",
+      "source_location": "L51",
       "_origin": "ast",
-      "id": "readme_benchmarks",
+      "id": "readme_array_\u0438_tensor",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "benchmarks"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "array \u0438 tensor"
     },
     {
-      "label": "Matmul",
+      "label": "Borrow \u0438 ownership",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L21",
+      "source_location": "L88",
       "_origin": "ast",
-      "id": "readme_matmul",
+      "id": "readme_borrow_\u0438_ownership",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "matmul"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "borrow \u0438 ownership"
     },
     {
-      "label": "Examples",
+      "label": "\u0421\u0442\u0430\u0440\u044b\u0435 \u043f\u0440\u0438\u043c\u0435\u0440\u044b \u0432 \u043d\u043e\u0432\u044b\u0445 \u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L25",
+      "source_location": "L101",
       "_origin": "ast",
-      "id": "readme_examples",
+      "id": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b_\u0432_\u043d\u043e\u0432\u044b\u0445_\u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "examples"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u0441\u0442\u0430\u0440\u044b\u0435 \u043f\u0440\u0438\u043c\u0435\u0440\u044b \u0432 \u043d\u043e\u0432\u044b\u0445 \u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445"
     },
     {
-      "label": "Imports",
+      "label": "Matrix: `list[list[int]]` \u2192 `tensor[float32]`",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L29",
+      "source_location": "L103",
       "_origin": "ast",
-      "id": "readme_imports",
+      "id": "readme_matrix_list_list_int_tensor_float32",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "imports"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "matrix: `list[list[int]]` \u2192 `tensor[float32]`"
     },
     {
-      "label": "Input",
+      "label": "\u041e\u0434\u043d\u043e\u043c\u0435\u0440\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u2192 owned `array`",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L37",
+      "source_location": "L132",
       "_origin": "ast",
-      "id": "readme_input",
+      "id": "readme_\u043e\u0434\u043d\u043e\u043c\u0435\u0440\u043d\u044b\u0439_\u0441\u043f\u0438\u0441\u043e\u043a_owned_array",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "input"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u043e\u0434\u043d\u043e\u043c\u0435\u0440\u043d\u044b\u0438 \u0441\u043f\u0438\u0441\u043e\u043a \u2192 owned `array`"
     },
     {
-      "label": "Cycles",
+      "label": "\u0421\u0442\u0430\u0440\u044b\u0435 \u0431\u0430\u0437\u043e\u0432\u044b\u0435 \u043f\u0440\u0438\u043c\u0435\u0440\u044b",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L46",
+      "source_location": "L158",
       "_origin": "ast",
-      "id": "readme_cycles",
+      "id": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u0431\u0430\u0437\u043e\u0432\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "cycles"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u0441\u0442\u0430\u0440\u044b\u0435 \u0431\u0430\u0437\u043e\u0432\u044b\u0435 \u043f\u0440\u0438\u043c\u0435\u0440\u044b"
     },
     {
-      "label": "C code -> function should starts with @",
+      "label": "\u0420\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L55",
+      "source_location": "L181",
       "_origin": "ast",
-      "id": "readme_c_code_function_should_starts_with",
+      "id": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "c code -> function should starts with @"
-    },
-    {
-      "label": "OOP",
-      "file_type": "document",
-      "source_file": "README.md",
-      "source_location": "L65",
-      "_origin": "ast",
-      "id": "readme_oop",
-      "community": 39,
-      "community_name": "Examples",
-      "norm_label": "oop"
-    },
-    {
-      "label": "Pthread (Multiprocessing)",
-      "file_type": "document",
-      "source_file": "README.md",
-      "source_location": "L118",
-      "_origin": "ast",
-      "id": "readme_pthread_multiprocessing",
-      "community": 39,
-      "community_name": "Examples",
-      "norm_label": "pthread (multiprocessing)"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430"
     },
     {
       "label": "Handoff.md",
@@ -15393,7 +15419,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L85",
+      "source_location": "L119",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_literal_expr",
@@ -15405,10 +15431,22 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L134",
+      "source_location": "L168",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_struct",
+      "target": "runtimeerror"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L60",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_zeros_expr",
       "target": "runtimeerror"
     },
     {
@@ -16476,7 +16514,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L75",
+      "source_location": "L100",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin",
@@ -16487,7 +16525,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L49",
+      "source_location": "L72",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin",
@@ -16520,7 +16558,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L82",
+      "source_location": "L116",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin",
@@ -16531,7 +16569,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L125",
+      "source_location": "L159",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin",
@@ -16542,11 +16580,33 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L105",
+      "source_location": "L57",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_codegen_tensor_codegen_tensorcodegenmixin",
+      "target": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_zeros_expr",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L139",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin",
       "target": "src_codegen_tensor_codegen_tensorcodegenmixin_infer_tensor_shape",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L49",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_codegen_tensor_codegen_tensorcodegenmixin",
+      "target": "src_codegen_tensor_codegen_tensorcodegenmixin_is_tensor_zeros_expression",
       "confidence_score": 1.0
     },
     {
@@ -16598,7 +16658,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L90",
+      "source_location": "L124",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_literal_expr",
@@ -16610,10 +16670,22 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L129",
+      "source_location": "L163",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_struct",
+      "target": "src_codegen_tensor_codegen_tensorcodegenmixin_tensor_struct_name",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L70",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_zeros_expr",
       "target": "src_codegen_tensor_codegen_tensorcodegenmixin_tensor_struct_name",
       "confidence_score": 1.0
     },
@@ -16658,7 +16730,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L67",
+      "source_location": "L92",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_declaration",
@@ -16670,7 +16742,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L92",
+      "source_location": "L126",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_literal_expr",
@@ -16706,7 +16778,67 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L59",
+      "source_location": "L104",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_assignment",
+      "target": "src_codegen_tensor_codegen_tensorcodegenmixin_is_tensor_zeros_expression",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L83",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_declaration",
+      "target": "src_codegen_tensor_codegen_tensorcodegenmixin_is_tensor_zeros_expression",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L107",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_assignment",
+      "target": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_zeros_expr",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L84",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_declaration",
+      "target": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_zeros_expr",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L63",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_zeros_expr",
+      "target": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_struct",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/codegen/tensor_codegen.py",
+      "source_location": "L82",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_declaration",
@@ -16718,7 +16850,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L91",
+      "source_location": "L125",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_literal_expr",
@@ -16730,7 +16862,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/codegen/tensor_codegen.py",
-      "source_location": "L83",
+      "source_location": "L117",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_codegen_tensor_codegen_tensorcodegenmixin_generate_tensor_literal_expr",
@@ -27544,6 +27676,18 @@
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L4",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_array_tensor",
+      "target": "tests_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
       "source_file": "tests/test_c_code.py",
       "source_location": "L1",
       "weight": 1.0,
@@ -27742,6 +27886,18 @@
       "_origin": "ast",
       "source": "tests_test_while_loop",
       "target": "tests_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L4",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_array_tensor",
+      "target": "tests_base_run",
       "confidence_score": 1.0
     },
     {
@@ -28462,6 +28618,28 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L57",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_array_tensor",
+      "target": "tests_test_array_tensor_test_tensor_the_big_code",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L193",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_array_tensor",
+      "target": "tests_test_array_tensor_test_tensor_zeros_dynamic_shape",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
@@ -28482,6 +28660,30 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_array_tensor_test_tensor_lowering_shape_and_index_mutation",
+      "target": "tests_test_array_tensor_generate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L181",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_array_tensor_test_tensor_the_big_code",
+      "target": "tests_test_array_tensor_generate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L194",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_array_tensor_test_tensor_zeros_dynamic_shape",
       "target": "tests_test_array_tensor_generate",
       "confidence_score": 1.0
     },
@@ -29006,121 +29208,99 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L19",
+      "source_location": "L51",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
-      "target": "readme_benchmarks",
+      "target": "readme_array_\u0438_tensor",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L25",
+      "source_location": "L88",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
-      "target": "readme_examples",
+      "target": "readme_borrow_\u0438_ownership",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L5",
+      "source_location": "L7",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
-      "target": "readme_info",
+      "target": "readme_\u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L13",
+      "source_location": "L22",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
-      "target": "readme_tests",
+      "target": "readme_\u0431\u044b\u0441\u0442\u0440\u044b\u0439_\u0437\u0430\u043f\u0443\u0441\u043a",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L21",
+      "source_location": "L181",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "readme_benchmarks",
-      "target": "readme_matmul",
+      "source": "readme_ocean",
+      "target": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L55",
+      "source_location": "L101",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_c_code_function_should_starts_with",
+      "source": "readme_ocean",
+      "target": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b_\u0432_\u043d\u043e\u0432\u044b\u0445_\u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L46",
+      "source_location": "L103",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_cycles",
+      "source": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b_\u0432_\u043d\u043e\u0432\u044b\u0445_\u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
+      "target": "readme_matrix_list_list_int_tensor_float32",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L29",
+      "source_location": "L132",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_imports",
+      "source": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b_\u0432_\u043d\u043e\u0432\u044b\u0445_\u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
+      "target": "readme_\u043e\u0434\u043d\u043e\u043c\u0435\u0440\u043d\u044b\u0439_\u0441\u043f\u0438\u0441\u043e\u043a_owned_array",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L37",
+      "source_location": "L158",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_input",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L65",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_oop",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L118",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_pthread_multiprocessing",
+      "source": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b_\u0432_\u043d\u043e\u0432\u044b\u0445_\u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
+      "target": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u0431\u0430\u0437\u043e\u0432\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b",
       "confidence_score": 1.0
     },
     {
@@ -29895,5 +30075,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "b9c7be0069284a30707426cffc4477d081922014"
+  "built_at_commit": "c2b1239738ebcf172386c53d32f9e3c8159820f1"
 }

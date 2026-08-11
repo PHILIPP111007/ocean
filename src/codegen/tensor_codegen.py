@@ -46,6 +46,29 @@ class TensorCodegenMixin:
         expressions = [self.generate_expression(index) for index in indices]
         self.add_line(self._tensor_set_call(variable, py_type, expressions, value))
 
+    def _is_tensor_zeros_expression(self, ast: Dict) -> bool:
+        return (
+            isinstance(ast, dict)
+            and ast.get("type") == "method_call"
+            and ast.get("object") == "tensor"
+            and ast.get("method") == "zeros"
+        )
+
+    def _generate_tensor_zeros_expr(self, var_name: str, py_type: str, ast: Dict) -> str:
+        args = ast.get("arguments", []) or []
+        if not args:
+            raise RuntimeError("tensor.zeros expects at least one dimension")
+        if not self.is_tensor_type(py_type):
+            raise RuntimeError(f"tensor.zeros target must be tensor[T], got {py_type}")
+        self.generate_tensor_struct(py_type)
+        shape_name = f"ocean_tensor_{var_name}_{self.temp_var_counter}_shape"
+        self.temp_var_counter += 1
+        dimensions = ", ".join(
+            f"(size_t)({self.generate_expression(argument)})" for argument in args
+        )
+        self.add_line(f"size_t {shape_name}[{len(args)}] = {{ {dimensions} }};")
+        return f"{self.tensor_struct_name(py_type)}_zeros({shape_name}, {len(args)})"
+
     def generate_tensor_declaration(self, node: Dict) -> None:
         var_name = node.get("var_name", "")
         var_type = node.get("var_type", "")
@@ -57,6 +80,8 @@ class TensorCodegenMixin:
 
         if expression_ast.get("type") == "list_literal":
             expr = self._generate_tensor_literal_expr(var_name, var_type, expression_ast)
+        elif self._is_tensor_zeros_expression(expression_ast):
+            expr = self._generate_tensor_zeros_expr(var_name, var_type, expression_ast)
         elif self._is_none_expression(expression_ast):
             expr = "NULL"
         else:
@@ -73,11 +98,20 @@ class TensorCodegenMixin:
         self.add_line(f"{self.tensor_c_type(var_type)} {var_name} = {expr};")
 
     def generate_tensor_assignment(self, node: Dict) -> None:
-        self._generate_owned_assignment(
-            node.get("symbols", [""])[0],
-            node.get("var_type") or self.get_variable_info(node.get("symbols", [""])[0]).get("py_type"),
-            node.get("expression_ast") or {},
-        )
+        target = node.get("symbols", [""])[0]
+        target_type = node.get("var_type") or self.get_variable_info(target).get("py_type")
+        expression_ast = node.get("expression_ast") or {}
+        if self._is_tensor_zeros_expression(expression_ast):
+            self.assert_can_move_or_delete(target)
+            self.add_line(self._owned_free_call(target, target_type))
+            expr = self._generate_tensor_zeros_expr(target, target_type, expression_ast)
+            self.add_line(f"{target} = {expr};")
+            info = self.get_variable_info(target)
+            info["is_deleted"] = False
+            info["is_moved"] = False
+            info["owns_reference"] = True
+            return
+        self._generate_owned_assignment(target, target_type, expression_ast)
 
     def _generate_tensor_literal_expr(self, var_name: str, py_type: str, ast: Dict) -> str:
         shape = self._infer_tensor_shape(ast)
@@ -166,15 +200,19 @@ static {struct_name}* {struct_name}_create(const {c_element_type}* values, size_
         stride *= tensor->shape[i];
     }}
     tensor->size = ndim ? stride : 0;
-    if (tensor->size != value_count) {{
+    if (tensor->size != value_count && !(values == NULL && value_count == 0)) {{
         fprintf(stderr, "Tensor literal size mismatch in {struct_name}\\n"); exit(1);
     }}
     if (tensor->size) {{
-        tensor->data = ({c_element_type}*)malloc(tensor->size * sizeof({c_element_type}));
+        tensor->data = ({c_element_type}*)calloc(tensor->size, sizeof({c_element_type}));
         if (!tensor->data) {{ fprintf(stderr, "Ocean allocation error: {struct_name} data\\n"); exit(1); }}
-        memcpy(tensor->data, values, tensor->size * sizeof({c_element_type}));
+        if (values) memcpy(tensor->data, values, tensor->size * sizeof({c_element_type}));
     }}
     return tensor;
+}}
+
+static {struct_name}* {struct_name}_zeros(const size_t* shape, size_t ndim) {{
+    return {struct_name}_create(NULL, 0, shape, ndim);
 }}
 
 static void {struct_name}_free({struct_name}* tensor) {{

@@ -69,6 +69,16 @@ var rows: int = A.shape[0]
 var elements: int = len(A)
 ```
 
+Для динамической формы используйте zero-filled constructor:
+
+```python
+var rows: int = 100
+var cols: int = 100
+var A: tensor[float32] = tensor.zeros(rows, cols)
+```
+
+`tensor.zeros(d0, d1, ...)` вычисляет форму во время выполнения, выделяет contiguous storage и инициализирует все элементы нулями.
+
 Большой пример с dot product, matmul, bias и 3D tensor находится в [examples/arrays_tensors.oc](examples/arrays_tensors.oc). Его backend-проверка:
 
 ```bash
