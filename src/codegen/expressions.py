@@ -361,7 +361,11 @@ class ExpressionsMixin:
         return f"{obj_name}.{attr_name}"
 
     def _generate_expression_from_ast_for_init(
-        self, ast: Dict, param_names: List[str]
+        self,
+        ast: Dict,
+        param_names: List[str],
+        target_type: str = "",
+        target_name: str = "field",
     ) -> str:
         """Генерирует выражение из AST для конструктора с подстановкой параметров"""
         if not ast:
@@ -400,6 +404,41 @@ class ExpressionsMixin:
                 for argument in ast.get("arguments", [])
             ]
             return f"create_{class_name}({', '.join(arguments)})"
+
+        elif node_type == "method_call":
+            if self._is_tensor_zeros_expression(ast):
+                return self._generate_tensor_zeros_expr(
+                    target_name,
+                    target_type,
+                    ast,
+                    expression_generator=lambda argument: self._generate_expression_from_ast_for_init(
+                        argument, param_names
+                    ),
+                )
+            raise RuntimeError(
+                f"method call '{ast.get('object', '')}.{ast.get('method', '')}' "
+                "is not supported in a constructor initializer"
+            )
+
+        elif node_type == "list_literal":
+            if self.is_tensor_type(target_type):
+                return self._generate_tensor_literal_expr(
+                    target_name,
+                    target_type,
+                    ast,
+                    expression_generator=lambda item: self._generate_expression_from_ast_for_init(
+                        item, param_names
+                    ),
+                )
+            # Keep the established constructor behavior for an empty list:
+            # calloc leaves the field NULL and later method initialization can
+            # replace it with a concrete list. Non-empty list fields need a
+            # dedicated owned-list initializer rather than a raw expression.
+            if target_type.startswith("list[") and not ast.get("items"):
+                return ""
+            raise RuntimeError(
+                f"list literal cannot initialize field '{target_name}' of type '{target_type}'"
+            )
 
         elif node_type == "binary_operation":
             left_ast = ast.get("left", {})

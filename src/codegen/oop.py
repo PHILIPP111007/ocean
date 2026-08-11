@@ -564,33 +564,12 @@ class OopMixin:
             return
         class_name = getattr(self, "_constructing_class", None)
         field_type = self.class_fields.get(class_name, {}).get(attribute) if class_name else None
-        if field_type and self.is_tensor_type(field_type) and value_ast.get("type") == "method_call":
-            if value_ast.get("object") != "tensor" or value_ast.get("method") != "zeros":
-                raise RuntimeError(
-                    f"unsupported tensor initializer for class field '{attribute}'"
-                )
-            arguments = [
-                self._generate_expression_from_ast_for_init(argument, param_names)
-                for argument in value_ast.get("arguments", [])
-            ]
-            if not arguments:
-                raise RuntimeError("tensor.zeros expects at least one dimension")
-            self.generate_tensor_struct(field_type)
-            shape_name = f"ocean_ctor_{attribute}_{self.temp_var_counter}_shape"
-            self.temp_var_counter += 1
-            self.add_line(
-                f"size_t {shape_name}[{len(arguments)}] = {{ "
-                + ", ".join(f"(size_t)({argument})" for argument in arguments)
-                + " };"
-            )
-            value_expr = (
-                f"{self.tensor_struct_name(field_type)}_zeros({shape_name}, "
-                f"{len(arguments)})"
-            )
-        elif field_type and self.is_tensor_type(field_type) and value_ast.get("type") == "list_literal":
-            value_expr = self._generate_tensor_literal_expr(attribute, field_type, value_ast)
-        else:
-            value_expr = self._generate_expression_from_ast_for_init(value_ast, param_names)
+        value_expr = self._generate_expression_from_ast_for_init(
+            value_ast,
+            param_names,
+            target_type=field_type or "",
+            target_name=attribute,
+        )
         if not value_expr:
             return
         if not field_type:

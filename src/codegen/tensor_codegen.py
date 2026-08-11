@@ -535,7 +535,13 @@ static {struct_name}* {struct_name}_scalar_broadcast(
             and ast.get("method") == "zeros"
         )
 
-    def _generate_tensor_zeros_expr(self, var_name: str, py_type: str, ast: Dict) -> str:
+    def _generate_tensor_zeros_expr(
+        self,
+        var_name: str,
+        py_type: str,
+        ast: Dict,
+        expression_generator=None,
+    ) -> str:
         args = ast.get("arguments", []) or []
         if not args:
             raise RuntimeError("tensor.zeros expects at least one dimension")
@@ -544,8 +550,9 @@ static {struct_name}* {struct_name}_scalar_broadcast(
         self.generate_tensor_struct(py_type)
         shape_name = f"ocean_tensor_{var_name}_{self.temp_var_counter}_shape"
         self.temp_var_counter += 1
+        generate_argument = expression_generator or self.generate_expression
         dimensions = ", ".join(
-            f"(size_t)({self.generate_expression(argument)})" for argument in args
+            f"(size_t)({generate_argument(argument)})" for argument in args
         )
         self.add_line(f"size_t {shape_name}[{len(args)}] = {{ {dimensions} }};")
         return f"{self.tensor_struct_name(py_type)}_zeros({shape_name}, {len(args)})"
@@ -594,7 +601,13 @@ static {struct_name}* {struct_name}_scalar_broadcast(
             return
         self._generate_owned_assignment(target, target_type, expression_ast)
 
-    def _generate_tensor_literal_expr(self, var_name: str, py_type: str, ast: Dict) -> str:
+    def _generate_tensor_literal_expr(
+        self,
+        var_name: str,
+        py_type: str,
+        ast: Dict,
+        expression_generator=None,
+    ) -> str:
         shape = self._infer_tensor_shape(ast)
         if shape is None:
             raise RuntimeError(f"tensor literal for '{var_name}' must be rectangular")
@@ -608,8 +621,9 @@ static {struct_name}* {struct_name}_scalar_broadcast(
         data_name = f"ocean_tensor_{var_name}_{self.temp_var_counter}_data"
         shape_name = f"ocean_tensor_{var_name}_{self.temp_var_counter}_shape"
         self.temp_var_counter += 1
+        generate_item = expression_generator or self.generate_expression
         if flat_items:
-            values = ", ".join(self.generate_expression(item) for item in flat_items)
+            values = ", ".join(generate_item(item) for item in flat_items)
             self.add_line(f"{c_element_type} {data_name}[{len(flat_items)}] = {{ {values} }};")
         else:
             data_name = "NULL"
