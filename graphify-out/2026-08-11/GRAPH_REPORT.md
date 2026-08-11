@@ -1,7 +1,7 @@
 # Graph Report - phils_language  (2026-08-11)
 
 ## Corpus Check
-- 58 files · ~76,876 words
+- 58 files · ~78,739 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -44,14 +44,14 @@
 - .parse_type_annotation
 - CCodeGenerator
 - Handoff.md
-- .find_operator_outside_parentheses
+- ._parse_with_priorities
 - ExpressionsMixin
 - DictCodegenMixin
 - ImportsMixin
 - OrchestratorMixin
 - ColoredFormatter
 - TensorCodegenMixin
-- .clean_value
+- .parse_class_attribute_initialization
 - .validate_function_return_type
 - Examples
 - What changed
@@ -119,7 +119,7 @@ Nodes (20): Определяет, является ли тип классом, M
 
 ### Community 5 - ".add_error"
 Cohesion: 0.07
-Nodes (20): Находит родительский scope для заданного уровня, Валидирует объявление переменной, Валидирует удаление переменной, Валидирует унарную операцию, Валидирует составное присваивание, Валидирует объявление функции, Валидирует вызов функции с поддержкой AST аргументов, Валидирует один аргумент (может быть строкой или AST) (+12 more)
+Nodes (20): Находит родительский scope для заданного уровня, Валидирует удаление переменной, Валидирует унарную операцию, Валидирует составное присваивание, Валидирует объявление функции, Валидирует вызов функции с поддержкой AST аргументов, Валидирует один аргумент (может быть строкой или AST), Извлекает зависимости (имена переменных) из AST (+12 more)
 
 ### Community 6 - "OwnershipMixin"
 Cohesion: 0.10
@@ -134,8 +134,8 @@ Cohesion: 0.07
 Nodes (13): Parser, Парсит оператор break, Парсит оператор continue, Парсит оператор del (полное удаление), Определяет текущий scope на основе отступа, Парсит итерируемое выражение для for цикла, Проверяет, является ли имя именем класса, Извлекает содержимое внутри скобок, учитывая вложенность (+5 more)
 
 ### Community 9 - ".parse_expression_to_ast"
-Cohesion: 0.09
-Nodes (14): Парсит литерал кортежа, Парсит оператор return, Parse an expression into the transitional Phils AST., Парсит выражение с учетом приоритетов операторов Python, Парсит унарные операторы, Парсит цепочки индексации типа a[0][1][2], Универсальный парсер аргументов функции. Возвращает (positional_args,…, Проверяет, находится ли "=" внутри скобок (например, в словаре или списке) (+6 more)
+Cohesion: 0.11
+Nodes (11): Парсит литерал кортежа, Парсит оператор return, Parse an expression into the transitional Phils AST., Универсальный парсер аргументов функции. Возвращает (positional_args,…, Проверяет, находится ли "=" внутри скобок (например, в словаре или списке), Парсит значение опции и определяет его тип, Парсит условие для циклов и if, Парсит литерал списка: [1, 2, 3] или [[1, 2], [3, 4]] (+3 more)
 
 ### Community 10 - "JSONValidator"
 Cohesion: 0.10
@@ -151,7 +151,7 @@ Nodes (11): Парсит присваивание значения указат�
 
 ### Community 14 - ".validate_assignment"
 Cohesion: 0.13
-Nodes (10): Валидирует выражение (правая часть присваивания или инициализации), Валидирует присваивание, Валидирует оператор return, Валидирует присваивание, Проверяет совместимость типов при присваивании, Получает текущее состояние переменной, Получает последнее действие с переменной, Пытается определить тип по значению (+2 more)
+Nodes (10): Валидирует объявление переменной, Валидирует выражение (правая часть присваивания или инициализации), Валидирует присваивание, Валидирует оператор return, Валидирует присваивание, Проверяет совместимость типов при присваивании, Получает последнее действие с переменной, Пытается определить тип по значению (+2 more)
 
 ### Community 15 - ".get_symbol_info"
 Cohesion: 0.12
@@ -198,8 +198,8 @@ Cohesion: 0.18
 Nodes (5): Парсит составные операции присваивания, Парсит вызов метода объекта с учетом наследования, Строит операции из AST выражения, Рекурсивно ищет символ в текущем и родительских scope'ах, Разрешает информацию о методе с учетом наследования
 
 ### Community 26 - ".parse_type_annotation"
-Cohesion: 0.13
-Nodes (10): Parse ``name: Type`` or ``name: Type = default``., Parse a typed variable declaration. Supported memory-oriented forms: *…, Parse ``var self.attr: Type [= value]`` with nested types., Return canonical type text and structured metadata., Parse ``self.attr [: Type] = value`` in a constructor., Извлекает информацию о контейнере из AST, Parse ``name: Type = default`` with nested generic/borrow types., Выводит тип из AST выражения (+2 more)
+Cohesion: 0.14
+Nodes (9): Parse ``name: Type`` or ``name: Type = default``., Parse a typed variable declaration. Supported memory-oriented forms: *…, Парсит сложные выражения с несколькими операциями, Parse ``var self.attr: Type [= value]`` with nested types., Return canonical type text and structured metadata., Очищает значение от лишних пробелов, но для сложных выражений возвращает AST, Parse ``name: Type = default`` with nested generic/borrow types., find_top_level() (+1 more)
 
 ### Community 27 - "CCodeGenerator"
 Cohesion: 0.13
@@ -209,9 +209,9 @@ Nodes (9): CoreMixin, Reset all per-compilation mutable state., Возвраща
 Cohesion: 0.08
 Nodes (24): 10. C interop, 11. Parser, 13. `&x` vs borrow, 14. Struct, 16. Strings, 17. Bounds safety, 18. SIMD, 19. Demand-driven runtime (+16 more)
 
-### Community 29 - ".find_operator_outside_parentheses"
-Cohesion: 0.20
-Nodes (5): Парсит выражение на текущем уровне приоритета операторов, Проверяет, что оператор в данной позиции является валидным оператором, Находит оператор с наименьшим приоритетом вне скобок, Проверяет, является ли символ частью идентификатора, Находит позицию оператора вне скобок, строк и комментариев
+### Community 29 - "._parse_with_priorities"
+Cohesion: 0.10
+Nodes (11): Парсит выражение с учетом приоритетов операторов Python, Парсит выражение на текущем уровне приоритета операторов, Парсит унарные операторы, Проверяет, что оператор в данной позиции является валидным оператором, Парсит цепочки индексации типа a[0][1][2], Разбирает сложные выражения с несколькими операторами и скобками, Проверяет, полностью ли выражение заключено в скобки, Находит оператор с наименьшим приоритетом вне скобок (+3 more)
 
 ### Community 30 - "ExpressionsMixin"
 Cohesion: 0.25
@@ -233,9 +233,9 @@ Nodes (4): OrchestratorMixin, Генерирует имя временной п�
 Cohesion: 0.33
 Nodes (4): LogRecord, ColoredFormatter, Set up a custom logger with optional configuration parameters. :param name:…, setup_logger()
 
-### Community 36 - ".clean_value"
-Cohesion: 0.20
-Nodes (5): Парсит сложные выражения с несколькими операциями, Разбирает сложные выражения с несколькими операторами и скобками, Проверяет, полностью ли выражение заключено в скобки, Проверяет, содержит ли выражение какой-либо оператор, Очищает значение от лишних пробелов, но для сложных выражений возвращает AST
+### Community 36 - ".parse_class_attribute_initialization"
+Cohesion: 0.40
+Nodes (3): Parse ``self.attr [: Type] = value`` in a constructor., Извлекает информацию о контейнере из AST, Выводит тип из AST выражения
 
 ### Community 39 - "Examples"
 Cohesion: 0.15
@@ -291,7 +291,7 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `CCodeGenerator` connect `CCodeGenerator` to `run`, `OopMixin`, `RuntimeError`, `TypesMixin`, `OwnershipMixin`, `JSONValidator`, `generator.py`, `ListCodegenMixin`, `IndexingMixin`, `IoMixin`, `StatementsMixin`, `ScopeMixin`, `HelpersMixin`, `ExpressionsMixin`, `DictCodegenMixin`, `ImportsMixin`, `OrchestratorMixin`, `TensorCodegenMixin`, `TupleCodegenMixin`?**
   _High betweenness centrality (0.376) - this node is a cross-community bridge._
-- **Why does `Parser` connect `Parser` to `run`, `.clean_value`, `SymbolTable`, `parser.py`, `JSONValidator`, `.parse_expression_to_ast`, `.parse_line`, `.extract_dependencies_from_ast`, `.parse_function_call`, `.parse_function_arguments_to_ast`, `.parse_object_method_call_node`, `.parse_type_annotation`, `.find_operator_outside_parentheses`?**
+- **Why does `Parser` connect `Parser` to `run`, `.parse_class_attribute_initialization`, `SymbolTable`, `parser.py`, `JSONValidator`, `.parse_expression_to_ast`, `.parse_line`, `.extract_dependencies_from_ast`, `.parse_function_call`, `.parse_function_arguments_to_ast`, `.parse_object_method_call_node`, `.parse_type_annotation`, `._parse_with_priorities`?**
   _High betweenness centrality (0.334) - this node is a cross-community bridge._
 - **Why does `JSONValidator` connect `JSONValidator` to `.add_warning`, `.validate_function_return_type`, `.add_error`, `.get_type_from_ast`, `.validate_assignment`, `.get_symbol_info`?**
   _High betweenness centrality (0.293) - this node is a cross-community bridge._

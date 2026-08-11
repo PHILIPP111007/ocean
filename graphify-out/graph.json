@@ -715,8 +715,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_dictcodegenmixin",
-      "community": 31,
-      "community_name": "DictCodegenMixin",
+      "community": 27,
+      "community_name": "CCodeGenerator",
       "norm_label": "dictcodegenmixin"
     },
     {
@@ -727,8 +727,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_dictcodegenmixin_generate_dict_struct",
-      "community": 31,
-      "community_name": "DictCodegenMixin",
+      "community": 27,
+      "community_name": "CCodeGenerator",
       "norm_label": ".generate_dict_struct()"
     },
     {
@@ -739,8 +739,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_dictcodegenmixin_generate_dict_declaration",
-      "community": 31,
-      "community_name": "DictCodegenMixin",
+      "community": 27,
+      "community_name": "CCodeGenerator",
       "norm_label": "._generate_dict_declaration()"
     },
     {
@@ -750,8 +750,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_rationale_11",
-      "community": 31,
-      "community_name": "DictCodegenMixin",
+      "community": 27,
+      "community_name": "CCodeGenerator",
       "norm_label": "generate an arc-owned chained hash table."
     },
     {
@@ -761,8 +761,8 @@
       "source_location": "L255",
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_rationale_255",
-      "community": 31,
-      "community_name": "DictCodegenMixin",
+      "community": 27,
+      "community_name": "CCodeGenerator",
       "norm_label": "\u0433\u0435\u043d\u0435\u0440\u0438\u0440\u0443\u0435\u0442 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0441\u043b\u043e\u0432\u0430\u0440\u044f"
     },
     {
@@ -1744,8 +1744,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_codegen_naming",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": "naming.py"
     },
     {
@@ -1757,8 +1757,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_codegen_naming_namingmixin",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": "namingmixin"
     },
     {
@@ -1769,8 +1769,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_naming_namingmixin_discover_generated_identifiers",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": "._discover_generated_identifiers()"
     },
     {
@@ -1781,8 +1781,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_naming_namingmixin_rewrite_identifiers_outside_literals",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": "._rewrite_identifiers_outside_literals()"
     },
     {
@@ -1793,8 +1793,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_naming_namingmixin_apply_ocean_namespace",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": ".apply_ocean_namespace()"
     },
     {
@@ -1804,8 +1804,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "src_codegen_naming_rationale_8",
-      "community": 27,
-      "community_name": "CCodeGenerator",
+      "community": 36,
+      "community_name": "NamingMixin",
       "norm_label": "namespace every phils-generated c type/function with ``ocean_``. the pass first..."
     },
     {
@@ -4226,8 +4226,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_get_variable_state",
-      "community": 5,
-      "community_name": ".add_error",
+      "community": 14,
+      "community_name": ".validate_assignment",
       "norm_label": ".get_variable_state()"
     },
     {
@@ -4454,8 +4454,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_declaration",
-      "community": 14,
-      "community_name": ".validate_assignment",
+      "community": 5,
+      "community_name": ".add_error",
       "norm_label": ".validate_declaration()"
     },
     {
@@ -5253,8 +5253,8 @@
       "source_location": "L260",
       "_origin": "ast",
       "id": "src_debug_rationale_260",
-      "community": 5,
-      "community_name": ".add_error",
+      "community": 14,
+      "community_name": ".validate_assignment",
       "norm_label": "\u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442 \u0442\u0435\u043a\u0443\u0449\u0435\u0435 \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438"
     },
     {
@@ -5462,8 +5462,8 @@
       "source_location": "L1090",
       "_origin": "ast",
       "id": "src_debug_rationale_1090",
-      "community": 14,
-      "community_name": ".validate_assignment",
+      "community": 5,
+      "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438"
     },
     {
@@ -6755,8 +6755,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_borrow_source_from_ast",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "._borrow_source_from_ast()"
     },
     {
@@ -6803,8 +6803,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_get_current_scope_for_indent",
-      "community": 13,
-      "community_name": ".parse_line",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": ".get_current_scope_for_indent()"
     },
     {
@@ -6995,8 +6995,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_pointer_to_variable_assignment",
-      "community": 13,
-      "community_name": ".parse_line",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": ".parse_pointer_to_variable_assignment()"
     },
     {
@@ -7079,8 +7079,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_const",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": ".parse_const()"
     },
     {
@@ -7091,8 +7091,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_var",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": ".parse_var()"
     },
     {
@@ -7103,8 +7103,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_delete",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 13,
+      "community_name": ".parse_line",
       "norm_label": ".parse_delete()"
     },
     {
@@ -7139,8 +7139,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_with_priorities",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "._parse_with_priorities()"
     },
     {
@@ -7152,7 +7152,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_operator_level",
       "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".find_operator_outside_parentheses",
       "norm_label": "._parse_operator_level()"
     },
     {
@@ -7163,8 +7163,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_unary_operators",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "._parse_unary_operators()"
     },
     {
@@ -7176,7 +7176,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_is_valid_operator_at",
       "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".find_operator_outside_parentheses",
       "norm_label": "._is_valid_operator_at()"
     },
     {
@@ -7187,8 +7187,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_chained_index_access",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "._parse_chained_index_access()"
     },
     {
@@ -7223,8 +7223,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_expression",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": ".parse_expression()"
     },
     {
@@ -7235,8 +7235,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_complex_expression",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": ".parse_complex_expression()"
     },
     {
@@ -7571,8 +7571,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_class_attribute_initialization",
-      "community": 36,
-      "community_name": ".parse_class_attribute_initialization",
+      "community": 26,
+      "community_name": ".parse_type_annotation",
       "norm_label": ".parse_class_attribute_initialization()"
     },
     {
@@ -7607,8 +7607,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_extract_container_info",
-      "community": 36,
-      "community_name": ".parse_class_attribute_initialization",
+      "community": 26,
+      "community_name": ".parse_type_annotation",
       "norm_label": "._extract_container_info()"
     },
     {
@@ -7619,8 +7619,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_is_fully_parenthesized",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": ".is_fully_parenthesized()"
     },
     {
@@ -7632,7 +7632,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_find_lowest_priority_operator",
       "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".find_operator_outside_parentheses",
       "norm_label": ".find_lowest_priority_operator()"
     },
     {
@@ -7644,7 +7644,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_is_identifier_char",
       "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".find_operator_outside_parentheses",
       "norm_label": ".is_identifier_char()"
     },
     {
@@ -7656,7 +7656,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_find_operator_outside_parentheses",
       "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".find_operator_outside_parentheses",
       "norm_label": ".find_operator_outside_parentheses()"
     },
     {
@@ -7667,8 +7667,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_contains_operator",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": ".contains_operator()"
     },
     {
@@ -7715,8 +7715,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_clean_value",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": ".clean_value()"
     },
     {
@@ -7739,8 +7739,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_infer_type_from_ast",
-      "community": 36,
-      "community_name": ".parse_class_attribute_initialization",
+      "community": 26,
+      "community_name": ".parse_type_annotation",
       "norm_label": "._infer_type_from_ast()"
     },
     {
@@ -7751,8 +7751,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_methods_equal",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 13,
+      "community_name": ".parse_line",
       "norm_label": ".methods_equal()"
     },
     {
@@ -7877,8 +7877,8 @@
       "source_location": "L217",
       "_origin": "ast",
       "id": "src_parser_rationale_217",
-      "community": 13,
-      "community_name": ".parse_line",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "\u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 \u043e\u0431\u043b\u0430\u0441\u0442\u044c \u0432\u0438\u0434\u0438\u043c\u043e\u0441\u0442\u0438 \u0434\u043b\u044f \u0437\u0430\u0434\u0430\u043d\u043d\u043e\u0433\u043e \u0443\u0440\u043e\u0432\u043d\u044f \u043e\u0442\u0441\u0442\u0443\u043f\u0430"
     },
     {
@@ -8020,8 +8020,8 @@
       "source_location": "L1426",
       "_origin": "ast",
       "id": "src_parser_rationale_1426",
-      "community": 13,
-      "community_name": ".parse_line",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f \u0443\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044f \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438: x = *p"
     },
     {
@@ -8097,8 +8097,8 @@
       "source_location": "L1863",
       "_origin": "ast",
       "id": "src_parser_rationale_1863",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "parse a typed variable declaration. supported memory-oriented forms: *..."
     },
     {
@@ -8108,8 +8108,8 @@
       "source_location": "L2160",
       "_origin": "ast",
       "id": "src_parser_rationale_2160",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 13,
+      "community_name": ".parse_line",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 del (\u043f\u043e\u043b\u043d\u043e\u0435 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u0435)"
     },
     {
@@ -8141,8 +8141,8 @@
       "source_location": "L2310",
       "_origin": "ast",
       "id": "src_parser_rationale_2310",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0441 \u0443\u0447\u0435\u0442\u043e\u043c \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u043e\u0432 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u043e\u0432 python"
     },
     {
@@ -8153,7 +8153,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_2517",
       "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".find_operator_outside_parentheses",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u043d\u0430 \u0442\u0435\u043a\u0443\u0449\u0435\u043c \u0443\u0440\u043e\u0432\u043d\u0435 \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u0430 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u043e\u0432"
     },
     {
@@ -8163,8 +8163,8 @@
       "source_location": "L2553",
       "_origin": "ast",
       "id": "src_parser_rationale_2553",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0443\u043d\u0430\u0440\u043d\u044b\u0435 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u044b"
     },
     {
@@ -8175,7 +8175,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_2606",
       "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".find_operator_outside_parentheses",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0447\u0442\u043e \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 \u0432 \u0434\u0430\u043d\u043d\u043e\u0438 \u043f\u043e\u0437\u0438\u0446\u0438\u0438 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u0432\u0430\u043b\u0438\u0434\u043d\u044b\u043c \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u043e\u043c"
     },
     {
@@ -8185,8 +8185,8 @@
       "source_location": "L2653",
       "_origin": "ast",
       "id": "src_parser_rationale_2653",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0446\u0435\u043f\u043e\u0447\u043a\u0438 \u0438\u043d\u0434\u0435\u043a\u0441\u0430\u0446\u0438\u0438 \u0442\u0438\u043f\u0430 a[0][1][2]"
     },
     {
@@ -8207,8 +8207,8 @@
       "source_location": "L3103",
       "_origin": "ast",
       "id": "src_parser_rationale_3103",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0441\u043b\u043e\u0436\u043d\u044b\u0435 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u044f \u0441 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u0438\u043c\u0438 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u044f\u043c\u0438"
     },
     {
@@ -8218,8 +8218,8 @@
       "source_location": "L3171",
       "_origin": "ast",
       "id": "src_parser_rationale_3171",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": "\u0440\u0430\u0437\u0431\u0438\u0440\u0430\u0435\u0442 \u0441\u043b\u043e\u0436\u043d\u044b\u0435 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u044f \u0441 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u0438\u043c\u0438 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0430\u043c\u0438 \u0438 \u0441\u043a\u043e\u0431\u043a\u0430\u043c\u0438"
     },
     {
@@ -8482,8 +8482,8 @@
       "source_location": "L5142",
       "_origin": "ast",
       "id": "src_parser_rationale_5142",
-      "community": 36,
-      "community_name": ".parse_class_attribute_initialization",
+      "community": 26,
+      "community_name": ".parse_type_annotation",
       "norm_label": "parse ``self.attr [: type] = value`` in a constructor."
     },
     {
@@ -8515,8 +8515,8 @@
       "source_location": "L5428",
       "_origin": "ast",
       "id": "src_parser_rationale_5428",
-      "community": 36,
-      "community_name": ".parse_class_attribute_initialization",
+      "community": 26,
+      "community_name": ".parse_type_annotation",
       "norm_label": "\u0438\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u0442 \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044e \u043e \u043a\u043e\u043d\u0442\u0435\u0438\u043d\u0435\u0440\u0435 \u0438\u0437 ast"
     },
     {
@@ -8526,8 +8526,8 @@
       "source_location": "L5484",
       "_origin": "ast",
       "id": "src_parser_rationale_5484",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u043f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e \u043b\u0438 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0437\u0430\u043a\u043b\u044e\u0447\u0435\u043d\u043e \u0432 \u0441\u043a\u043e\u0431\u043a\u0438"
     },
     {
@@ -8538,7 +8538,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5502",
       "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".find_operator_outside_parentheses",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u043e\u043c \u0432\u043d\u0435 \u0441\u043a\u043e\u0431\u043e\u043a"
     },
     {
@@ -8549,7 +8549,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5537",
       "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".find_operator_outside_parentheses",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043b\u0438 \u0441\u0438\u043c\u0432\u043e\u043b \u0447\u0430\u0441\u0442\u044c\u044e \u0438\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0442\u043e\u0440\u0430"
     },
     {
@@ -8560,7 +8560,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5541",
       "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".find_operator_outside_parentheses",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u043f\u043e\u0437\u0438\u0446\u0438\u044e \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0430 \u0432\u043d\u0435 \u0441\u043a\u043e\u0431\u043e\u043a, \u0441\u0442\u0440\u043e\u043a \u0438 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0435\u0432"
     },
     {
@@ -8570,8 +8570,8 @@
       "source_location": "L5607",
       "_origin": "ast",
       "id": "src_parser_rationale_5607",
-      "community": 29,
-      "community_name": "._parse_with_priorities",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043b\u0438 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u043a\u0430\u043a\u043e\u0438-\u043b\u0438\u0431\u043e \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440"
     },
     {
@@ -8614,8 +8614,8 @@
       "source_location": "L5764",
       "_origin": "ast",
       "id": "src_parser_rationale_5764",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 31,
+      "community_name": ".clean_value",
       "norm_label": "\u043e\u0447\u0438\u0449\u0430\u0435\u0442 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u043e\u0442 \u043b\u0438\u0448\u043d\u0438\u0445 \u043f\u0440\u043e\u0431\u0435\u043b\u043e\u0432, \u043d\u043e \u0434\u043b\u044f \u0441\u043b\u043e\u0436\u043d\u044b\u0445 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0438 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 ast"
     },
     {
@@ -8636,8 +8636,8 @@
       "source_location": "L5846",
       "_origin": "ast",
       "id": "src_parser_rationale_5846",
-      "community": 36,
-      "community_name": ".parse_class_attribute_initialization",
+      "community": 26,
+      "community_name": ".parse_type_annotation",
       "norm_label": "\u0432\u044b\u0432\u043e\u0434\u0438\u0442 \u0442\u0438\u043f \u0438\u0437 ast \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u044f"
     },
     {
@@ -8647,8 +8647,8 @@
       "source_location": "L5938",
       "_origin": "ast",
       "id": "src_parser_rationale_5938",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 13,
+      "community_name": ".parse_line",
       "norm_label": "\u0441\u0440\u0430\u0432\u043d\u0438\u0432\u0430\u0435\u0442 \u0434\u0432\u0430 \u043c\u0435\u0442\u043e\u0434\u0430"
     },
     {
@@ -8857,8 +8857,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_find_top_level",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "find_top_level()"
     },
     {
@@ -8951,8 +8951,8 @@
       "source_location": "L224",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_224",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 41,
+      "community_name": "parser.py",
       "norm_label": "return the first top-level occurrence of ``needle`` or -1."
     },
     {
@@ -9068,6 +9068,18 @@
       "community": 0,
       "community_name": "run",
       "norm_label": "test_tensor_lowering_shape_and_index_mutation()"
+    },
+    {
+      "label": "test_tensor_the_big_code()",
+      "file_type": "code",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L57",
+      "_callable": true,
+      "_origin": "ast",
+      "id": "tests_test_array_tensor_test_tensor_the_big_code",
+      "community": 0,
+      "community_name": "run",
+      "norm_label": "test_tensor_the_big_code()"
     },
     {
       "label": "test_c_code.py",
@@ -9820,7 +9832,7 @@
       "_origin": "ast",
       "id": "readme",
       "community": 39,
-      "community_name": "Examples",
+      "community_name": "Ocean \ud83c\udf0a",
       "norm_label": "readme.md"
     },
     {
@@ -9831,129 +9843,107 @@
       "_origin": "ast",
       "id": "readme_ocean",
       "community": 39,
-      "community_name": "Examples",
+      "community_name": "Ocean \ud83c\udf0a",
       "norm_label": "ocean \ud83c\udf0a"
     },
     {
-      "label": "Info",
+      "label": "\u0410\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L5",
+      "source_location": "L7",
       "_origin": "ast",
-      "id": "readme_info",
+      "id": "readme_\u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "info"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430"
     },
     {
-      "label": "Tests",
+      "label": "\u0411\u044b\u0441\u0442\u0440\u044b\u0439 \u0437\u0430\u043f\u0443\u0441\u043a",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L13",
+      "source_location": "L22",
       "_origin": "ast",
-      "id": "readme_tests",
+      "id": "readme_\u0431\u044b\u0441\u0442\u0440\u044b\u0439_\u0437\u0430\u043f\u0443\u0441\u043a",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "tests"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u0431\u044b\u0441\u0442\u0440\u044b\u0438 \u0437\u0430\u043f\u0443\u0441\u043a"
     },
     {
-      "label": "Benchmarks",
+      "label": "Array \u0438 tensor",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L19",
+      "source_location": "L51",
       "_origin": "ast",
-      "id": "readme_benchmarks",
+      "id": "readme_array_\u0438_tensor",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "benchmarks"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "array \u0438 tensor"
     },
     {
-      "label": "Matmul",
+      "label": "Borrow \u0438 ownership",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L21",
+      "source_location": "L78",
       "_origin": "ast",
-      "id": "readme_matmul",
+      "id": "readme_borrow_\u0438_ownership",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "matmul"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "borrow \u0438 ownership"
     },
     {
-      "label": "Examples",
+      "label": "\u0421\u0442\u0430\u0440\u044b\u0435 \u043f\u0440\u0438\u043c\u0435\u0440\u044b \u0432 \u043d\u043e\u0432\u044b\u0445 \u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L25",
+      "source_location": "L91",
       "_origin": "ast",
-      "id": "readme_examples",
+      "id": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b_\u0432_\u043d\u043e\u0432\u044b\u0445_\u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "examples"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u0441\u0442\u0430\u0440\u044b\u0435 \u043f\u0440\u0438\u043c\u0435\u0440\u044b \u0432 \u043d\u043e\u0432\u044b\u0445 \u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445"
     },
     {
-      "label": "Imports",
+      "label": "Matrix: `list[list[int]]` \u2192 `tensor[float32]`",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L29",
+      "source_location": "L93",
       "_origin": "ast",
-      "id": "readme_imports",
+      "id": "readme_matrix_list_list_int_tensor_float32",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "imports"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "matrix: `list[list[int]]` \u2192 `tensor[float32]`"
     },
     {
-      "label": "Input",
+      "label": "\u041e\u0434\u043d\u043e\u043c\u0435\u0440\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u2192 owned `array`",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L37",
+      "source_location": "L122",
       "_origin": "ast",
-      "id": "readme_input",
+      "id": "readme_\u043e\u0434\u043d\u043e\u043c\u0435\u0440\u043d\u044b\u0439_\u0441\u043f\u0438\u0441\u043e\u043a_owned_array",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "input"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u043e\u0434\u043d\u043e\u043c\u0435\u0440\u043d\u044b\u0438 \u0441\u043f\u0438\u0441\u043e\u043a \u2192 owned `array`"
     },
     {
-      "label": "Cycles",
+      "label": "\u0421\u0442\u0430\u0440\u044b\u0435 \u0431\u0430\u0437\u043e\u0432\u044b\u0435 \u043f\u0440\u0438\u043c\u0435\u0440\u044b",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L46",
+      "source_location": "L148",
       "_origin": "ast",
-      "id": "readme_cycles",
+      "id": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u0431\u0430\u0437\u043e\u0432\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "cycles"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u0441\u0442\u0430\u0440\u044b\u0435 \u0431\u0430\u0437\u043e\u0432\u044b\u0435 \u043f\u0440\u0438\u043c\u0435\u0440\u044b"
     },
     {
-      "label": "C code -> function should starts with @",
+      "label": "\u0420\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L55",
+      "source_location": "L171",
       "_origin": "ast",
-      "id": "readme_c_code_function_should_starts_with",
+      "id": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
       "community": 39,
-      "community_name": "Examples",
-      "norm_label": "c code -> function should starts with @"
-    },
-    {
-      "label": "OOP",
-      "file_type": "document",
-      "source_file": "README.md",
-      "source_location": "L65",
-      "_origin": "ast",
-      "id": "readme_oop",
-      "community": 39,
-      "community_name": "Examples",
-      "norm_label": "oop"
-    },
-    {
-      "label": "Pthread (Multiprocessing)",
-      "file_type": "document",
-      "source_file": "README.md",
-      "source_location": "L118",
-      "_origin": "ast",
-      "id": "readme_pthread_multiprocessing",
-      "community": 39,
-      "community_name": "Examples",
-      "norm_label": "pthread (multiprocessing)"
+      "community_name": "Ocean \ud83c\udf0a",
+      "norm_label": "\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430"
     },
     {
       "label": "Handoff.md",
@@ -27544,6 +27534,18 @@
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L4",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_array_tensor",
+      "target": "tests_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
       "source_file": "tests/test_c_code.py",
       "source_location": "L1",
       "weight": 1.0,
@@ -27742,6 +27744,30 @@
       "_origin": "ast",
       "source": "tests_test_while_loop",
       "target": "tests_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L4",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_array_tensor",
+      "target": "tests_base_run",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L443",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_array_tensor_test_tensor_the_big_code",
+      "target": "tests_base_run",
       "confidence_score": 1.0
     },
     {
@@ -28462,6 +28488,17 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_array_tensor.py",
+      "source_location": "L57",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_array_tensor",
+      "target": "tests_test_array_tensor_test_tensor_the_big_code",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
@@ -29006,121 +29043,99 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L19",
+      "source_location": "L51",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
-      "target": "readme_benchmarks",
+      "target": "readme_array_\u0438_tensor",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L25",
+      "source_location": "L78",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
-      "target": "readme_examples",
+      "target": "readme_borrow_\u0438_ownership",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L5",
+      "source_location": "L7",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
-      "target": "readme_info",
+      "target": "readme_\u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L13",
+      "source_location": "L22",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
-      "target": "readme_tests",
+      "target": "readme_\u0431\u044b\u0441\u0442\u0440\u044b\u0439_\u0437\u0430\u043f\u0443\u0441\u043a",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L21",
+      "source_location": "L171",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "readme_benchmarks",
-      "target": "readme_matmul",
+      "source": "readme_ocean",
+      "target": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L55",
+      "source_location": "L91",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_c_code_function_should_starts_with",
+      "source": "readme_ocean",
+      "target": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b_\u0432_\u043d\u043e\u0432\u044b\u0445_\u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L46",
+      "source_location": "L93",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_cycles",
+      "source": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b_\u0432_\u043d\u043e\u0432\u044b\u0445_\u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
+      "target": "readme_matrix_list_list_int_tensor_float32",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L29",
+      "source_location": "L122",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_imports",
+      "source": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b_\u0432_\u043d\u043e\u0432\u044b\u0445_\u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
+      "target": "readme_\u043e\u0434\u043d\u043e\u043c\u0435\u0440\u043d\u044b\u0439_\u0441\u043f\u0438\u0441\u043e\u043a_owned_array",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L37",
+      "source_location": "L148",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_input",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L65",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_oop",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L118",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "readme_examples",
-      "target": "readme_pthread_multiprocessing",
+      "source": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b_\u0432_\u043d\u043e\u0432\u044b\u0445_\u043f\u0430\u0442\u0442\u0435\u0440\u043d\u0430\u0445",
+      "target": "readme_\u0441\u0442\u0430\u0440\u044b\u0435_\u0431\u0430\u0437\u043e\u0432\u044b\u0435_\u043f\u0440\u0438\u043c\u0435\u0440\u044b",
       "confidence_score": 1.0
     },
     {
@@ -29895,5 +29910,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "b9c7be0069284a30707426cffc4477d081922014"
+  "built_at_commit": "9d04df74abb89cfe46d5f0efc81d335b8f20faae"
 }
