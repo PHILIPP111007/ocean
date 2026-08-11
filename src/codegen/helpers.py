@@ -33,6 +33,16 @@ class HelpersMixin:
                 method = value.get("method")
                 function = value.get("function")
                 var_type = value.get("var_type") or value.get("type_annotation")
+                node_type = value.get("type") or value.get("node")
+
+                if node_type in {
+                    "tensor_index_access",
+                    "nested_index_access",
+                    "nested_index_assignment",
+                }:
+                    indices = value.get("indices")
+                    if isinstance(indices, (list, tuple)) and indices:
+                        self.tensor_index_ranks.add(len(indices))
 
                 if method == "sort":
                     self.runtime_needs_sort_helpers = True

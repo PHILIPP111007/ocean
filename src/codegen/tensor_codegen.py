@@ -23,14 +23,49 @@ class TensorCodegenMixin:
     def _tensor_index_call(self, tensor_expr: str, py_type: str, indices: Iterable[str]) -> str:
         values = list(indices)
         struct_name = self.tensor_struct_name(py_type)
+        if len(values) in getattr(self, "tensor_index_ranks", set()):
+            arguments = ", ".join(values)
+            return f"{struct_name}_get{len(values)}({tensor_expr}, {arguments})"
         literal = ", ".join(f"(size_t)({value})" for value in values)
         return f"{struct_name}_get({tensor_expr}, (size_t[]){{{literal}}}, {len(values)})"
 
     def _tensor_set_call(self, tensor_expr: str, py_type: str, indices: Iterable[str], value: str) -> str:
         values = list(indices)
         struct_name = self.tensor_struct_name(py_type)
+        if len(values) in getattr(self, "tensor_index_ranks", set()):
+            arguments = ", ".join(values)
+            return f"{struct_name}_set{len(values)}({tensor_expr}, {arguments}, {value});"
         literal = ", ".join(f"(size_t)({index})" for index in values)
         return f"{struct_name}_set({tensor_expr}, (size_t[]){{{literal}}}, {len(values)}, {value});"
+
+    def _tensor_rank_helpers(self, struct_name: str, c_element_type: str) -> str:
+        helpers = []
+        for rank in sorted(getattr(self, "tensor_index_ranks", set())):
+            if rank < 1:
+                continue
+            parameters = ", ".join(f"size_t index_{axis}" for axis in range(rank))
+            checks = " || ".join(
+                f"index_{axis} >= tensor->shape[{axis}]" for axis in range(rank)
+            )
+            offset = " + ".join(
+                f"index_{axis} * tensor->strides[{axis}]" for axis in range(rank)
+            )
+            helpers.append(f"""
+static inline {c_element_type} {struct_name}_get{rank}(const {struct_name}* tensor, {parameters}) {{
+    if (!tensor || {checks}) {{
+        fprintf(stderr, "Tensor index out of bounds in {struct_name}\\n"); exit(1);
+    }}
+    return tensor->data[{offset}];
+}}
+
+static inline void {struct_name}_set{rank}({struct_name}* tensor, {parameters}, {c_element_type} value) {{
+    if (!tensor || {checks}) {{
+        fprintf(stderr, "Tensor index out of bounds in {struct_name}\\n"); exit(1);
+    }}
+    tensor->data[{offset}] = value;
+}}
+""")
+        return "\n".join(helpers)
 
     def generate_tensor_index_access(self, ast: Dict) -> str:
         variable = ast.get("variable", "")
@@ -255,4 +290,6 @@ static inline {c_element_type} {struct_name}_get(const {struct_name}* tensor, co
 static inline void {struct_name}_set({struct_name}* tensor, const size_t* indices, size_t rank, {c_element_type} value) {{
     tensor->data[{struct_name}_offset(tensor, indices, rank)] = value;
 }}
+
+{self._tensor_rank_helpers(struct_name, c_element_type)}
 """)

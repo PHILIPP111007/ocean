@@ -1,16 +1,16 @@
 # Graph Report - phils_language  (2026-08-11)
 
 ## Corpus Check
-- 58 files · ~79,845 words
+- 58 files · ~73,700 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 934 nodes · 1680 edges · 54 communities (47 shown, 7 thin omitted)
+- 937 nodes · 1686 edges · 54 communities (48 shown, 6 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 53 edges (avg confidence: 0.68)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `dc2d5d74`
+- Built from commit: `5d392fa9`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -20,7 +20,7 @@
 - RuntimeError
 - .add_warning
 - TypesMixin
-- .add_error
+- .validate_graph
 - OwnershipMixin
 - SymbolTable
 - Parser
@@ -30,7 +30,7 @@
 - .get_type_from_ast
 - .parse_line
 - .validate_assignment
-- .get_symbol_info
+- .add_error
 - .extract_dependencies_from_ast
 - ListCodegenMixin
 - IndexingMixin
@@ -42,26 +42,26 @@
 - HelpersMixin
 - .parse_object_method_call_node
 - .parse_type_annotation
-- CCodeGenerator
+- CoreMixin
 - Handoff.md
-- ._parse_with_priorities
+- .find_operator_outside_parentheses
 - ExpressionsMixin
-- test_array_tensor.py
+- .clean_value
 - ImportsMixin
 - OrchestratorMixin
 - ColoredFormatter
 - TensorCodegenMixin
-- NamingMixin
+- CCodeGenerator
 - .validate_function_return_type
 - Ocean 🌊
 - What changed
 - parser.py
 - TupleCodegenMixin
+- DictCodegenMixin
 - Repository Guidelines
 - Ocean automatic ownership model v1
 - 4. Memory model
 - 20. Тесты
-- .parse_class_attribute_initialization
 - 21. Array — принятое устройство
 - 28. Статус array/tensor на момент handoff
 - 30. Следующий рекомендуемый этап
@@ -72,35 +72,35 @@
 ## God Nodes (most connected - your core abstractions)
 1. `Parser` - 106 edges
 2. `JSONValidator` - 90 edges
-3. `run()` - 59 edges
+3. `run()` - 60 edges
 4. `OopMixin` - 28 edges
 5. `OwnershipMixin` - 28 edges
 6. `CCodeGenerator` - 26 edges
 7. `ArrayCodegenMixin` - 22 edges
 8. `TypesMixin` - 22 edges
-9. `TensorCodegenMixin` - 18 edges
+9. `TensorCodegenMixin` - 19 edges
 10. `SymbolTable` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `main()` --calls--> `CCodeGenerator`  [INFERRED]
-  main.py → src/codegen/generator.py
 - `run()` --calls--> `CCodeGenerator`  [INFERRED]
   tests/base.py → src/codegen/generator.py
 - `generate()` --calls--> `CCodeGenerator`  [INFERRED]
   tests/test_array_tensor.py → src/codegen/generator.py
+- `main()` --calls--> `CCodeGenerator`  [INFERRED]
+  main.py → src/codegen/generator.py
+- `main()` --calls--> `JSONValidator`  [EXTRACTED]
+  main.py → src/debug.py
 - `main()` --calls--> `Parser`  [EXTRACTED]
   main.py → src/parser.py
-- `run()` --calls--> `Parser`  [EXTRACTED]
-  tests/base.py → src/parser.py
 
 ## Import Cycles
 - None detected.
 
-## Communities (54 total, 7 thin omitted)
+## Communities (54 total, 6 thin omitted)
 
 ### Community 0 - "run"
 Cohesion: 0.07
-Nodes (40): run(), test_c_code_math(), test_c_code_pthread(), test_del(), test_dict(), test_dict_get(), test_for_loop_1(), test_for_loop_2() (+32 more)
+Nodes (41): run(), test_c_code_math(), test_c_code_pthread(), test_del(), test_dict(), test_dict_get(), test_for_loop_1(), test_for_loop_2() (+33 more)
 
 ### Community 1 - "OopMixin"
 Cohesion: 0.05
@@ -112,15 +112,15 @@ Nodes (18): RuntimeError, ArrayCodegenMixin, Lower uniquely-owned one-dimensiona
 
 ### Community 3 - ".add_warning"
 Cohesion: 0.06
-Nodes (22): Проверяет, что функция имеет return если нужно, Проверяет циклы на корректность, Проверяет объявленные, но неиспользуемые переменные, Собирает переменные из AST, Проверяет, что все пути выполнения функции возвращают значение, Проверяет деление на ноль, Проверяет условия циклов на потенциальные проблемы, Проверяет потенциальные утечки памяти с указателями (+14 more)
+Nodes (23): Валидирует объявление функции, Проверяет, что функция имеет return если нужно, Проверяет циклы на корректность, Проверяет объявленные, но неиспользуемые переменные, Собирает переменные из AST, Проверяет, что все пути выполнения функции возвращают значение, Проверяет деление на ноль, Проверяет условия циклов на потенциальные проблемы (+15 more)
 
 ### Community 4 - "TypesMixin"
 Cohesion: 0.07
 Nodes (20): Определяет, является ли тип классом, Map a Phils type to C, including zero-cost borrows ``&T``/``&mut T``., Получает имя текущего класса из контекста, Определяет, является ли выражение строкой, Проверяет, является ли выражение None, Извлекает типы ключа и значения из dict[K, V], Очищает имя типа для использования в C идентификаторах, Извлекает информацию о вложенном типе списка с рекурсивным анализом (+12 more)
 
-### Community 5 - ".add_error"
-Cohesion: 0.07
-Nodes (20): Находит родительский scope для заданного уровня, Валидирует объявление переменной, Валидирует удаление переменной, Валидирует унарную операцию, Валидирует составное присваивание, Валидирует объявление функции, Валидирует вызов функции с поддержкой AST аргументов, Валидирует один аргумент (может быть строкой или AST) (+12 more)
+### Community 5 - ".validate_graph"
+Cohesion: 0.11
+Nodes (12): Валидирует унарную операцию, Валидирует составное присваивание, Валидирует вызов функции с поддержкой AST аргументов, Валидирует один аргумент (может быть строкой или AST), Валидирует вызов встроенной функции, Валидирует вызов функции print, Валидирует узел цикла, Проверяет, удалена ли переменная (+4 more)
 
 ### Community 6 - "OwnershipMixin"
 Cohesion: 0.10
@@ -135,12 +135,12 @@ Cohesion: 0.07
 Nodes (13): Parser, Парсит оператор break, Парсит оператор continue, Парсит оператор del (полное удаление), Определяет текущий scope на основе отступа, Парсит итерируемое выражение для for цикла, Проверяет, является ли имя именем класса, Извлекает содержимое внутри скобок, учитывая вложенность (+5 more)
 
 ### Community 9 - ".parse_expression_to_ast"
-Cohesion: 0.11
-Nodes (11): Парсит литерал кортежа, Парсит оператор return, Parse an expression into the transitional Phils AST., Универсальный парсер аргументов функции. Возвращает (positional_args,…, Проверяет, находится ли "=" внутри скобок (например, в словаре или списке), Парсит значение опции и определяет его тип, Парсит условие для циклов и if, Парсит литерал списка: [1, 2, 3] или [[1, 2], [3, 4]] (+3 more)
+Cohesion: 0.09
+Nodes (14): Парсит литерал кортежа, Парсит оператор return, Parse an expression into the transitional Phils AST., Парсит выражение с учетом приоритетов операторов Python, Парсит унарные операторы, Парсит цепочки индексации типа a[0][1][2], Универсальный парсер аргументов функции. Возвращает (positional_args,…, Проверяет, находится ли "=" внутри скобок (например, в словаре или списке) (+6 more)
 
 ### Community 10 - "JSONValidator"
-Cohesion: 0.10
-Nodes (14): main(), JSONValidator, Строит карту соответствия узлов исходным строкам, Строит историю операций с переменными С УЧЕТОМ ПОРЯДКА СТРОК, Основной метод валидации, Валидирует вызов статического метода, Находит символ класса в таблице символов, Возвращает отчет о проверке (+6 more)
+Cohesion: 0.08
+Nodes (17): JSONValidator, Строит карту соответствия узлов исходным строкам, Находит родительский scope для заданного уровня, Строит историю операций с переменными С УЧЕТОМ ПОРЯДКА СТРОК, Извлекает зависимости (имена переменных) из AST, Основной метод валидации, Валидирует вызов статического метода, Находит символ класса в таблице символов (+9 more)
 
 ### Community 12 - ".get_type_from_ast"
 Cohesion: 0.13
@@ -151,12 +151,12 @@ Cohesion: 0.14
 Nodes (11): Парсит присваивание значения указателя переменной: x = *p, Parse a free function with fully nested type annotations., Возвращает область видимости для заданного уровня отступа, Находит конец блока с отступом, Парсит if-elif-else конструкцию - РАБОЧАЯ ВЕРСИЯ без бесконечного цикла, Основной метод парсинга строки с поддержкой всех конструкций, Парсит вложенные if внутри других блоков (while, for, других if), Parse a value-semantic struct. Structs intentionally contain fields only in… (+3 more)
 
 ### Community 14 - ".validate_assignment"
-Cohesion: 0.13
-Nodes (10): Валидирует выражение (правая часть присваивания или инициализации), Валидирует присваивание, Валидирует оператор return, Валидирует присваивание, Проверяет совместимость типов при присваивании, Получает текущее состояние переменной, Получает последнее действие с переменной, Пытается определить тип по значению (+2 more)
-
-### Community 15 - ".get_symbol_info"
 Cohesion: 0.12
-Nodes (7): Валидирует объявление указателя, Получает информацию о символе из текущего или родительских scope'ов, Проверяет выход за границы массивов/списков, Проверяет операции со строками, Проверяет вызовы C-функций (начинающиеся с @), Пытается получить статическое значение из AST, Находит родительский узел (если есть)
+Nodes (11): Валидирует объявление переменной, Валидирует выражение (правая часть присваивания или инициализации), Валидирует присваивание, Валидирует оператор return, Валидирует присваивание, Проверяет совместимость типов при присваивании, Получает текущее состояние переменной, Получает последнее действие с переменной (+3 more)
+
+### Community 15 - ".add_error"
+Cohesion: 0.11
+Nodes (9): Валидирует удаление переменной, Валидирует объявление указателя, Валидирует запись через указатель (*p = значение), Добавляет ошибку с информацией о строке, Получает информацию о символе из текущего или родительских scope'ов, Проверяет корректное использование указателей, Проверяет выход за границы массивов/списков, Проверяет вызовы C-функций (начинающиеся с @) (+1 more)
 
 ### Community 16 - ".extract_dependencies_from_ast"
 Cohesion: 0.12
@@ -192,35 +192,35 @@ Nodes (6): Парсит создание объекта с присваиван�
 
 ### Community 24 - "HelpersMixin"
 Cohesion: 0.24
-Nodes (6): HelpersMixin, Генерирует вспомогательные функции для сортировки, Генерирует вспомогательные функции для работы со строками, Collect standard-runtime features before any C is emitted. The scan is…, Генерирует секцию с вспомогательными функциями и структурами в правильном…, Генерирует вспомогательные функции для конвертации в int
+Nodes (6): HelpersMixin, Генерирует вспомогательные функции для сортировки, Collect standard-runtime features before any C is emitted. The scan is…, Генерирует вспомогательные функции для работы со строками, Генерирует секцию с вспомогательными функциями и структурами в правильном…, Генерирует вспомогательные функции для конвертации в int
 
 ### Community 25 - ".parse_object_method_call_node"
 Cohesion: 0.18
 Nodes (5): Парсит составные операции присваивания, Парсит вызов метода объекта с учетом наследования, Строит операции из AST выражения, Рекурсивно ищет символ в текущем и родительских scope'ах, Разрешает информацию о методе с учетом наследования
 
 ### Community 26 - ".parse_type_annotation"
-Cohesion: 0.14
-Nodes (9): Parse ``name: Type`` or ``name: Type = default``., Parse a typed variable declaration. Supported memory-oriented forms: *…, Парсит сложные выражения с несколькими операциями, Parse ``var self.attr: Type [= value]`` with nested types., Return canonical type text and structured metadata., Очищает значение от лишних пробелов, но для сложных выражений возвращает AST, Parse ``name: Type = default`` with nested generic/borrow types., find_top_level() (+1 more)
-
-### Community 27 - "CCodeGenerator"
 Cohesion: 0.13
-Nodes (10): CoreMixin, Reset all per-compilation mutable state., Возвращает отступ для текущего уровня, Добавляет строку с правильным отступом, Добавляет пустую строку, DictCodegenMixin, Generate an ARC-owned chained hash table., Генерирует объявление словаря (+2 more)
+Nodes (10): Parse ``name: Type`` or ``name: Type = default``., Parse a typed variable declaration. Supported memory-oriented forms: *…, Parse ``var self.attr: Type [= value]`` with nested types., Return canonical type text and structured metadata., Parse ``self.attr [: Type] = value`` in a constructor., Извлекает информацию о контейнере из AST, Parse ``name: Type = default`` with nested generic/borrow types., Выводит тип из AST выражения (+2 more)
+
+### Community 27 - "CoreMixin"
+Cohesion: 0.22
+Nodes (5): CoreMixin, Reset all per-compilation mutable state., Возвращает отступ для текущего уровня, Добавляет строку с правильным отступом, Добавляет пустую строку
 
 ### Community 28 - "Handoff.md"
 Cohesion: 0.08
 Nodes (24): 10. C interop, 11. Parser, 13. `&x` vs borrow, 14. Struct, 16. Strings, 17. Bounds safety, 18. SIMD, 19. Demand-driven runtime (+16 more)
 
-### Community 29 - "._parse_with_priorities"
-Cohesion: 0.10
-Nodes (11): Парсит выражение с учетом приоритетов операторов Python, Парсит выражение на текущем уровне приоритета операторов, Парсит унарные операторы, Проверяет, что оператор в данной позиции является валидным оператором, Парсит цепочки индексации типа a[0][1][2], Разбирает сложные выражения с несколькими операторами и скобками, Проверяет, полностью ли выражение заключено в скобки, Находит оператор с наименьшим приоритетом вне скобок (+3 more)
+### Community 29 - ".find_operator_outside_parentheses"
+Cohesion: 0.20
+Nodes (5): Парсит выражение на текущем уровне приоритета операторов, Проверяет, что оператор в данной позиции является валидным оператором, Находит оператор с наименьшим приоритетом вне скобок, Проверяет, является ли символ частью идентификатора, Находит позицию оператора вне скобок, строк и комментариев
 
 ### Community 30 - "ExpressionsMixin"
 Cohesion: 0.25
 Nodes (5): ExpressionsMixin, Генерирует C выражение из AST с поддержкой tuple и list, Генерирует доступ к атрибуту объекта, Генерирует выражение из AST для конструктора с подстановкой параметров, Генерирует выражение из AST с подстановкой параметров конструктора
 
-### Community 31 - "test_array_tensor.py"
-Cohesion: 0.29
-Nodes (6): Compatibility façade for the Phils Ocean C backend v0.2. Existing callers may…, generate(), test_array_lowering_and_index_mutation(), test_tensor_lowering_shape_and_index_mutation(), test_tensor_the_big_code(), test_tensor_zeros_dynamic_shape()
+### Community 31 - ".clean_value"
+Cohesion: 0.20
+Nodes (5): Парсит сложные выражения с несколькими операциями, Разбирает сложные выражения с несколькими операторами и скобками, Проверяет, полностью ли выражение заключено в скобки, Проверяет, содержит ли выражение какой-либо оператор, Очищает значение от лишних пробелов, но для сложных выражений возвращает AST
 
 ### Community 32 - "ImportsMixin"
 Cohesion: 0.29
@@ -234,6 +234,10 @@ Nodes (4): OrchestratorMixin, Генерирует имя временной п�
 Cohesion: 0.33
 Nodes (4): LogRecord, ColoredFormatter, Set up a custom logger with optional configuration parameters. :param name:…, setup_logger()
 
+### Community 36 - "CCodeGenerator"
+Cohesion: 0.20
+Nodes (6): main(), CCodeGenerator, Public C backend façade. The implementation is split by responsibility into…, NamingMixin, Namespace every Phils-generated C type/function with ``ocean_``. The pass first…, Compatibility façade for the Phils Ocean C backend v0.2. Existing callers may…
+
 ### Community 39 - "Ocean 🌊"
 Cohesion: 0.18
 Nodes (10): Array и tensor, Borrow и ownership, Matrix: `list[list[int]]` → `tensor[float32]`, Ocean 🌊, Архитектура, Быстрый запуск, Одномерный список → owned `array`, Разработка (+2 more)
@@ -243,12 +247,16 @@ Cohesion: 0.17
 Nodes (11): 1. `ocean_` C namespace, 2. Automatic ownership management, 3. Lexical hybrid borrow checker v1, 4. Deterministic scope cleanup, 5. Ownership-aware containers, 6. Safer class lowering, Important safety boundary, Module layout (+3 more)
 
 ### Community 41 - "parser.py"
-Cohesion: 0.08
-Nodes (15): CImportProcessor, ImportProcessor, Просто регистрирует C импорт без парсинга, Обрабатывает импорт и возвращает содержимое импортируемого файла, Обрабатывает все импорты в коде и вставляет содержимое файлов, Reset all per-compilation parser state. A Parser instance can safely be reused…, Parse one Phils compilation unit into the legacy graph + typed metadata. The…, infer_literal_shape() (+7 more)
+Cohesion: 0.06
+Nodes (21): CImportProcessor, ImportProcessor, Просто регистрирует C импорт без парсинга, Обрабатывает импорт и возвращает содержимое импортируемого файла, Обрабатывает все импорты в коде и вставляет содержимое файлов, Reset all per-compilation parser state. A Parser instance can safely be reused…, Parse one Phils compilation unit into the legacy graph + typed metadata. The…, infer_literal_shape() (+13 more)
 
 ### Community 42 - "TupleCodegenMixin"
 Cohesion: 0.36
 Nodes (5): Генерирует имя структуры для tuple, Генерирует код для повторного объявления кортежа, Create a homogeneous immutable tuple with owned element references., Generate an ARC-owned homogeneous tuple[T]., TupleCodegenMixin
+
+### Community 43 - "DictCodegenMixin"
+Cohesion: 0.50
+Nodes (3): DictCodegenMixin, Generate an ARC-owned chained hash table., Генерирует объявление словаря
 
 ### Community 44 - "Repository Guidelines"
 Cohesion: 0.25
@@ -266,10 +274,6 @@ Nodes (7): 4. Memory model, BORROWED, Immutable borrow, Mutable borrow, OWNED, S
 Cohesion: 0.33
 Nodes (6): 20. Тесты, Level 1 — AST / parser, Level 2 — C generation, Level 3 — compile, Level 4 — memory safety, Обязательные memory tests
 
-### Community 48 - ".parse_class_attribute_initialization"
-Cohesion: 0.40
-Nodes (3): Parse ``self.attr [: Type] = value`` in a constructor., Извлекает информацию о контейнере из AST, Выводит тип из AST выражения
-
 ### Community 49 - "21. Array — принятое устройство"
 Cohesion: 0.67
 Nodes (3): 21. Array — принятое устройство, array, list
@@ -285,17 +289,17 @@ Nodes (3): 30. Следующий рекомендуемый этап, Array, Te
 ## Knowledge Gaps
 - **72 isolated node(s):** `Project Structure & Module Organization`, `Build, Test, and Development Commands`, `Coding Style & Naming Conventions`, `Testing Guidelines`, `Commit & Pull Request Guidelines` (+67 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **6 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `CCodeGenerator` connect `CCodeGenerator` to `run`, `OopMixin`, `RuntimeError`, `TypesMixin`, `OwnershipMixin`, `JSONValidator`, `generator.py`, `ListCodegenMixin`, `IndexingMixin`, `IoMixin`, `StatementsMixin`, `ScopeMixin`, `HelpersMixin`, `ExpressionsMixin`, `test_array_tensor.py`, `ImportsMixin`, `OrchestratorMixin`, `TensorCodegenMixin`, `NamingMixin`, `TupleCodegenMixin`?**
-  _High betweenness centrality (0.378) - this node is a cross-community bridge._
-- **Why does `Parser` connect `Parser` to `run`, `SymbolTable`, `parser.py`, `JSONValidator`, `.parse_expression_to_ast`, `.parse_line`, `.parse_class_attribute_initialization`, `.extract_dependencies_from_ast`, `.parse_function_call`, `.parse_function_arguments_to_ast`, `.parse_object_method_call_node`, `.parse_type_annotation`, `._parse_with_priorities`, `test_array_tensor.py`?**
+- **Why does `CCodeGenerator` connect `CCodeGenerator` to `run`, `OopMixin`, `RuntimeError`, `TypesMixin`, `OwnershipMixin`, `generator.py`, `ListCodegenMixin`, `IndexingMixin`, `IoMixin`, `StatementsMixin`, `ScopeMixin`, `HelpersMixin`, `CoreMixin`, `ExpressionsMixin`, `ImportsMixin`, `OrchestratorMixin`, `TensorCodegenMixin`, `parser.py`, `TupleCodegenMixin`, `DictCodegenMixin`?**
+  _High betweenness centrality (0.379) - this node is a cross-community bridge._
+- **Why does `Parser` connect `Parser` to `run`, `CCodeGenerator`, `SymbolTable`, `parser.py`, `.parse_expression_to_ast`, `generator.py`, `.parse_line`, `.extract_dependencies_from_ast`, `.parse_function_call`, `.parse_function_arguments_to_ast`, `.parse_object_method_call_node`, `.parse_type_annotation`, `.find_operator_outside_parentheses`, `.clean_value`?**
   _High betweenness centrality (0.335) - this node is a cross-community bridge._
-- **Why does `JSONValidator` connect `JSONValidator` to `.add_warning`, `.validate_function_return_type`, `.add_error`, `.get_type_from_ast`, `.validate_assignment`, `.get_symbol_info`?**
-  _High betweenness centrality (0.294) - this node is a cross-community bridge._
+- **Why does `JSONValidator` connect `JSONValidator` to `.add_warning`, `CCodeGenerator`, `.validate_function_return_type`, `.validate_graph`, `generator.py`, `.get_type_from_ast`, `.validate_assignment`, `.add_error`?**
+  _High betweenness centrality (0.293) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `Parser` (e.g. with `SymbolTable` and `TypeParser`) actually correct?**
   _`Parser` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 28 inferred relationships involving `RuntimeError` (e.g. with `._generate_array_literal_expr()` and `.generate_array_struct()`) actually correct?**
@@ -303,4 +307,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `Project Structure & Module Organization`, `Build, Test, and Development Commands`, `Coding Style & Naming Conventions` to the rest of the system?**
   _72 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `run` be split into smaller, more focused modules?**
-  _Cohesion score 0.06836055656382335 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06721215663354763 - nodes in this community are weakly interconnected._

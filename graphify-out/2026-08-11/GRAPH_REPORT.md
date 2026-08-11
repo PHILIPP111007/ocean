@@ -1,16 +1,16 @@
 # Graph Report - phils_language  (2026-08-11)
 
 ## Corpus Check
-- 58 files · ~79,772 words
+- 58 files · ~73,622 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 934 nodes · 1680 edges · 54 communities (47 shown, 7 thin omitted)
+- 936 nodes · 1684 edges · 57 communities (48 shown, 9 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 53 edges (avg confidence: 0.68)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c2b12397`
+- Built from commit: `5d392fa9`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -38,7 +38,7 @@
 - .parse_function_call
 - StatementsMixin
 - ScopeMixin
-- .parse_function_arguments_to_ast
+- TypeParser
 - HelpersMixin
 - .parse_object_method_call_node
 - .parse_type_annotation
@@ -57,6 +57,7 @@
 - What changed
 - parser.py
 - TupleCodegenMixin
+- TypeSpec
 - Repository Guidelines
 - Ocean automatic ownership model v1
 - 4. Memory model
@@ -68,17 +69,19 @@
 - 12. Новый parser v0.2
 - 15. Classes
 - Handoff — Phils Language / Ocean backend
+- split_top_level
+- .reset_state
 
 ## God Nodes (most connected - your core abstractions)
 1. `Parser` - 106 edges
 2. `JSONValidator` - 90 edges
-3. `run()` - 59 edges
+3. `run()` - 60 edges
 4. `OopMixin` - 28 edges
 5. `OwnershipMixin` - 28 edges
 6. `CCodeGenerator` - 26 edges
 7. `ArrayCodegenMixin` - 22 edges
 8. `TypesMixin` - 22 edges
-9. `TensorCodegenMixin` - 18 edges
+9. `TensorCodegenMixin` - 19 edges
 10. `SymbolTable` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
@@ -96,11 +99,11 @@
 ## Import Cycles
 - None detected.
 
-## Communities (54 total, 7 thin omitted)
+## Communities (57 total, 9 thin omitted)
 
 ### Community 0 - "run"
 Cohesion: 0.07
-Nodes (40): run(), test_c_code_math(), test_c_code_pthread(), test_del(), test_dict(), test_dict_get(), test_for_loop_1(), test_for_loop_2() (+32 more)
+Nodes (41): run(), test_c_code_math(), test_c_code_pthread(), test_del(), test_dict(), test_dict_get(), test_for_loop_1(), test_for_loop_2() (+33 more)
 
 ### Community 1 - "OopMixin"
 Cohesion: 0.05
@@ -132,7 +135,7 @@ Nodes (6): Добавляет атрибут в класс, Получает м�
 
 ### Community 8 - "Parser"
 Cohesion: 0.07
-Nodes (13): Parser, Парсит оператор break, Парсит оператор continue, Парсит оператор del (полное удаление), Определяет текущий scope на основе отступа, Парсит итерируемое выражение для for цикла, Проверяет, является ли имя именем класса, Извлекает содержимое внутри скобок, учитывая вложенность (+5 more)
+Nodes (12): Parser, Парсит присваивание значения указателя переменной: x = *p, Парсит оператор break, Парсит оператор del (полное удаление), Возвращает область видимости для заданного уровня отступа, Определяет текущий scope на основе отступа, Проверяет, является ли имя именем класса, Извлекает содержимое внутри скобок, учитывая вложенность (+4 more)
 
 ### Community 9 - ".parse_expression_to_ast"
 Cohesion: 0.11
@@ -147,8 +150,8 @@ Cohesion: 0.13
 Nodes (11): Валидирует типы в условии if/elif, Валидирует типы в операциях, Определяет тип значения из AST, Валидирует операции с типами, Рекурсивно валидирует типы в AST, Проверяет, можно ли выполнить операцию между двумя типами, Находит scope по уровню, Валидирует типы в узле (+3 more)
 
 ### Community 13 - ".parse_line"
-Cohesion: 0.14
-Nodes (11): Парсит присваивание значения указателя переменной: x = *p, Parse a free function with fully nested type annotations., Возвращает область видимости для заданного уровня отступа, Находит конец блока с отступом, Парсит if-elif-else конструкцию - РАБОЧАЯ ВЕРСИЯ без бесконечного цикла, Основной метод парсинга строки с поддержкой всех конструкций, Парсит вложенные if внутри других блоков (while, for, других if), Parse a value-semantic struct. Structs intentionally contain fields only in… (+3 more)
+Cohesion: 0.13
+Nodes (11): Парсит оператор continue, Parse a free function with fully nested type annotations., Находит конец блока с отступом, Парсит итерируемое выражение для for цикла, Парсит if-elif-else конструкцию - РАБОЧАЯ ВЕРСИЯ без бесконечного цикла, Основной метод парсинга строки с поддержкой всех конструкций, Парсит вложенные if внутри других блоков (while, for, других if), Parse a value-semantic struct. Structs intentionally contain fields only in… (+3 more)
 
 ### Community 14 - ".validate_assignment"
 Cohesion: 0.13
@@ -159,8 +162,8 @@ Cohesion: 0.12
 Nodes (7): Валидирует объявление указателя, Получает информацию о символе из текущего или родительских scope'ов, Проверяет выход за границы массивов/списков, Проверяет операции со строками, Проверяет вызовы C-функций (начинающиеся с @), Пытается получить статическое значение из AST, Находит родительский узел (если есть)
 
 ### Community 16 - ".extract_dependencies_from_ast"
-Cohesion: 0.12
-Nodes (8): Парсит присваивание срезу: my_list[1:3] = [20, 30], Парсит присваивание по индексу с поддержкой многомерных массивов, Парсит составную операцию с индексом: my_list[0] += 5, Парсит присваивание атрибуту: obj.attr = value, Парсит присваивание через разыменование указателя: *p = value, Парсит присваивание результата вызова функции: var x: type = func(args), Извлекает зависимости (используемые переменные) из AST, Парсит многомерное присваивание по индексу: A_data[0][0] = 10
+Cohesion: 0.08
+Nodes (13): Парсит присваивание срезу: my_list[1:3] = [20, 30], Парсит создание объекта с присваиванием: var x: Class = Class(args), Парсит вызов конструктора без присваивания: Class(args), Парсит присваивание по индексу с поддержкой многомерных массивов, Парсит составную операцию с индексом: my_list[0] += 5, Парсит присваивание атрибуту: obj.attr = value, Парсит присваивание через разыменование указателя: *p = value, Парсит присваивание результата вызова функции: var x: type = func(args) (+5 more)
 
 ### Community 17 - "ListCodegenMixin"
 Cohesion: 0.16
@@ -186,9 +189,9 @@ Nodes (7): Release loop-local owners before transferring control., Release curre
 Cohesion: 0.23
 Nodes (4): Enter a lexical ownership scope., Leave a lexical scope and deterministically release owned values., Generate a function with borrowed parameters and automatic cleanup., ScopeMixin
 
-### Community 23 - ".parse_function_arguments_to_ast"
-Cohesion: 0.17
-Nodes (6): Парсит создание объекта с присваиванием: var x: Class = Class(args), Парсит вызов конструктора без присваивания: Class(args), Парсит аргументы функции в список AST, Парсит создание объекта: ClassName(arg1, arg2, ...), Парсит вызов статического метода: ClassName.method(args), Парсит вызов статического метода: Class.method(args)
+### Community 23 - "TypeParser"
+Cohesion: 0.31
+Nodes (4): infer_literal_shape(), Recursive parser for Phils type expressions., Infer a rectangular shape from nested list literals. Returns ``None`` for…, TypeParser
 
 ### Community 24 - "HelpersMixin"
 Cohesion: 0.24
@@ -243,8 +246,8 @@ Cohesion: 0.17
 Nodes (11): 1. `ocean_` C namespace, 2. Automatic ownership management, 3. Lexical hybrid borrow checker v1, 4. Deterministic scope cleanup, 5. Ownership-aware containers, 6. Safer class lowering, Important safety boundary, Module layout (+3 more)
 
 ### Community 41 - "parser.py"
-Cohesion: 0.08
-Nodes (15): CImportProcessor, ImportProcessor, Просто регистрирует C импорт без парсинга, Обрабатывает импорт и возвращает содержимое импортируемого файла, Обрабатывает все импорты в коде и вставляет содержимое файлов, Reset all per-compilation parser state. A Parser instance can safely be reused…, Parse one Phils compilation unit into the legacy graph + typed metadata. The…, infer_literal_shape() (+7 more)
+Cohesion: 0.21
+Nodes (5): CImportProcessor, ImportProcessor, Просто регистрирует C импорт без парсинга, Обрабатывает импорт и возвращает содержимое импортируемого файла, Обрабатывает все импорты в коде и вставляет содержимое файлов
 
 ### Community 42 - "TupleCodegenMixin"
 Cohesion: 0.36
@@ -282,20 +285,24 @@ Nodes (3): 28. Статус array/tensor на момент handoff, Backend, Par
 Cohesion: 0.67
 Nodes (3): 30. Следующий рекомендуемый этап, Array, Tensor
 
+### Community 55 - "split_top_level"
+Cohesion: 0.33
+Nodes (4): Parse a comma-separated parameter list at top level., Парсит многомерное присваивание по индексу: A_data[0][0] = 10, Split text only when not nested in (), [], {}, <> or strings., split_top_level()
+
 ## Knowledge Gaps
 - **72 isolated node(s):** `Project Structure & Module Organization`, `Build, Test, and Development Commands`, `Coding Style & Naming Conventions`, `Testing Guidelines`, `Commit & Pull Request Guidelines` (+67 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **9 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `CCodeGenerator` connect `CCodeGenerator` to `run`, `OopMixin`, `RuntimeError`, `TypesMixin`, `OwnershipMixin`, `JSONValidator`, `generator.py`, `ListCodegenMixin`, `IndexingMixin`, `IoMixin`, `StatementsMixin`, `ScopeMixin`, `HelpersMixin`, `ExpressionsMixin`, `test_array_tensor.py`, `ImportsMixin`, `OrchestratorMixin`, `TensorCodegenMixin`, `NamingMixin`, `TupleCodegenMixin`?**
-  _High betweenness centrality (0.378) - this node is a cross-community bridge._
-- **Why does `Parser` connect `Parser` to `run`, `SymbolTable`, `parser.py`, `JSONValidator`, `.parse_expression_to_ast`, `.parse_line`, `.parse_class_attribute_initialization`, `.extract_dependencies_from_ast`, `.parse_function_call`, `.parse_function_arguments_to_ast`, `.parse_object_method_call_node`, `.parse_type_annotation`, `._parse_with_priorities`, `test_array_tensor.py`?**
+  _High betweenness centrality (0.379) - this node is a cross-community bridge._
+- **Why does `Parser` connect `Parser` to `run`, `SymbolTable`, `parser.py`, `JSONValidator`, `.parse_expression_to_ast`, `.parse_line`, `.parse_class_attribute_initialization`, `.extract_dependencies_from_ast`, `.parse_function_call`, `TypeParser`, `split_top_level`, `.reset_state`, `.parse_object_method_call_node`, `.parse_type_annotation`, `._parse_with_priorities`, `test_array_tensor.py`?**
   _High betweenness centrality (0.335) - this node is a cross-community bridge._
 - **Why does `JSONValidator` connect `JSONValidator` to `.add_warning`, `.validate_function_return_type`, `.add_error`, `.get_type_from_ast`, `.validate_assignment`, `.get_symbol_info`?**
-  _High betweenness centrality (0.294) - this node is a cross-community bridge._
+  _High betweenness centrality (0.293) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `Parser` (e.g. with `SymbolTable` and `TypeParser`) actually correct?**
   _`Parser` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 28 inferred relationships involving `RuntimeError` (e.g. with `._generate_array_literal_expr()` and `.generate_array_struct()`) actually correct?**
@@ -303,4 +310,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `Project Structure & Module Organization`, `Build, Test, and Development Commands`, `Coding Style & Naming Conventions` to the rest of the system?**
   _72 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `run` be split into smaller, more focused modules?**
-  _Cohesion score 0.06836055656382335 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06721215663354763 - nodes in this community are weakly interconnected._

@@ -22,7 +22,7 @@
   "20": ".parse_function_call",
   "21": "StatementsMixin",
   "22": "ScopeMixin",
-  "23": ".parse_function_arguments_to_ast",
+  "23": "TypeParser",
   "24": "HelpersMixin",
   "25": ".parse_object_method_call_node",
   "26": ".parse_type_annotation",
@@ -42,6 +42,7 @@
   "40": "What changed",
   "41": "parser.py",
   "42": "TupleCodegenMixin",
+  "43": "TypeSpec",
   "44": "Repository Guidelines",
   "45": "Ocean automatic ownership model v1",
   "46": "4. Memory model",
@@ -52,5 +53,7 @@
   "51": "30. Следующий рекомендуемый этап",
   "52": "12. Новый parser v0.2",
   "53": "15. Classes",
-  "54": "Handoff — Phils Language / Ocean backend"
+  "54": "Handoff — Phils Language / Ocean backend",
+  "55": "split_top_level",
+  "56": ".reset_state"
 }

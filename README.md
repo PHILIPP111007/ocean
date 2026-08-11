@@ -43,7 +43,7 @@ python -m venv .venv
 Команда обновит `examples/parsed_code.json` и `examples/generated_code.c`, затем соберёт C-программу в `examples/generated_code`. Для ручной проверки generated C используйте C11 и строгие предупреждения:
 
 ```bash
-gcc -std=c11 -Wall -Wextra -Wpedantic \
+gcc -O3 -std=c11 -Wall -Wextra -Wpedantic \
     -fsanitize=address,undefined \
     examples/generated_code.c -o /tmp/ocean_generated
 ```

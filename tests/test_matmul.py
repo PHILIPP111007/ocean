@@ -580,9 +580,9 @@ void* ocean_matmul(ocean_tensor_float32* A, ocean_tensor_float32* B, ocean_tenso
         for (int j = 0; ((1) > 0 ? j < cols_B : j > cols_B); j += 1) {
             float sum_value = 0.0;
             for (int k = 0; ((1) > 0 ? k < cols_A : k > cols_A); k += 1) {
-                sum_value = (sum_value + (ocean_tensor_float32_get(A, (size_t[]){(size_t)(i), (size_t)(k)}, 2) * ocean_tensor_float32_get(B, (size_t[]){(size_t)(k), (size_t)(j)}, 2)));
+                sum_value = (sum_value + (ocean_tensor_float32_get2(A, i, k) * ocean_tensor_float32_get2(B, k, j)));
             }
-            ocean_tensor_float32_set(C, (size_t[]){(size_t)(i), (size_t)(j)}, 2, sum_value);
+            ocean_tensor_float32_set2(C, i, j, sum_value);
         }
     }
     return NULL;
@@ -597,13 +597,13 @@ int main(void) {
     size_t ocean_tensor_C_2_shape[2] = { (size_t)(size), (size_t)(size) };
     ocean_tensor_float32* C = ocean_tensor_float32_zeros(ocean_tensor_C_2_shape, 2);
     for (int i = 0; ((1) > 0 ? i < size : i > size); i += 1) {
-        ocean_tensor_float32_set(A, (size_t[]){(size_t)(i), (size_t)(i)}, 2, 1.0);
-        ocean_tensor_float32_set(B, (size_t[]){(size_t)(i), (size_t)(i)}, 2, 2.0);
+        ocean_tensor_float32_set2(A, i, i, 1.0);
+        ocean_tensor_float32_set2(B, i, i, 2.0);
     }
     for (int _ = 0; ((1) > 0 ? _ < 1000 : _ > 1000); _ += 1) {
         ocean_matmul(A, B, C);
     }
-    printf("%f\n", ocean_tensor_float32_get(C, (size_t[]){(size_t)(0), (size_t)(0)}, 2));
+    printf("%f\n", ocean_tensor_float32_get2(C, 0, 0));
     printf("%zu\n", ocean_tensor_float32_shape_at(C, (size_t)(0)));
     printf("%zu\n", ocean_tensor_float32_shape_at(C, (size_t)(1)));
     printf("%zu\n", C->size);

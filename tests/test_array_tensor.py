@@ -47,7 +47,7 @@ def main() -> int:
     assert "ocean_tensor_float32_set" in code
     assert "ocean_tensor_float32_shape_at" in code
     assert "ocean_tensor_float32_free(matrix);" in code
-    assert "ocean_tensor_float32_get(matrix, (size_t[])" in code
+    assert "ocean_tensor_float32_get2(matrix" in code
 
 
 
@@ -185,6 +185,9 @@ def main() -> int:
     assert "ocean_tensor_float32_create" in code
     assert "ocean_tensor_float32_get" in code
     assert "ocean_tensor_float32_set" in code
+    assert "ocean_tensor_float32_get2(" in code
+    assert "ocean_tensor_float32_get3(" in code
+    assert "ocean_tensor_float32_set2(" in code
     assert "ocean_tensor_float32_shape_at" in code
     assert "ocean_tensor_float32_free(batch);" in code
     assert "ocean_array_float32_free(input);" in code
@@ -208,6 +211,21 @@ def main() -> int:
 
     assert "ocean_tensor_float32_zeros" in code
     assert "size_t ocean_tensor_matrix_" in code
-    assert "ocean_tensor_float32_set(matrix" in code
+    assert "ocean_tensor_float32_set2(matrix" in code
     assert "ocean_tensor_float32_free(matrix);" in code
     assert 'printf("%zu\\n"' in code
+
+
+def test_tensor_rank_specialization_is_unbounded():
+    code = generate(
+        """
+def main() -> int:
+    var values: tensor[float32] = tensor.zeros(1, 1, 1, 1, 1)
+    values[0, 0, 0, 0, 0] = 3.0
+    print(values[0, 0, 0, 0, 0])
+    return 0
+"""
+    )
+
+    assert "ocean_tensor_float32_get5(values" in code
+    assert "ocean_tensor_float32_set5(values" in code
