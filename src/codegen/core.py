@@ -30,6 +30,7 @@ class CoreMixin:
         self.pointer_types = set()
 
         self.class_fields = {}  # {class_name: {field_name: field_type}}
+        self.class_models = {}
 
         # Расширенный маппинг типов Python -> C
         self.type_map = {
@@ -121,6 +122,7 @@ class CoreMixin:
         self.struct_types = set()
         self.pointer_types = set()
         self.class_fields = {}
+        self.class_models = {}
         self.class_hierarchy = {}
         self.inherited_methods = {}
         self.all_class_methods = {}

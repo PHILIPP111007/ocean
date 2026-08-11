@@ -42,8 +42,9 @@ class OrchestratorMixin:
         # Semantic class prepasses are non-emitting and must happen before the
         # helper section so every field type is known in time.
         self.collect_class_fields_from_init_parameters(json_data)
-        self.analyze_class_inheritance(json_data)
         self.analyze_classes(json_data)
+        self.build_class_models(json_data)
+        self.analyze_class_inheritance(json_data)
 
         all_types = self.extract_all_types_from_ast(json_data)
         for fields in self.class_fields.values():

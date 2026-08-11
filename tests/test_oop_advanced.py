@@ -49,6 +49,33 @@ def main() -> int:
     assert compile_and_run(source, tmp_path) == "7\n9\n"
 
 
+def test_oop_metadata_has_one_canonical_class_model():
+    source = """
+class Counter:
+    def __init__(self, value: int) -> None:
+        self.value: int = value
+
+    def get(self) -> int:
+        return self.value
+
+class Box:
+    def __init__(self, value: int) -> None:
+        self.counter: Counter = Counter(value)
+
+def main() -> int:
+    var box: Box = Box(3)
+    return box.counter.get()
+"""
+
+    generator = CCodeGenerator()
+    generator.generate_from_json(Parser().parse_code(source))
+
+    box = generator.class_models["Box"]
+    assert box.bases == []
+    assert box.direct_field("counter").py_type == "Counter"
+    assert box.direct_method("__init__").scope is not None
+
+
 def test_oop_default_constructor_without_init(tmp_path):
     source = """
 class Marker:
@@ -134,4 +161,17 @@ class Invalid(Left, Right):
 """
 
     with pytest.raises(RuntimeError, match="multiple inheritance"):
+        CCodeGenerator().generate_from_json(Parser().parse_code(source))
+
+
+def test_oop_rejects_inheritance_cycles():
+    source = """
+class Left(Right):
+    pass
+
+class Right(Left):
+    pass
+"""
+
+    with pytest.raises(RuntimeError, match="inheritance cycle"):
         CCodeGenerator().generate_from_json(Parser().parse_code(source))

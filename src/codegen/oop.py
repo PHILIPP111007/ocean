@@ -5,8 +5,14 @@ from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
 from src.modules.logger import logger
+from src.codegen.class_model import ClassModel, FieldModel, build_class_models
 
 class OopMixin:
+    def build_class_models(self, json_data: List[Dict]) -> Dict[str, ClassModel]:
+        """Build the canonical OOP metadata after field inference is complete."""
+        self.class_models = build_class_models(json_data, self.class_fields)
+        return self.class_models
+
     def generate_class_declaration(self, node: Dict):
         """Генерирует структуру для класса C динамически"""
         class_name = node.get("class_name", "")
@@ -277,57 +283,12 @@ class OopMixin:
         self.add_empty_line()
 
     def generate_class_constructors(self, json_data: List[Dict]):
-        """Генерирует конструкторы для всех классов"""
-        # Сначала находим все методы __init__
-        init_scopes = {}
-
-        for scope in json_data:
-            # Ищем как constructor ИЛИ class_method
-            if (
-                scope.get("type") == "class_method"
-                or scope.get("type") == "constructor"
-            ) and scope.get("method_name") == "__init__":
-                class_name = scope.get("class_name", "")
-                init_scopes[class_name] = scope
-                logger.debug(
-                    f"DEBUG: Found init_scope for {class_name} (type: {scope.get('type')})"
-                )
-                logger.debug(f"Graph length: {len(scope.get('graph', []))}")
-
-        # Затем находим объявления классов
-        for scope in json_data:
-            if scope.get("type") == "module":
-                for node in scope.get("graph", []):
-                    if node.get("node") == "class_declaration":
-                        class_name = node.get("class_name", "")
-                        methods = node.get("methods", [])
-
-                        # Ищем метод __init__ в объявлении класса
-                        init_method = None
-                        for method in methods:
-                            if method.get("name") == "__init__":
-                                init_method = method
-                                logger.debug(f"Found init_method for {class_name}")
-                                break
-
-                        # Получаем scope для этого метода
-                        init_scope = init_scopes.get(class_name)
-
-                        if init_scope:
-                            logger.debug(f"Will generate constructor for {class_name}")
-                            # Выводим для отладки структуру init_scope
-                            logger.debug(f"init_scope keys: {init_scope.keys()}")
-                            logger.debug(
-                                f"DEBUG init_scope graph: {init_scope.get('graph', [])}"
-                            )
-                        else:
-                            logger.debug(f"No init_scope found for {class_name}")
-                            logger.debug(
-                                f"DEBUG: Available scopes: {list(init_scopes.keys())}"
-                            )
-
-                        # Генерируем конструктор
-                        self.generate_constructor(class_name, init_method, init_scope)
+        """Generate constructors from the canonical class models."""
+        for class_name, model in self.class_models.items():
+            init_model = model.direct_method("__init__")
+            init_method = init_model.to_dict() if init_model else None
+            init_scope = init_model.scope if init_model else None
+            self.generate_constructor(class_name, init_method, init_scope)
 
     def generate_class_method_implementation(self, class_name: str, scope: Dict):
         """Generate a method with borrowed parameters and automatic owner cleanup."""
@@ -450,7 +411,8 @@ class OopMixin:
     def generate_class_declaration_with_fields(self, node: Dict):
         """Generate an ARC-compatible class layout with safe single inheritance."""
         class_name = node.get("class_name", "")
-        base_classes = node.get("base_classes", [])
+        model = self.class_models.get(class_name)
+        base_classes = model.bases if model else node.get("base_classes", [])
         if len(base_classes) > 1:
             raise RuntimeError(
                 f"multiple inheritance for class '{class_name}' is disabled in Ocean memory-safe v0.2; "
@@ -472,8 +434,12 @@ class OopMixin:
             self.add_line("ocean_object_header header;")
             self.add_line("void** vtable;")
 
-        for field_name, field_type in self.class_fields.get(class_name, {}).items():
-            self.add_line(f"{self.map_type_to_c(field_type)} {field_name};")
+        fields = model.fields.values() if model else (
+            FieldModel(name=name, py_type=field_type, owner=class_name)
+            for name, field_type in self.class_fields.get(class_name, {}).items()
+        )
+        for field in fields:
+            self.add_line(f"{self.map_type_to_c(field.py_type)} {field.name};")
         self.indent_level -= 1
         self.add_line("};")
         self.add_empty_line()
@@ -518,6 +484,18 @@ class OopMixin:
 
     def _iter_inherited_fields(self, class_name: str):
         """Yield (origin_class, field_name, field_type) from root to leaf."""
+        model = self.class_models.get(class_name)
+        if model:
+            chain = list(model.iter_ancestor_names(self.class_models))
+            chain.reverse()
+            chain.append(class_name)
+            for origin in chain:
+                origin_model = self.class_models.get(origin)
+                if origin_model:
+                    for field in origin_model.fields.values():
+                        yield origin, field.name, field.py_type
+            return
+
         chain = []
         current = class_name
         seen = set()
@@ -608,18 +586,12 @@ class OopMixin:
         # Сначала анализируем наследование
         self.analyze_class_inheritance(json_data)
 
-        # Собираем все методы классов из JSON
+        # Собираем реализации из canonical MethodModel scopes.
         class_method_scopes = {}
-
-        for scope in json_data:
-            if scope.get("type") == "class_method":
-                class_name = scope.get("class_name", "")
-                method_name = scope.get("method_name", "")
-
-                if class_name not in class_method_scopes:
-                    class_method_scopes[class_name] = {}
-
-                class_method_scopes[class_name][method_name] = scope
+        for class_name, model in self.class_models.items():
+            for method_name, method in model.methods.items():
+                if method.scope and method_name != "__init__":
+                    class_method_scopes.setdefault(class_name, {})[method_name] = method.scope
 
         # Генерируем унаследованные методы
         for class_name, methods in self.all_class_methods.items():
@@ -835,42 +807,49 @@ class OopMixin:
             logger.debug(f"  {class_name}: {fields}")
 
     def analyze_class_inheritance(self, json_data: List[Dict]):
-        """Анализирует иерархию наследования классов"""
+        """Build method resolution metadata from canonical class models."""
         logger.debug("DEBUG analyze_class_inheritance: Начинаем анализ классов")
+        if not self.class_models:
+            self.build_class_models(json_data)
 
-        # Сначала собираем информацию о всех классах
-        class_info = {}
+        self.class_hierarchy = {
+            class_name: list(model.bases)
+            for class_name, model in self.class_models.items()
+        }
+        self.all_class_methods = {}
 
-        for scope in json_data:
-            if scope.get("type") == "module":
-                for node in scope.get("graph", []):
-                    if node.get("node") == "class_declaration":
-                        class_name = node.get("class_name", "")
-                        base_classes = node.get("base_classes", [])
-                        methods = node.get("methods", [])
+        def add_methods(class_name: str, active: set[str] | None = None):
+            active = set() if active is None else set(active)
+            if class_name in active:
+                raise RuntimeError(f"inheritance cycle involving {class_name}")
+            active.add(class_name)
+            model = self.class_models.get(class_name)
+            if not model:
+                return
 
-                        class_info[class_name] = {
-                            "base_classes": base_classes,
-                            "methods": {method["name"]: method for method in methods},
-                        }
-                        logger.debug(f"Класс {class_name} наследует от {base_classes}")
-
-        # Строим иерархию наследования
-        for class_name, info in class_info.items():
-            self.class_hierarchy[class_name] = info["base_classes"]
-            self.all_class_methods[class_name] = {}
-
-            # Начинаем с методов текущего класса
-            for method_name, method_info in info["methods"].items():
-                self.all_class_methods[class_name][method_name] = {
-                    **method_info,
+            methods = self.all_class_methods.setdefault(class_name, {})
+            for method_name, method in model.methods.items():
+                methods[method_name] = {
+                    **method.to_dict(),
                     "origin": class_name,
                     "is_inherited": False,
                 }
 
-            # Добавляем методы из родительских классов
-            if info["base_classes"]:
-                self._inherit_methods_from_parents(class_name, class_info)
+            if len(model.bases) > 1:
+                raise RuntimeError(
+                    f"multiple inheritance for class '{class_name}' is not supported"
+                )
+            for parent in model.bases:
+                add_methods(parent, active)
+                for method_name, method_info in self.all_class_methods.get(parent, {}).items():
+                    if method_name not in methods:
+                        methods[method_name] = {
+                            **method_info,
+                            "is_inherited": True,
+                        }
+
+        for class_name in self.class_models:
+            add_methods(class_name)
 
     def _inherit_methods_from_parents(self, class_name: str, class_info: Dict):
         """Добавляет унаследованные методы из родительских классов"""

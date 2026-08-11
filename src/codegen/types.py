@@ -1060,13 +1060,16 @@ class TypesMixin:
                 raise RuntimeError(f"inheritance cycle involving {class_name}")
             visited.add(current)
 
+            model = self.class_models.get(current)
+            field_model = model.direct_field(attribute) if model else None
             fields = self.class_fields.get(current, {})
-            if attribute in fields:
+            if field_model or attribute in fields:
+                field_type = field_model.py_type if field_model else fields[attribute]
                 if current == class_name:
                     expression = f"{path}->{attribute}"
                 else:
                     expression = f"{path}.{attribute}"
-                return fields[attribute], expression
+                return field_type, expression
 
             parents = self.class_hierarchy.get(current, [])
             if not parents:
