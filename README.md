@@ -4,6 +4,114 @@
 
 Ocean is a Python-like language that compiles to C11. The project targets systems programming and ML-oriented computation, with explicit borrow parameters and ownership checks during code generation.
 
+## Memory Model Overview
+
+Ocean uses a hybrid model: automatic ownership, reference counting, and static borrow checks.
+
+### Data Types
+
+- `int`, `float`, `bool` — regular value types without memory management.
+- `list[T]`, `dict[K, V]`, `tuple[T]`, class instances — ARC objects with reference counting.
+- `str` — a dedicated C string, copied when creating an alias.
+- `array[T]`, `tensor[T]` — unique-owned buffers with separate `free`.
+- `&T` — immutable borrow.
+- `&mut T` — exclusive mutable borrow.
+- raw C pointers — completely unsafe ownership.
+
+### Reference Counting
+
+An ARC object has a header:
+
+```c
+typedef struct ocean_object_header {
+    size_t refcount;
+    void (*destroy)(void*);
+} ocean_object_header;
+```
+
+When creating an object:
+
+```text
+refcount = 1
+```
+
+When creating a new alias, the following is called:
+
+```c
+ocean_retain(object);
+```
+
+When the owner leaves the scope:
+
+```c
+ocean_release(object);
+```
+
+When the counter reaches zero, the object's destructor is called.
+
+```python
+var a: list[int] = [1, 2, 3]
+var b: list[int] = a
+```
+
+`a` and `b` point to the same object, but each owner maintains its own reference.
+
+### Arrays and Tensors
+
+`array[T]` and `tensor[T]` do not use ARC. They have a single owner:
+
+```python
+var matrix: tensor[float32] = tensor.zeros(100, 100)
+```
+
+When the scope ends, the generator calls:
+
+```c
+ocean_tensor_float32_free(matrix);
+```
+
+Assigning an owned value usually transfers ownership:
+
+```python
+var first: tensor[float32] = tensor.zeros(10, 10)
+var second: tensor[float32] = first
+```
+
+After moving, `first` can no longer be used.
+
+### Borrowing
+
+Borrow does not increase the reference count or free memory:
+
+```python
+def read(matrix: &tensor[float32]) -> float32:
+    return matrix[0, 0]
+```
+
+`&mut` allows modification:
+
+```python
+def clear(matrix: &mut tensor[float32]) -> None:
+    matrix[0, 0] = 0.0
+    return None
+```
+
+The compiler prohibits deleting or modifying the object while borrowing is active.
+
+### Manual Management
+
+For explicit deletion, use:
+
+```python
+del value
+```
+
+This is usually not necessary: owned objects are automatically freed at the end of the scope. Direct C calls via `@` remain unsafe and may violate ownership rules.
+
+Reference counting in the current version is non-atomic, so ARC objects are intended primarily for thread-confined use.
+
+Details: [docs/MEMORY_MODEL.md](docs/MEMORY_MODEL.md).
+
 ## Architecture
 
 The main pipeline is:
