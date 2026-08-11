@@ -78,70 +78,119 @@ def main() -> int:
 """
 
     C = r"""
-list_list_int* get_empty_result_matrix(int rows, int cols) {
-    list_list_int* C = create_list_list_int(4);
-    list_int* zeros = create_list_int(4);
-    for (int j = 0; j < cols; j += 1) {
-        append_list_int(zeros, 0);
+int main(void);
+
+ocean_list_list_int* ocean_get_empty_result_matrix(int rows, int cols) {
+    ocean_list_list_int* C = ocean_create_list_list_int(4);
+    ocean_list_int* zeros = ocean_create_list_int(4);
+    for (int j = 0; ((1) > 0 ? j < cols : j > cols); j += 1) {
+        ocean_append_list_int(zeros, 0);
     }
-    for (int i = 0; i < rows; i += 1) {
-        list_int* row = create_list_int(4);
-        for (int j = 0; j < cols; j += 1) {
-            append_list_int(row, get_list_int(zeros, j));
+    for (int i = 0; ((1) > 0 ? i < rows : i > rows); i += 1) {
+        ocean_list_int* row = ocean_create_list_int(4);
+        for (int j = 0; ((1) > 0 ? j < cols : j > cols); j += 1) {
+            ocean_append_list_int(row, ocean_get_list_int(zeros, j));
         }
-        append_list_list_int(C, row);
+        ocean_append_list_list_int(C, row);
+        ocean_release(row);
+        row = NULL;
     }
-    return C;
+    ocean_list_list_int* ocean_return_0 = C;
+    ocean_release(zeros);
+    zeros = NULL;
+    return ocean_return_0;
+    ocean_release(zeros);
+    zeros = NULL;
+    ocean_release(C);
+    C = NULL;
 }
 
-list_list_int* matmul(list_list_int* A, list_list_int* B) {
-    int rows_A = builtin_len_list_list_int(A);
-    list_int* cols_A_list = get_list_list_int(A, 0);
-    int cols_A = builtin_len_list_int(cols_A_list);
-    list_int* cols_B_list = get_list_list_int(B, 0);
-    int cols_B = builtin_len_list_int(cols_B_list);
-    list_list_int* C = get_empty_result_matrix(rows_A, cols_B);
-    for (int i = 0; i < rows_A; i += 1) {
-        list_int* A_row = get_list_list_int(A, i);
-        list_int* C_row = get_list_list_int(C, i);
-        for (int k = 0; k < cols_A; k += 1) {
-            int A_ik = get_list_int(A_row, k);
-            list_int* B_row = get_list_list_int(B, k);
-            for (int j = 0; j < cols_B; j += 1) {
-                set_list_int(C_row, j, (get_list_int(C_row, j) + (A_ik * get_list_int(B_row, j))));
+ocean_list_list_int* ocean_matmul(ocean_list_list_int* A, ocean_list_list_int* B) {
+    int rows_A = ocean_builtin_len_list_list_int(A);
+    ocean_list_int* cols_A_list = ocean_get_list_list_int(A, 0);
+    ocean_retain(cols_A_list);
+    int cols_A = ocean_builtin_len_list_int(cols_A_list);
+    ocean_list_int* cols_B_list = ocean_get_list_list_int(B, 0);
+    ocean_retain(cols_B_list);
+    int cols_B = ocean_builtin_len_list_int(cols_B_list);
+    ocean_list_list_int* C = ocean_get_empty_result_matrix(rows_A, cols_B);
+    for (int i = 0; ((1) > 0 ? i < rows_A : i > rows_A); i += 1) {
+        ocean_list_int* A_row = ocean_get_list_list_int(A, i);
+        ocean_retain(A_row);
+        ocean_list_int* C_row = ocean_get_list_list_int(C, i);
+        ocean_retain(C_row);
+        for (int k = 0; ((1) > 0 ? k < cols_A : k > cols_A); k += 1) {
+            int A_ik = ocean_get_list_int(A_row, k);
+            ocean_list_int* B_row = ocean_get_list_list_int(B, k);
+            ocean_retain(B_row);
+            for (int j = 0; ((1) > 0 ? j < cols_B : j > cols_B); j += 1) {
+                ocean_set_list_int(C_row, j, (ocean_get_list_int(C_row, j) + (A_ik * ocean_get_list_int(B_row, j))));
             }
+            ocean_release(B_row);
+            B_row = NULL;
         }
+        ocean_release(C_row);
+        C_row = NULL;
+        ocean_release(A_row);
+        A_row = NULL;
     }
-    return C;
+    ocean_list_list_int* ocean_return_1 = C;
+    ocean_release(cols_B_list);
+    cols_B_list = NULL;
+    ocean_release(cols_A_list);
+    cols_A_list = NULL;
+    return ocean_return_1;
+    ocean_release(C);
+    C = NULL;
+    ocean_release(cols_B_list);
+    cols_B_list = NULL;
+    ocean_release(cols_A_list);
+    cols_A_list = NULL;
 }
 
 int main(void) {
     int size = 100;
-    list_list_int* A = create_list_list_int(4);
-    list_list_int* B = create_list_list_int(4);
-    for (int i = 0; i < size; i += 1) {
-        list_int* row_a = create_list_int(4);
-        list_int* row_b = create_list_int(4);
-        for (int j = 0; j < size; j += 1) {
-            append_list_int(row_a, (i + j));
-            append_list_int(row_b, (i + j));
+    ocean_list_list_int* A = ocean_create_list_list_int(4);
+    ocean_list_list_int* B = ocean_create_list_list_int(4);
+    for (int i = 0; ((1) > 0 ? i < size : i > size); i += 1) {
+        ocean_list_int* row_a = ocean_create_list_int(4);
+        ocean_list_int* row_b = ocean_create_list_int(4);
+        for (int j = 0; ((1) > 0 ? j < size : j > size); j += 1) {
+            ocean_append_list_int(row_a, (i + j));
+            ocean_append_list_int(row_b, (i + j));
         }
-        append_list_list_int(A, row_a);
-        append_list_list_int(B, row_b);
+        ocean_append_list_list_int(A, row_a);
+        ocean_append_list_list_int(B, row_b);
+        ocean_release(row_b);
+        row_b = NULL;
+        ocean_release(row_a);
+        row_a = NULL;
     }
     printf("%s\n", "Matrix created");
-    int rows_A = builtin_len_list_list_int(A);
-    list_int* cols_B_list = get_list_list_int(B, 0);
-    int cols_B = builtin_len_list_int(cols_B_list);
-    for (int _ = 0; _ < 1000; _ += 1) {
-        list_list_int* result = matmul(A, B);
+    int rows_A = ocean_builtin_len_list_list_int(A);
+    ocean_list_int* cols_B_list = ocean_get_list_list_int(B, 0);
+    ocean_retain(cols_B_list);
+    int cols_B = ocean_builtin_len_list_int(cols_B_list);
+    for (int _ = 0; ((1) > 0 ? _ < 1000 : _ > 1000); _ += 1) {
+        ocean_list_list_int* result = ocean_matmul(A, B);
         // del result
-        if (result) {
-            free_list_list_int(result);
-        }
+        ocean_release(result);
         result = NULL;
     }
-    return 0;
+    int ocean_return_2 = 0;
+    ocean_release(cols_B_list);
+    cols_B_list = NULL;
+    ocean_release(B);
+    B = NULL;
+    ocean_release(A);
+    A = NULL;
+    return ocean_return_2;
+    ocean_release(cols_B_list);
+    cols_B_list = NULL;
+    ocean_release(B);
+    B = NULL;
+    ocean_release(A);
+    A = NULL;
 }
 """
     run(P, C)
@@ -226,99 +275,128 @@ def main() -> int:
 """
 
     C = r"""
-typedef struct Matrix Matrix;
+typedef struct ocean_Matrix ocean_Matrix;
 
-struct Matrix {
+struct ocean_Matrix {
+    ocean_object_header header;
     void** vtable;
-    // Поля класса Matrix
     int rows;
     int cols;
     int size;
-    list_int* data;
+    ocean_list_int* data;
 };
 
-void* Matrix_init_matrix(Matrix* self);
-int Matrix_get(Matrix* self, int i, int j);
-void* Matrix_set(Matrix* self, int i, int j, int value);
+void* ocean_Matrix_init_matrix(ocean_Matrix* self);
+int ocean_Matrix_get(ocean_Matrix* self, int i, int j);
+void* ocean_Matrix_set(ocean_Matrix* self, int i, int j, int value);
 int main(void);
 
-// Конструктор для Matrix
-Matrix* create_Matrix(int rows, int cols) {
-    Matrix* obj = malloc(sizeof(Matrix));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for Matrix\n");
-        exit(1);
-    }
+static void ocean_destroy_Matrix(void* ptr) {
+    ocean_Matrix* self = (ocean_Matrix*)ptr;
+    if (!self) return;
+    ocean_release(((ocean_Matrix*)self)->data);
+    free(self);
+}
 
-    // Инициализация полей класса Matrix
-    obj->vtable = malloc(sizeof(void*) * 16);
-    if (!obj->vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
+ocean_Matrix* ocean_create_Matrix(int rows, int cols) {
+    ocean_Matrix* obj = (ocean_Matrix*)calloc(1, sizeof(ocean_Matrix));
+    if (!obj) { fprintf(stderr, "Memory allocation failed for Matrix\n"); exit(1); }
+    obj->header.refcount = 1;
+    obj->header.destroy = ocean_destroy_Matrix;
+    obj->vtable = NULL;
     obj->rows = rows;
     obj->cols = cols;
     obj->size = rows * cols;
-    obj->data = 0; // default value
     return obj;
 }
 
-void* Matrix_init_matrix(Matrix* self) {
+void* ocean_Matrix_init_matrix(ocean_Matrix* self) {
     int size = self->size;
-    list_int* data = create_list_int(4);
-    for (int _ = 0; _ < size; _ += 1) {
-        append_list_int(data, 0);
+    ocean_list_int* data = ocean_create_list_int(4);
+    for (int _ = 0; ((1) > 0 ? _ < size : _ > size); _ += 1) {
+        ocean_append_list_int(data, 0);
     }
-    self->data = data;
+    ocean_list_int* ocean_field_tmp_0 = data;
+    ocean_retain(ocean_field_tmp_0);
+    ocean_release(self->data);
+    self->data = ocean_field_tmp_0;
+    ocean_release(data);
+    data = NULL;
 }
 
-int Matrix_get(Matrix* self, int i, int j) {
-    return get_list_int(self->data, ((i * self->cols) + j));
+int ocean_Matrix_get(ocean_Matrix* self, int i, int j) {
+    int ocean_return_1 = ocean_get_list_int(self->data, ((i * self->cols) + j));
+    return ocean_return_1;
 }
 
-void* Matrix_set(Matrix* self, int i, int j, int value) {
-    set_list_int(self->data, ((i * self->cols) + j), value);
+void* ocean_Matrix_set(ocean_Matrix* self, int i, int j, int value) {
+    ocean_set_list_int(self->data, ((i * self->cols) + j), value);
 }
 
-void* matmul(Matrix* A, Matrix* B, Matrix* C) {
+void* ocean_matmul(ocean_Matrix* A, ocean_Matrix* B, ocean_Matrix* C) {
     int rows_A = A->rows;
     int cols_A = A->cols;
     int cols_B = B->cols;
-    list_int* A_data = A->data;
-    list_int* B_data = B->data;
-    list_int* C_data = C->data;
+    ocean_list_int* A_data = A->data;
+    ocean_retain(A_data);
+    ocean_list_int* B_data = B->data;
+    ocean_retain(B_data);
+    ocean_list_int* C_data = C->data;
+    ocean_retain(C_data);
     int cols_A_local = cols_A;
     int cols_B_local = cols_B;
-    for (int i = 0; i < rows_A; i += 1) {
+    for (int i = 0; ((1) > 0 ? i < rows_A : i > rows_A); i += 1) {
         int row_offset_A = (i * cols_A_local);
         int row_offset_C = (i * cols_B_local);
-        for (int j = 0; j < cols_B_local; j += 1) {
+        for (int j = 0; ((1) > 0 ? j < cols_B_local : j > cols_B_local); j += 1) {
             int sum_val = 0;
             int offset_C = (row_offset_C + j);
-            for (int k = 0; k < cols_A_local; k += 1) {
-                sum_val = (sum_val + (get_list_int(A_data, (row_offset_A + k)) * get_list_int(B_data, ((k * cols_B_local) + j))));
+            for (int k = 0; ((1) > 0 ? k < cols_A_local : k > cols_A_local); k += 1) {
+                sum_val = (sum_val + (ocean_get_list_int(A_data, (row_offset_A + k)) * ocean_get_list_int(B_data, ((k * cols_B_local) + j))));
             }
-            set_list_int(C_data, offset_C, sum_val);
+            ocean_set_list_int(C_data, offset_C, sum_val);
         }
     }
+    ocean_release(C_data);
+    C_data = NULL;
+    ocean_release(B_data);
+    B_data = NULL;
+    ocean_release(A_data);
+    A_data = NULL;
 }
 
 int main(void) {
-    list_int* data = create_list_int(4);
+    ocean_list_int* data = ocean_create_list_int(4);
     int rows = 100;
     int cols = 100;
-    Matrix* A = create_Matrix(rows, cols);
-    Matrix* B = create_Matrix(rows, cols);
-    Matrix_init_matrix(A);
-    Matrix_init_matrix(B);
+    ocean_Matrix* A = ocean_create_Matrix(rows, cols);
+    ocean_Matrix* B = ocean_create_Matrix(rows, cols);
+    ocean_Matrix_init_matrix(A);
+    ocean_Matrix_init_matrix(B);
     printf("%s\n", "Matrix created");
-    Matrix* C = create_Matrix(rows, cols);
-    Matrix_init_matrix(C);
-    for (int _ = 0; _ < 1000; _ += 1) {
-        matmul(A, B, C);
+    ocean_Matrix* C = ocean_create_Matrix(rows, cols);
+    ocean_Matrix_init_matrix(C);
+    for (int _ = 0; ((1) > 0 ? _ < 1000 : _ > 1000); _ += 1) {
+        ocean_matmul(A, B, C);
     }
-    return 0;
+    int ocean_return_2 = 0;
+    ocean_release(C);
+    C = NULL;
+    ocean_release(B);
+    B = NULL;
+    ocean_release(A);
+    A = NULL;
+    ocean_release(data);
+    data = NULL;
+    return ocean_return_2;
+    ocean_release(C);
+    C = NULL;
+    ocean_release(B);
+    B = NULL;
+    ocean_release(A);
+    A = NULL;
+    ocean_release(data);
+    data = NULL;
 }
 """
     run(P, C)
@@ -385,27 +463,29 @@ def main() -> int:
 """
 
     C = r"""
-void* matmul(list_int* A, list_int* B, list_int* C, int rows_A, int cols_A, int cols_B) {
-    for (int i = 0; i < rows_A; i += 1) {
+int main(void);
+
+void* ocean_matmul(ocean_list_int* A, ocean_list_int* B, ocean_list_int* C, int rows_A, int cols_A, int cols_B) {
+    for (int i = 0; ((1) > 0 ? i < rows_A : i > rows_A); i += 1) {
         int offset_A = (i * cols_A);
         int offset_C = (i * cols_B);
-        for (int j = 0; j < cols_B; j += 1) {
+        for (int j = 0; ((1) > 0 ? j < cols_B : j > cols_B); j += 1) {
             int sum_val = 0;
             int offset_B = j;
             int k = 0;
             int cols_A_local = cols_A;
             while (((k + 3) < cols_A_local)) {
-                sum_val = (sum_val + (get_list_int(A, (offset_A + k)) * get_list_int(B, ((k * cols_B) + j))));
-                sum_val = (sum_val + (get_list_int(A, (offset_A + (k + 1))) * get_list_int(B, (((k + 1) * cols_B) + j))));
-                sum_val = (sum_val + (get_list_int(A, (offset_A + (k + 2))) * get_list_int(B, (((k + 2) * cols_B) + j))));
-                sum_val = (sum_val + (get_list_int(A, (offset_A + (k + 3))) * get_list_int(B, (((k + 3) * cols_B) + j))));
+                sum_val = (sum_val + (ocean_get_list_int(A, (offset_A + k)) * ocean_get_list_int(B, ((k * cols_B) + j))));
+                sum_val = (sum_val + (ocean_get_list_int(A, (offset_A + (k + 1))) * ocean_get_list_int(B, (((k + 1) * cols_B) + j))));
+                sum_val = (sum_val + (ocean_get_list_int(A, (offset_A + (k + 2))) * ocean_get_list_int(B, (((k + 2) * cols_B) + j))));
+                sum_val = (sum_val + (ocean_get_list_int(A, (offset_A + (k + 3))) * ocean_get_list_int(B, (((k + 3) * cols_B) + j))));
                 k = (k + 4);
             }
             while ((k < cols_A_local)) {
-                sum_val = (sum_val + (get_list_int(A, (offset_A + k)) * get_list_int(B, ((k * cols_B) + j))));
+                sum_val = (sum_val + (ocean_get_list_int(A, (offset_A + k)) * ocean_get_list_int(B, ((k * cols_B) + j))));
                 k = (k + 1);
             }
-            set_list_int(C, (offset_C + j), sum_val);
+            ocean_set_list_int(C, (offset_C + j), sum_val);
         }
     }
 }
@@ -415,21 +495,34 @@ int main(void) {
     int rows = size;
     int cols = size;
     int total_size = (rows * cols);
-    list_int* A = create_list_int(4);
-    list_int* B = create_list_int(4);
-    for (int idx = 0; idx < total_size; idx += 1) {
-        append_list_int(A, 0);
-        append_list_int(B, 0);
+    ocean_list_int* A = ocean_create_list_int(4);
+    ocean_list_int* B = ocean_create_list_int(4);
+    for (int idx = 0; ((1) > 0 ? idx < total_size : idx > total_size); idx += 1) {
+        ocean_append_list_int(A, 0);
+        ocean_append_list_int(B, 0);
     }
     printf("%s\n", "Matrix created");
-    list_int* C = create_list_int(4);
-    for (int _ = 0; _ < rows * cols; _ += 1) {
-        append_list_int(C, 0);
+    ocean_list_int* C = ocean_create_list_int(4);
+    for (int _ = 0; ((1) > 0 ? _ < rows * cols : _ > rows * cols); _ += 1) {
+        ocean_append_list_int(C, 0);
     }
-    for (int _ = 0; _ < 1000; _ += 1) {
-        matmul(A, B, C, rows, cols, cols);
+    for (int _ = 0; ((1) > 0 ? _ < 1000 : _ > 1000); _ += 1) {
+        ocean_matmul(A, B, C, rows, cols, cols);
     }
-    return 0;
+    int ocean_return_0 = 0;
+    ocean_release(C);
+    C = NULL;
+    ocean_release(B);
+    B = NULL;
+    ocean_release(A);
+    A = NULL;
+    return ocean_return_0;
+    ocean_release(C);
+    C = NULL;
+    ocean_release(B);
+    B = NULL;
+    ocean_release(A);
+    A = NULL;
 }
 """
     run(P, C)

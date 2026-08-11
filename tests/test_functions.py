@@ -20,7 +20,8 @@ def main() -> int:
 """
 
     C = r"""
-void* func_1(void) {
+
+void* ocean_func_1(void) {
     int x = 0;
     x = (x + 1);
 }
@@ -29,17 +30,19 @@ int main(void) {
     int x = 10;
     if ((x < 10)) {
         if ((1 < 10)) {
-            func_1();
+            ocean_func_1();
         }
         else {
-            func_2();
+            ocean_func_2();
         }
     }
-    return 0;
+    int ocean_return_0 = 0;
+    return ocean_return_0;
 }
 
-int func_2(void) {
-    return 1;
+int ocean_func_2(void) {
+    int ocean_return_1 = 1;
+    return ocean_return_1;
 }
 """
     run(P, C)
@@ -60,16 +63,19 @@ def main() -> int:
 """
 
     C = r"""
-char* func(void) {
-    return "qepfko";
+char* ocean_func(void) {
+    char* ocean_return_0 = ocean_strdup("qepfko");
+    return ocean_return_0;
 }
 
 int main(void) {
     int a = (1 + 10);
-    char* b = func();
+    char* b = ocean_func();
     // del b
+    free(b);
     b = NULL;
-    return 0;
+    int ocean_return_1 = 0;
+    return ocean_return_1;
 }
 """
     run(P, C)

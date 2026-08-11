@@ -18,29 +18,30 @@ def main() -> int:
 
     C = """
 int main(void) {
-    list_int* a = create_list_int(4);
-    append_list_int(a, 1);
-    append_list_int(a, 2);
-    append_list_int(a, 3);
-    append_list_int(a, 1);
+    ocean_list_int* a = ocean_create_list_int(4);
+    ocean_append_list_int(a, 1);
+    ocean_append_list_int(a, 2);
+    ocean_append_list_int(a, 3);
+    ocean_append_list_int(a, 1);
     // del a
-    if (a) {
-        free_list_int(a);
-    }
+    ocean_release(a);
     a = NULL;
-    list_list_int* b = create_list_list_int(4);
-    list_int* b_1 = create_list_int(4);
-    append_list_int(b_1, 1);
-    append_list_int(b_1, 2);
-    append_list_int(b_1, 3);
-    append_list_int(b_1, 4);
-    append_list_list_int(b, b_1);
+    ocean_list_list_int* b = ocean_create_list_list_int(4);
+    ocean_list_int* b_1 = ocean_create_list_int(4);
+    ocean_append_list_int(b_1, 1);
+    ocean_append_list_int(b_1, 2);
+    ocean_append_list_int(b_1, 3);
+    ocean_append_list_int(b_1, 4);
+    ocean_append_list_list_int(b, b_1);
     // del b
-    if (b) {
-        free_list_list_int(b);
-    }
+    ocean_release(b);
     b = NULL;
-    return 0;
+    int ocean_return_0 = 0;
+    ocean_release(b_1);
+    b_1 = NULL;
+    return ocean_return_0;
+    ocean_release(b_1);
+    b_1 = NULL;
 }
 """
     run(P, C)
@@ -51,38 +52,26 @@ def test_list_pop_1():
 def main() -> int:
     var a: list[int] = [1, 2, 3]
     
-    a.pop(0)
-    a.pop()
+    var b: int = a.pop(0)
+    var c: int = a.pop()
 
     return 0
 """
 
     C = r"""
 int main(void) {
-    list_int* a = create_list_int(4);
-    append_list_int(a, 1);
-    append_list_int(a, 2);
-    append_list_int(a, 3);
-    if (a && 0 >= 0 && 0 < a->size) {
-        int temp_0 = a->data[0];
-        for (int i = 0; i < a->size - 1; i++) {
-            a->data[i] = a->data[i + 1];
-        }
-        a->size--;
-        // Результат pop() используется, но не присвоен
-    } else {
-        fprintf(stderr, "IndexError: pop index out of range\n");
-        exit(1);
-    }
-    if (a && a->size > 0) {
-        int temp_1 = a->data[a->size - 1];
-        a->size--;
-        // Результат pop() используется, но не присвоен
-    } else {
-        fprintf(stderr, "IndexError: pop from empty list\n");
-        exit(1);
-    }
-    return 0;
+    ocean_list_int* a = ocean_create_list_int(4);
+    ocean_append_list_int(a, 1);
+    ocean_append_list_int(a, 2);
+    ocean_append_list_int(a, 3);
+    int b = ocean_pop_list_int(a, 0);
+    int c = ocean_pop_list_int(a, -1);
+    int ocean_return_0 = 0;
+    ocean_release(a);
+    a = NULL;
+    return ocean_return_0;
+    ocean_release(a);
+    a = NULL;
 }
 """
     run(P, C)
@@ -103,24 +92,19 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    list_int* a = create_list_int(4);
-    append_list_int(a, 1);
-    append_list_int(a, 2);
-    append_list_int(a, 3);
+    ocean_list_int* a = ocean_create_list_int(4);
+    ocean_append_list_int(a, 1);
+    ocean_append_list_int(a, 2);
+    ocean_append_list_int(a, 3);
     int b = 0;
-    if (a && 0 >= 0 && 0 < a->size) {
-        int temp_0 = a->data[0];
-        for (int i = 0; i < a->size - 1; i++) {
-            a->data[i] = a->data[i + 1];
-        }
-        a->size--;
-        b = temp_0;
-    } else {
-        fprintf(stderr, "IndexError: pop index out of range\n");
-        exit(1);
-    }
+    b = ocean_pop_list_int(a, 0);
     printf("%d\n", b);
-    return 0;
+    int ocean_return_0 = 0;
+    ocean_release(a);
+    a = NULL;
+    return ocean_return_0;
+    ocean_release(a);
+    a = NULL;
 }
 """
     run(P, C)
@@ -136,12 +120,17 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    list_int* a = create_list_int(4);
-    append_list_int(a, 1);
-    append_list_int(a, 2);
-    append_list_int(a, 3);
-    set_list_int(a, 0, 10);
-    return 0;
+    ocean_list_int* a = ocean_create_list_int(4);
+    ocean_append_list_int(a, 1);
+    ocean_append_list_int(a, 2);
+    ocean_append_list_int(a, 3);
+    ocean_set_list_int(a, 0, 10);
+    int ocean_return_0 = 0;
+    ocean_release(a);
+    a = NULL;
+    return ocean_return_0;
+    ocean_release(a);
+    a = NULL;
 }
 """
     run(P, C)
@@ -157,12 +146,17 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    list_int* a = create_list_int(4);
-    append_list_int(a, 1);
-    append_list_int(a, 2);
-    append_list_int(a, 3);
-    int a1 = get_list_int(a, 0);
-    return 0;
+    ocean_list_int* a = ocean_create_list_int(4);
+    ocean_append_list_int(a, 1);
+    ocean_append_list_int(a, 2);
+    ocean_append_list_int(a, 3);
+    int a1 = ocean_get_list_int(a, 0);
+    int ocean_return_0 = 0;
+    ocean_release(a);
+    a = NULL;
+    return ocean_return_0;
+    ocean_release(a);
+    a = NULL;
 }
 """
     run(P, C)
@@ -178,11 +172,20 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    list_str* a = create_list_str(4);
-    append_list_str(a, "1");
-    append_list_str(a, "2");
-    char* a1 = get_list_str(a, 0);
-    return 0;
+    ocean_list_str* a = ocean_create_list_str(4);
+    ocean_append_list_str(a, "1");
+    ocean_append_list_str(a, "2");
+    char* a1 = ocean_strdup(ocean_get_list_str(a, 0));
+    int ocean_return_0 = 0;
+    free(a1);
+    a1 = NULL;
+    ocean_release(a);
+    a = NULL;
+    return ocean_return_0;
+    free(a1);
+    a1 = NULL;
+    ocean_release(a);
+    a = NULL;
 }
 """
     run(P, C)
@@ -198,11 +201,16 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    list_str* a = create_list_str(4);
-    append_list_str(a, "1");
-    append_list_str(a, "2");
-    set_list_str(a, 0, "100");
-    return 0;
+    ocean_list_str* a = ocean_create_list_str(4);
+    ocean_append_list_str(a, "1");
+    ocean_append_list_str(a, "2");
+    ocean_set_list_str(a, 0, "100");
+    int ocean_return_0 = 0;
+    ocean_release(a);
+    a = NULL;
+    return ocean_return_0;
+    ocean_release(a);
+    a = NULL;
 }
 """
     run(P, C)
@@ -218,14 +226,19 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    list_int* a = create_list_int(4);
-    append_list_int(a, 1);
-    append_list_int(a, 2);
-    append_list_int(a, 3);
-    int temp_0 = get_list_int(a, 1);
+    ocean_list_int* a = ocean_create_list_int(4);
+    ocean_append_list_int(a, 1);
+    ocean_append_list_int(a, 2);
+    ocean_append_list_int(a, 3);
+    int temp_0 = ocean_get_list_int(a, 1);
     temp_0 += 1;
-    set_list_int(a, 1, temp_0);
-    return 0;
+    ocean_set_list_int(a, 1, temp_0);
+    int ocean_return_1 = 0;
+    ocean_release(a);
+    a = NULL;
+    return ocean_return_1;
+    ocean_release(a);
+    a = NULL;
 }
 """
     run(P, C)
@@ -256,29 +269,42 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    list_list_list_int* A = create_list_list_list_int(4);
-    list_list_int* a = create_list_list_int(4);
-    list_int* a1 = create_list_int(5);
-    append_list_int(a1, 1);
-    append_list_int(a1, 2);
-    append_list_int(a1, 3);
-    append_list_int(a1, 4);
-    append_list_int(a1, 5);
-    append_list_list_int(a, a1);
-    append_list_list_list_int(A, a);
-    set_list_int(a1, 0, 100);
-    list_int* temp_0 = get_list_list_int(a, 0);
-    set_list_int(temp_0, 0, 100);
-    list_list_int* temp_1 = get_list_list_list_int(A, 0);
-    list_int* temp_2 = get_list_list_int(temp_1, 0);
-    set_list_int(temp_2, 0, (100 + 1));
-    int b = get_list_int(get_list_list_int(get_list_list_list_int(A, 0), 0), 0);
+    ocean_list_list_list_int* A = ocean_create_list_list_list_int(4);
+    ocean_list_list_int* a = ocean_create_list_list_int(4);
+    ocean_list_int* a1 = ocean_create_list_int(5);
+    ocean_append_list_int(a1, 1);
+    ocean_append_list_int(a1, 2);
+    ocean_append_list_int(a1, 3);
+    ocean_append_list_int(a1, 4);
+    ocean_append_list_int(a1, 5);
+    ocean_append_list_list_int(a, a1);
+    ocean_append_list_list_list_int(A, a);
+    ocean_set_list_int(a1, 0, 100);
+    ocean_list_int* temp_0 = ocean_get_list_list_int(a, 0);
+    ocean_set_list_int(temp_0, 0, 100);
+    ocean_list_list_int* temp_1 = ocean_get_list_list_list_int(A, 0);
+    ocean_list_int* temp_2 = ocean_get_list_list_int(temp_1, 0);
+    ocean_set_list_int(temp_2, 0, (100 + 1));
+    int b = ocean_get_list_int(ocean_get_list_list_int(ocean_get_list_list_list_int(A, 0), 0), 0);
     printf("%d\n", b);
-    b = (get_list_int(get_list_list_int(get_list_list_list_int(A, 0), 0), 0) + get_list_int(get_list_list_int(get_list_list_list_int(A, 0), 0), 1));
-    list_list_int* temp_3 = get_list_list_list_int(A, 0);
-    list_int* temp_4 = get_list_list_int(temp_3, 0);
-    set_list_int(temp_4, 2, (get_list_int(get_list_list_int(get_list_list_list_int(A, 0), 0), 0) + get_list_int(get_list_list_int(get_list_list_list_int(A, 0), 0), 1)));
-    return 0;
+    b = (ocean_get_list_int(ocean_get_list_list_int(ocean_get_list_list_list_int(A, 0), 0), 0) + ocean_get_list_int(ocean_get_list_list_int(ocean_get_list_list_list_int(A, 0), 0), 1));
+    ocean_list_list_int* temp_3 = ocean_get_list_list_list_int(A, 0);
+    ocean_list_int* temp_4 = ocean_get_list_list_int(temp_3, 0);
+    ocean_set_list_int(temp_4, 2, (ocean_get_list_int(ocean_get_list_list_int(ocean_get_list_list_list_int(A, 0), 0), 0) + ocean_get_list_int(ocean_get_list_list_int(ocean_get_list_list_list_int(A, 0), 0), 1)));
+    int ocean_return_5 = 0;
+    ocean_release(a1);
+    a1 = NULL;
+    ocean_release(a);
+    a = NULL;
+    ocean_release(A);
+    A = NULL;
+    return ocean_return_5;
+    ocean_release(a1);
+    a1 = NULL;
+    ocean_release(a);
+    a = NULL;
+    ocean_release(A);
+    A = NULL;
 }
 """
     run(P, C)

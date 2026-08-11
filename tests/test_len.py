@@ -20,20 +20,37 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    list_str* l = create_list_str(4);
-    append_list_str(l, "1");
-    append_list_str(l, "2");
-    dict_str_str* a = create_dict_str_str(16);
-    set_dict_str_str(a, "a", "b");
-    int a_len = len_dict_str_str(a);
-    char* b = "abc";
+    ocean_list_str* l = ocean_create_list_str(4);
+    ocean_append_list_str(l, "1");
+    ocean_append_list_str(l, "2");
+    ocean_dict_str_str* a = ocean_create_dict_str_str(16);
+    ocean_set_dict_str_str(a, "a", "b");
+    int a_len = ocean_len_dict_str_str(a);
+    char* b = ocean_strdup("abc");
     int b_len = strlen(b);
-    list_int* c = create_list_int(4);
-    append_list_int(c, 1);
-    append_list_int(c, 2);
-    append_list_int(c, 3);
-    int c_len = builtin_len_list_int(c);
-    return 0;
+    ocean_list_int* c = ocean_create_list_int(4);
+    ocean_append_list_int(c, 1);
+    ocean_append_list_int(c, 2);
+    ocean_append_list_int(c, 3);
+    int c_len = ocean_builtin_len_list_int(c);
+    int ocean_return_0 = 0;
+    ocean_release(c);
+    c = NULL;
+    free(b);
+    b = NULL;
+    ocean_release(a);
+    a = NULL;
+    ocean_release(l);
+    l = NULL;
+    return ocean_return_0;
+    ocean_release(c);
+    c = NULL;
+    free(b);
+    b = NULL;
+    ocean_release(a);
+    a = NULL;
+    ocean_release(l);
+    l = NULL;
 }
 """
     run(P, C)

@@ -34,35 +34,60 @@ def main() -> int:
 """
 
     C = r"""
+int main(void);
+
 int main(void) {
-    char* a = "Hello {}";
-    a = string_upper(a);
-    a = string_lower(a);
-    a = string_format(a, "world");
-    list_str* a_list = string_split(a, " ");
-    qsort(a_list->data, a_list->size, sizeof(char*), compare_string);
+    char* a = ocean_strdup("Hello {}");
+    char* ocean_string_tmp_0 = ocean_string_upper(a);
+    free(a);
+    a = ocean_string_tmp_0;
+    char* ocean_string_tmp_1 = ocean_string_lower(a);
+    free(a);
+    a = ocean_string_tmp_1;
+    char* ocean_string_tmp_2 = ocean_string_format(a, "world");
+    free(a);
+    a = ocean_string_tmp_2;
+    ocean_list_str* a_list = ocean_string_split(a, " ");
+    qsort(a_list->data, a_list->size, sizeof(char*), ocean_compare_string);
     int b = 100;
-    char* b1 = builtin_str_int(b);
-    char* c = "10";
+    char* b1 = ocean_builtin_str_int(b);
+    char* c = ocean_strdup("10");
     int c1 = atoi(c);
-    list_int* d = create_list_int(4);
-    append_list_int(d, 1);
-    append_list_int(d, 2);
-    qsort(d->data, d->size, sizeof(int), compare_int);
-    if (d && d->size > 0) {
-        int temp_0 = d->data[d->size - 1];
-        d->size--;
-        // Результат pop() используется, но не присвоен
-    } else {
-        fprintf(stderr, "IndexError: pop from empty list\n");
-        exit(1);
-    }
-    list_list_int* d1 = create_list_list_int(4);
-    append_list_list_int(d1, d);
-    append_list_list_int(d1, d);
-    int e = builtin_len_list_int(d);
-    int e1 = builtin_len_list_list_int(d1);
-    return 0;
+    ocean_list_int* d = ocean_create_list_int(4);
+    ocean_append_list_int(d, 1);
+    ocean_append_list_int(d, 2);
+    qsort(d->data, d->size, sizeof(int), ocean_compare_int);
+    ocean_list_list_int* d1 = ocean_create_list_list_int(4);
+    ocean_append_list_list_int(d1, d);
+    ocean_append_list_list_int(d1, d);
+    int e = ocean_builtin_len_list_int(d);
+    int e1 = ocean_builtin_len_list_list_int(d1);
+    int ocean_return_3 = 0;
+    ocean_release(d1);
+    d1 = NULL;
+    ocean_release(d);
+    d = NULL;
+    free(c);
+    c = NULL;
+    free(b1);
+    b1 = NULL;
+    ocean_release(a_list);
+    a_list = NULL;
+    free(a);
+    a = NULL;
+    return ocean_return_3;
+    ocean_release(d1);
+    d1 = NULL;
+    ocean_release(d);
+    d = NULL;
+    free(c);
+    c = NULL;
+    free(b1);
+    b1 = NULL;
+    ocean_release(a_list);
+    a_list = NULL;
+    free(a);
+    a = NULL;
 }
 """
     run(P, C)

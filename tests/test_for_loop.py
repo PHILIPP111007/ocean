@@ -12,10 +12,11 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    for (int i = 0; i < 100; i += 1) {
+    for (int i = 0; ((1) > 0 ? i < 100 : i > 100); i += 1) {
         printf("%d\n", i);
     }
-    return 0;
+    int ocean_return_0 = 0;
+    return ocean_return_0;
 }
 """
     run(P, C)
@@ -32,10 +33,11 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    for (int i = 0; i < 100; i += -10) {
+    for (int i = 0; ((-10) > 0 ? i < 100 : i > 100); i += -10) {
         printf("%d\n", i);
     }
-    return 0;
+    int ocean_return_0 = 0;
+    return ocean_return_0;
 }
 """
     run(P, C)
@@ -55,16 +57,16 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    for (int i = 0; i < 100; i += 10) {
+    for (int i = 0; ((10) > 0 ? i < 100 : i > 100); i += 10) {
         if (((i % 10) == 0)) {
             main();
         }
         else {
             break;
-            // break statement
         }
     }
-    return 0;
+    int ocean_return_0 = 0;
+    return ocean_return_0;
 }
 """
     run(P, C)
@@ -82,12 +84,13 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    for (int i = 0; i < 100; i += 10) {
-        for (int j = 0; j < 100; j += 1) {
+    for (int i = 0; ((10) > 0 ? i < 100 : i > 100); i += 10) {
+        for (int j = 0; ((1) > 0 ? j < 100 : j > 100); j += 1) {
             printf("%d\n", (i * j));
         }
     }
-    return 0;
+    int ocean_return_0 = 0;
+    return ocean_return_0;
 }
 """
     run(P, C)

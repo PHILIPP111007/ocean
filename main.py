@@ -57,11 +57,11 @@ def main(base_path: str, p_path: str, json_path: str, c_path: str):
 
 
 if __name__ == "__main__":
-    p_path = "/Users/phil/GitHub/phils_language/examples/main.p"
+    p_path = "./examples/main.oc"
     base_path = os.path.dirname(p_path)
-    json_path = "/Users/phil/GitHub/phils_language/examples/parsed_code.json"
-    c_path = "/Users/phil/GitHub/phils_language/examples/generated_code.c"
-    output_path = "/Users/phil/GitHub/phils_language/examples/generated_code"
+    json_path = "./examples/parsed_code.json"
+    c_path = "./examples/generated_code.c"
+    output_path = "./examples/generated_code"
 
     main(base_path=base_path, p_path=p_path, json_path=json_path, c_path=c_path)
 

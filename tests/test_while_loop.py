@@ -15,7 +15,8 @@ int main(void) {
     while ((1 < 10)) {
         printf("%d\n", 1);
     }
-    return 0;
+    int ocean_return_0 = 0;
+    return ocean_return_0;
 }
 """
     run(P, C)
@@ -35,7 +36,8 @@ int main(void) {
     while ((1 > 10)) {
         printf("%d\n", 1);
     }
-    return 0;
+    int ocean_return_0 = 0;
+    return ocean_return_0;
 }
 """
     run(P, C)
@@ -59,7 +61,8 @@ int main(void) {
         printf("%d\n", i);
         i = (i + 1);
     }
-    return 0;
+    int ocean_return_0 = 0;
+    return ocean_return_0;
 }
 """
     run(P, C)

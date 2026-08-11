@@ -14,7 +14,8 @@ def main() -> int:
 int A = 1000;
 float B = 1.1;
 int main(void) {
-    return 0;
+    int ocean_return_0 = 0;
+    return ocean_return_0;
 }
 """
     run(P, C)

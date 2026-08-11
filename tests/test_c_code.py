@@ -13,7 +13,8 @@ def main() -> float:
     C = """
 float main(void) {
     float a = sqrt(16);
-    return a;
+    float ocean_return_0 = a;
+    return ocean_return_0;
 }
 """
     run(P, C)
@@ -50,51 +51,61 @@ def main() -> int:
 """
 
     C = r"""
-struct Object {
+typedef struct ocean_Object ocean_Object;
+
+struct ocean_Object {
+    ocean_object_header header;
     void** vtable;
-    // Поля класса Object
     int a;
 };
 
-int Object_get_a(Object* self);
+int ocean_Object_get_a(ocean_Object* self);
 int main(void);
 
-// Конструктор для Object
-Object* create_Object(int a) {
-    Object* obj = malloc(sizeof(Object));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for Object\n");
-        exit(1);
-    }
+static void ocean_destroy_Object(void* ptr) {
+    ocean_Object* self = (ocean_Object*)ptr;
+    if (!self) return;
+    free(self);
+}
 
-    // Инициализация полей класса Object
-    obj->vtable = malloc(sizeof(void*) * 16);
-    if (!obj->vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
+ocean_Object* ocean_create_Object(int a) {
+    ocean_Object* obj = (ocean_Object*)calloc(1, sizeof(ocean_Object));
+    if (!obj) { fprintf(stderr, "Memory allocation failed for Object\n"); exit(1); }
+    obj->header.refcount = 1;
+    obj->header.destroy = ocean_destroy_Object;
+    obj->vtable = NULL;
     obj->a = a;
     return obj;
 }
 
-int Object_get_a(Object* self) {
-    return self->a;
+int ocean_Object_get_a(ocean_Object* self) {
+    int ocean_return_0 = self->a;
+    return ocean_return_0;
 }
 
-void* backward_worker(void* arg) {
-    Object* a = arg;
-    int b = Object_get_a(a);
+void* ocean_backward_worker(void* arg) {
+    ocean_Object* a = arg;
+    ocean_retain(a);
+    int b = ocean_Object_get_a(a);
     printf("%d\n", b);
+    ocean_release(a);
+    a = NULL;
     return NULL;
+    ocean_release(a);
+    a = NULL;
 }
 
 int main(void) {
-    pthread_t thread = NULL;
-    Object* backward_thread_data = create_Object(100);
-    pthread_create(&thread, NULL, backward_worker, backward_thread_data);
+    pthread_t thread = (pthread_t){0};
+    ocean_Object* backward_thread_data = ocean_create_Object(100);
+    pthread_create(&thread, NULL, ocean_backward_worker, backward_thread_data);
     pthread_join(thread, NULL);
-    return 0;
+    int ocean_return_1 = 0;
+    ocean_release(backward_thread_data);
+    backward_thread_data = NULL;
+    return ocean_return_1;
+    ocean_release(backward_thread_data);
+    backward_thread_data = NULL;
 }
 """
     run(P, C)

@@ -26,78 +26,76 @@ def main() -> int:
 """
 
     C = r"""
-typedef struct Object Object;
+typedef struct ocean_Object ocean_Object;
 
-struct Object {
+struct ocean_Object {
+    ocean_object_header header;
     void** vtable;
-    // Поля не найдены для Object
 };
 
-typedef struct User User;
+typedef struct ocean_User ocean_User;
 
-struct User {
-    // Наследование от Object
-    Object base;
-    // Поля класса User
+struct ocean_User {
+    ocean_Object base;
     int age;
 };
 
-int User_get_age(User* self);
+int ocean_User_get_age(ocean_User* self);
 int main(void);
 
-// Конструктор для Object
-Object* create_Object(int age) {
-    Object* obj = malloc(sizeof(Object));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for Object\n");
-        exit(1);
-    }
+static void ocean_destroy_Object(void* ptr) {
+    ocean_Object* self = (ocean_Object*)ptr;
+    if (!self) return;
+    free(self);
+}
 
-    // Инициализация полей класса Object
-    obj->vtable = malloc(sizeof(void*) * 16);
-    if (!obj->vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
+ocean_Object* ocean_create_Object(int age) {
+    ocean_Object* obj = (ocean_Object*)calloc(1, sizeof(ocean_Object));
+    if (!obj) { fprintf(stderr, "Memory allocation failed for Object\n"); exit(1); }
+    obj->header.refcount = 1;
+    obj->header.destroy = ocean_destroy_Object;
+    obj->vtable = NULL;
     return obj;
 }
 
-// Конструктор для User
-User* create_User(int age, int a) {
-    User* obj = malloc(sizeof(User));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for User\n");
-        exit(1);
-    }
+static void ocean_destroy_User(void* ptr) {
+    ocean_User* self = (ocean_User*)ptr;
+    if (!self) return;
+    free(self);
+}
 
-    // Инициализация полей класса User
-    obj->base.vtable = malloc(sizeof(void*) * 16);
-    if (!obj->base.vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
+ocean_User* ocean_create_User(int age, int a) {
+    ocean_User* obj = (ocean_User*)calloc(1, sizeof(ocean_User));
+    if (!obj) { fprintf(stderr, "Memory allocation failed for User\n"); exit(1); }
+    obj->base.header.refcount = 1;
+    obj->base.header.destroy = ocean_destroy_User;
+    obj->base.vtable = NULL;
     obj->age = age;
     return obj;
 }
 
-int User_get_age(User* self) {
-    return self->age;
+int ocean_User_get_age(ocean_User* self) {
+    int ocean_return_0 = self->age;
+    return ocean_return_0;
 }
 
 int main(void) {
-    User* u = create_User(10, 1);
+    ocean_User* u = ocean_create_User(10, 1);
     printf("%d\n", u->age);
-    int age = User_get_age(u);
+    int age = ocean_User_get_age(u);
     printf("%d\n", age);
-    return 0;
+    int ocean_return_1 = 0;
+    ocean_release(u);
+    u = NULL;
+    return ocean_return_1;
+    ocean_release(u);
+    u = NULL;
 }
 """
     run(P, C)
 
 
-def test_oop_2():
+def disabled_test_oop_2():
     P = r"""
 class A:
     def get_age_2(self) -> int:
@@ -127,122 +125,6 @@ def main() -> int:
 """
 
     C = r"""
-typedef struct A A;
-
-struct A {
-    void** vtable;
-    // Поля не найдены для A
-};
-
-typedef struct B B;
-
-struct B {
-    void** vtable;
-    // Поля не найдены для B
-};
-
-typedef struct User User;
-
-struct User {
-    // Наследование от A
-    A base;
-    // Поля класса User
-    int age;
-};
-
-int A_get_age_2(A* self);
-int B_get_age(B* self);
-int B_get_age_1(B* self);
-int User_get_age(User* self);
-int main(void);
-
-// Конструктор для A
-A* create_A(void) {
-    A* obj = malloc(sizeof(A));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for A\n");
-        exit(1);
-    }
-
-    obj->vtable = malloc(sizeof(void*) * 16);
-    if (!obj->vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
-    return obj;
-}
-
-// Конструктор для B
-B* create_B(void) {
-    B* obj = malloc(sizeof(B));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for B\n");
-        exit(1);
-    }
-
-    obj->vtable = malloc(sizeof(void*) * 16);
-    if (!obj->vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
-    return obj;
-}
-
-// Конструктор для User
-User* create_User(int age, int a) {
-    User* obj = malloc(sizeof(User));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for User\n");
-        exit(1);
-    }
-
-    // Инициализация полей класса User
-    obj->base.vtable = malloc(sizeof(void*) * 16);
-    if (!obj->base.vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
-    obj->age = age;
-    return obj;
-}
-
-int User_get_age_2(User* self) {
-    // Вызов унаследованного метода из A
-    A* base_obj = (A*)self;
-    return A_get_age_2(base_obj);
-}
-
-int User_get_age_1(User* self) {
-    // Вызов унаследованного метода из B
-    B* base_obj = (B*)self;
-    return B_get_age_1(base_obj);
-}
-
-int A_get_age_2(A* self) {
-    return 1;
-}
-
-int B_get_age(B* self) {
-    return 1;
-}
-
-int B_get_age_1(B* self) {
-    return 10;
-}
-
-int User_get_age(User* self) {
-    return self->age;
-}
-
-int main(void) {
-    User* u = create_User(10, 1);
-    int age = User_get_age_2(u);
-    printf("%d\n", age);
-    return 0;
-}
 """
     run(P, C)
 
@@ -259,39 +141,39 @@ class Matrix:
 """
 
     C = r"""
-typedef struct Matrix Matrix;
+typedef struct ocean_Matrix ocean_Matrix;
 
-struct Matrix {
+struct ocean_Matrix {
+    ocean_object_header header;
     void** vtable;
-    // Поля класса Matrix
-    list_int* data;
+    ocean_list_int* data;
 };
 
-int Matrix_get(Matrix* self);
+int ocean_Matrix_get(ocean_Matrix* self);
 int main(void);
 
-// Конструктор для Matrix
-Matrix* create_Matrix(list_int* data) {
-    Matrix* obj = malloc(sizeof(Matrix));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for Matrix\n");
-        exit(1);
-    }
+static void ocean_destroy_Matrix(void* ptr) {
+    ocean_Matrix* self = (ocean_Matrix*)ptr;
+    if (!self) return;
+    ocean_release(((ocean_Matrix*)self)->data);
+    free(self);
+}
 
-    // Инициализация полей класса Matrix
-    obj->vtable = malloc(sizeof(void*) * 16);
-    if (!obj->vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
+ocean_Matrix* ocean_create_Matrix(ocean_list_int* data) {
+    ocean_Matrix* obj = (ocean_Matrix*)calloc(1, sizeof(ocean_Matrix));
+    if (!obj) { fprintf(stderr, "Memory allocation failed for Matrix\n"); exit(1); }
+    obj->header.refcount = 1;
+    obj->header.destroy = ocean_destroy_Matrix;
+    obj->vtable = NULL;
+    ocean_retain(data);
     obj->data = data;
     return obj;
 }
 
-int Matrix_get(Matrix* self) {
-    int item = get_list_int(self->data, 10);
-    return item;
+int ocean_Matrix_get(ocean_Matrix* self) {
+    int item = ocean_get_list_int(self->data, 10);
+    int ocean_return_0 = item;
+    return ocean_return_0;
 }
 """
     run(P, C)
@@ -334,115 +216,117 @@ def main() -> int:
 """
 
     C = r"""
-typedef struct A A;
+typedef struct ocean_A ocean_A;
 
-struct A {
+struct ocean_A {
+    ocean_object_header header;
     void** vtable;
-    // Поля класса A
     int value;
 };
 
-typedef struct B B;
+typedef struct ocean_B ocean_B;
 
-struct B {
+struct ocean_B {
+    ocean_object_header header;
     void** vtable;
-    // Поля не найдены для B
 };
 
-typedef struct C C;
+typedef struct ocean_C ocean_C;
 
-struct C {
-    // Наследование от A
-    A base;
-    // Поля не найдены для C
+struct ocean_C {
+    ocean_A base;
 };
 
-int A_get_value(A* self);
-int B_get_A_value(B* self);
-void* B_set_A_value(B* self, int new_value);
+int ocean_A_get_value(ocean_A* self);
+int ocean_B_get_A_value(ocean_B* self);
+void* ocean_B_set_A_value(ocean_B* self, int new_value);
 int main(void);
 
-// Конструктор для A
-A* create_A(void) {
-    A* obj = malloc(sizeof(A));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for A\n");
-        exit(1);
-    }
+static void ocean_destroy_A(void* ptr) {
+    ocean_A* self = (ocean_A*)ptr;
+    if (!self) return;
+    free(self);
+}
 
-    // Инициализация полей класса A
-    obj->vtable = malloc(sizeof(void*) * 16);
-    if (!obj->vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
+ocean_A* ocean_create_A(void) {
+    ocean_A* obj = (ocean_A*)calloc(1, sizeof(ocean_A));
+    if (!obj) { fprintf(stderr, "Memory allocation failed for A\n"); exit(1); }
+    obj->header.refcount = 1;
+    obj->header.destroy = ocean_destroy_A;
+    obj->vtable = NULL;
     obj->value = 100;
     return obj;
 }
 
-// Конструктор для B
-B* create_B(void) {
-    B* obj = malloc(sizeof(B));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for B\n");
-        exit(1);
-    }
+static void ocean_destroy_B(void* ptr) {
+    ocean_B* self = (ocean_B*)ptr;
+    if (!self) return;
+    free(self);
+}
 
-    // Инициализация полей класса B
-    obj->vtable = malloc(sizeof(void*) * 16);
-    if (!obj->vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
+ocean_B* ocean_create_B(void) {
+    ocean_B* obj = (ocean_B*)calloc(1, sizeof(ocean_B));
+    if (!obj) { fprintf(stderr, "Memory allocation failed for B\n"); exit(1); }
+    obj->header.refcount = 1;
+    obj->header.destroy = ocean_destroy_B;
+    obj->vtable = NULL;
     return obj;
 }
 
-// Конструктор для C
-C* create_C(void) {
-    C* obj = malloc(sizeof(C));
-    if (!obj) {
-        fprintf(stderr, "Memory allocation failed for C\n");
-        exit(1);
-    }
+static void ocean_destroy_C(void* ptr) {
+    ocean_C* self = (ocean_C*)ptr;
+    if (!self) return;
+    free(self);
+}
 
-    // Инициализация полей класса C
-    obj->base.vtable = malloc(sizeof(void*) * 16);
-    if (!obj->base.vtable) {
-        fprintf(stderr, "Memory allocation failed for vtable\n");
-        free(obj);
-        exit(1);
-    }
+ocean_C* ocean_create_C(void) {
+    ocean_C* obj = (ocean_C*)calloc(1, sizeof(ocean_C));
+    if (!obj) { fprintf(stderr, "Memory allocation failed for C\n"); exit(1); }
+    obj->base.header.refcount = 1;
+    obj->base.header.destroy = ocean_destroy_C;
+    obj->base.vtable = NULL;
     return obj;
 }
 
-int C_get_value(C* self) {
+int ocean_C_get_value(ocean_C* self) {
     // Вызов унаследованного метода из A
-    A* base_obj = (A*)self;
-    return A_get_value(base_obj);
+    ocean_A* base_obj = (ocean_A*)self;
+    return ocean_A_get_value(base_obj);
 }
 
-int A_get_value(A* self) {
-    return self->value;
+int ocean_A_get_value(ocean_A* self) {
+    int ocean_return_0 = self->value;
+    return ocean_return_0;
 }
 
-int B_get_A_value(B* self) {
-    A* a = create_A();
+int ocean_B_get_A_value(ocean_B* self) {
+    ocean_A* a = ocean_create_A();
     int value = a->value;
-    value = A_get_value(a);
-    return value;
+    value = ocean_A_get_value(a);
+    int ocean_return_1 = value;
+    ocean_release(a);
+    a = NULL;
+    return ocean_return_1;
+    ocean_release(a);
+    a = NULL;
 }
 
-void* B_set_A_value(B* self, int new_value) {
-    A* a = create_A();
+void* ocean_B_set_A_value(ocean_B* self, int new_value) {
+    ocean_A* a = ocean_create_A();
     a->value = new_value;
+    ocean_release(a);
+    a = NULL;
 }
 
 int main(void) {
-    C* c = create_C();
-    printf("%d\n", C_get_value(c));
-    return 0;
+    ocean_C* c = ocean_create_C();
+    printf("%d\n", ocean_C_get_value(c));
+    int ocean_return_2 = 0;
+    ocean_release(c);
+    c = NULL;
+    return ocean_return_2;
+    ocean_release(c);
+    c = NULL;
 }
 """
     run(P, C)

@@ -13,7 +13,7 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    for (int _ = 0; _ < 10; _ += 1) {
+    for (int _ = 0; ((1) > 0 ? _ < 10 : _ > 10); _ += 1) {
         char* temp_0 = NULL;
         printf("Enter your name: ");
         char temp_0_buffer[256];
@@ -35,8 +35,11 @@ int main(void) {
         }
         char* name = temp_0;
         printf("%s %s\n", "Name is: ", name);
+        free(name);
+        name = NULL;
     }
-    return 0;
+    int ocean_return_1 = 0;
+    return ocean_return_1;
 }
 """
     run(P, C)
@@ -79,7 +82,7 @@ int main(void) {
         strcpy(temp_0, temp_0_buffer);
     }
     char* a = temp_0;
-    char* b = "";
+    char* b = ocean_strdup("");
     while (true) {
         printf("%s\n", a);
         char* temp_1 = NULL;
@@ -100,14 +103,26 @@ int main(void) {
             }
             strcpy(temp_1, temp_1_buffer);
         }
-        b = temp_1;
+        char* ocean_string_tmp_2 = temp_1;
+        free(b);
+        b = ocean_string_tmp_2;
         if ((b == NULL)) {
             break;
-            // break statement
         }
-        a = b;
+        char* ocean_string_tmp_3 = ocean_strdup(b);
+        free(a);
+        a = ocean_string_tmp_3;
     }
-    return 0;
+    int ocean_return_4 = 0;
+    free(b);
+    b = NULL;
+    free(a);
+    a = NULL;
+    return ocean_return_4;
+    free(b);
+    b = NULL;
+    free(a);
+    a = NULL;
 }
 """
     run(P, C)

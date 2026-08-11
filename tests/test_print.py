@@ -12,10 +12,11 @@ def main() -> int:
 
     C = r"""
 int main(void) {
-    for (int i = 0; i < 10; i += 1) {
+    for (int i = 0; ((1) > 0 ? i < 10 : i > 10); i += 1) {
         printf("%d_%d_%d\n", i, i, i);
     }
-    return 0;
+    int ocean_return_0 = 0;
+    return ocean_return_0;
 }
 """
     run(P, C)

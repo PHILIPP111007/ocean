@@ -15,6 +15,12 @@ import "./module.p"
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
 #include "my_header.h"
+
+int main(void);
 """
     run(P, C)

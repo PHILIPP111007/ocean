@@ -26,49 +26,46 @@ def main() -> int:
     C = """
 int main(void) {
     int a = 100;
-    char* b = "kkofrkfor";
+    char* b = ocean_strdup("kkofrkfor");
     bool c = false;
-    list_int* d = create_list_int(4);
-    append_list_int(d, 1);
-    append_list_int(d, 2);
-    append_list_int(d, 3);
-    int temp_0[3] = {
+    ocean_list_int* d = ocean_create_list_int(4);
+    ocean_append_list_int(d, 1);
+    ocean_append_list_int(d, 2);
+    ocean_append_list_int(d, 3);
+    int ocean_tuple_items_0[3] = {
         1,
         2,
         3
     };
-    tuple_int* e = create_tuple_int(temp_0, 3);
-    list_list_int* f = create_list_list_int(4);
-    append_list_list_int(f, d);
-    append_list_list_int(f, d);
-    list_tuple_int* g = create_list_tuple_int(4);
-    append_list_tuple_int(g, e);
-    append_list_tuple_int(g, e);
-    append_list_tuple_int(g, e);
+    ocean_tuple_int* e = ocean_create_tuple_int(ocean_tuple_items_0, 3);
+    ocean_list_list_int* f = ocean_create_list_list_int(4);
+    ocean_append_list_list_int(f, d);
+    ocean_append_list_list_int(f, d);
+    ocean_list_tuple_int* g = ocean_create_list_tuple_int(4);
+    ocean_append_list_tuple_int(g, e);
+    ocean_append_list_tuple_int(g, e);
+    ocean_append_list_tuple_int(g, e);
     // del a
     a = 0;
     // del b
+    free(b);
     b = NULL;
     // del c
     c = false;
     // del d
-    if (d) {
-        free_list_int(d);
-    }
+    ocean_release(d);
     d = NULL;
     // del e
-    free_tuple_int(&e);
+    ocean_release(e);
+    e = NULL;
     // del f
-    if (f) {
-        free_list_list_int(f);
-    }
+    ocean_release(f);
     f = NULL;
     // del g
-    if (g) {
-        free_list_tuple_int(g);
-    }
+    ocean_release(g);
     g = NULL;
-    return 0;
+    int ocean_return_1 = 0;
+    return ocean_return_1;
 }
 """
     run(P, C)

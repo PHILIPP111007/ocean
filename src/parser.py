@@ -6,29 +6,154 @@ from src.modules.imports import CImportProcessor, ImportProcessor
 from src.modules.constants import KEYS, DATA_TYPES, METHOD_DECORATORS
 from src.modules.symbol_table import SymbolTable
 from src.modules.logger import logger
+from src.parsing.type_system import (
+    TypeParser,
+    find_top_level,
+    infer_literal_shape,
+    split_top_level,
+)
 
 
 class Parser:
     def __init__(self, base_path: str = ""):
-        self.scopes = []  # Список всех областей видимости
-        self.scope_stack = []  # Стек текущих областей видимости
-        self.symbol_counter = 0
-        self.current_indent = 0
-        self.indent_size = None  # Размер отступа (4 пробела или 1 таб)
-        self.indent_char = None  # Тип отступа ('space' или 'tab')
+        self.base_path = base_path
+        self.type_parser = TypeParser()
         self.builtin_functions = {
             "print",
             "len",
             "str",
             "int",
+            "float",
             "bool",
             "range",
-            "input",  # ДОБАВЛЕНО
-        }  # Добавили встроенные функции
-        self.import_processor = ImportProcessor(
-            base_path=base_path
-        )  # Добавляем процессор импортов
+            "input",
+        }
+        self.import_processor = ImportProcessor(base_path=base_path)
         self.c_import_processor = CImportProcessor(base_path=base_path)
+        self.reset_state()
+    def reset_state(self) -> None:
+        """Reset all per-compilation parser state.
+
+        A Parser instance can safely be reused for more than one source file.
+        Import processors are deliberately preserved because their base path is
+        configuration, not compilation state.
+        """
+        self.scopes = []
+        self.scope_stack = []
+        self.symbol_counter = 0
+        self.current_indent = 0
+        self.indent_size = None
+        self.indent_char = None
+
+
+    def parse_type_annotation(self, type_text: str) -> tuple[str, dict]:
+        """Return canonical type text and structured metadata."""
+        spec = self.type_parser.parse(type_text)
+        return spec.canonical, spec.to_dict()
+
+
+    def _strip_comments_preserving_strings(self, code: str) -> str:
+        """Remove ``#`` comments without corrupting string literals."""
+        result = []
+        for line in code.splitlines():
+            out = []
+            in_string = False
+            quote = ""
+            escaped = False
+            i = 0
+            while i < len(line):
+                char = line[i]
+                if escaped:
+                    out.append(char)
+                    escaped = False
+                    i += 1
+                    continue
+                if in_string:
+                    out.append(char)
+                    if char == "\\":
+                        escaped = True
+                    elif char == quote:
+                        in_string = False
+                        quote = ""
+                    i += 1
+                    continue
+                if char in {'"', "'"}:
+                    in_string = True
+                    quote = char
+                    out.append(char)
+                    i += 1
+                    continue
+                if char == "#":
+                    break
+                out.append(char)
+                i += 1
+            result.append("".join(out))
+        return "\n".join(result)
+
+
+    def _strip_triple_quoted_blocks(self, code: str) -> str:
+        """Remove standalone triple-quoted blocks while preserving line count."""
+        pattern = re.compile(r"((?:\'{3})|(?:\"{3})).*?\1", flags=re.DOTALL)
+
+        def repl(match):
+            return "\n" * match.group(0).count("\n")
+
+        return pattern.sub(repl, code)
+
+
+    def _type_info_for_symbol(self, type_text: str) -> dict:
+        _, info = self.parse_type_annotation(type_text)
+        return info
+
+
+    def _is_owned_container_type(self, type_text: str) -> bool:
+        info = self._type_info_for_symbol(type_text)
+        return info.get("memory_kind") == "owned"
+
+
+    def _is_borrow_type(self, type_text: str) -> bool:
+        info = self._type_info_for_symbol(type_text)
+        return info.get("kind") in {"borrow", "mut_borrow"}
+
+
+    def _borrow_source_from_ast(self, ast_node: dict) -> str | None:
+        if not isinstance(ast_node, dict):
+            return None
+        if ast_node.get("type") == "variable":
+            return ast_node.get("name") or ast_node.get("value")
+        if ast_node.get("type") == "borrow":
+            source = ast_node.get("source", {})
+            if isinstance(source, dict) and source.get("type") == "variable":
+                return source.get("name") or source.get("value")
+        return None
+
+
+    def _parse_struct_field(self, line: str) -> dict | None:
+        """Parse ``name: Type`` or ``name: Type = default``."""
+        colon = find_top_level(line, ":")
+        if colon <= 0:
+            return None
+        name = line[:colon].strip()
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name):
+            return None
+        rest = line[colon + 1 :].strip()
+        equals = find_top_level(rest, "=")
+        if equals >= 0:
+            type_text = rest[:equals].strip()
+            default_text = rest[equals + 1 :].strip()
+            default_ast = self.parse_expression_to_ast(default_text)
+        else:
+            type_text = rest
+            default_text = None
+            default_ast = None
+        canonical, type_info = self.parse_type_annotation(type_text)
+        return {
+            "name": name,
+            "type": canonical,
+            "type_info": type_info,
+            "default": default_ast,
+            "default_source": default_text,
+        }
 
     ###############################################################################################
     # INDENT
@@ -228,12 +353,16 @@ class Parser:
     ###############################################################################################
 
     def parse_code(self, code: str, file_path: str = "") -> list[dict]:
-        def _parse_processed_code(code: str) -> list[dict]:
-            code = re.sub(r"#.*", "", code)
-            code = re.sub(r"'''.*?'''", "", code, flags=re.DOTALL)
-            code = re.sub(r'""".*?"""', "", code, flags=re.DOTALL)
+        """Parse one Phils compilation unit into the legacy graph + typed metadata.
 
-            lines = code.split("\n")
+        The legacy node names are retained so the Ocean C backend can consume old
+        and new parser output during the transition to a typed semantic IR.
+        """
+
+        def _parse_processed_code(processed: str) -> list[dict]:
+            processed = self._strip_triple_quoted_blocks(processed)
+            processed = self._strip_comments_preserving_strings(processed)
+            lines = processed.split("\n")
 
             if any(line.startswith((" ", "\t")) for line in lines if line.strip()):
                 self.indent_char, self.indent_size = self.analyze_indent_pattern(lines)
@@ -252,54 +381,46 @@ class Parser:
 
             i = 0
             while i < len(lines):
-                line = lines[i]
-
-                if not line.strip():
+                raw_line = lines[i]
+                if not raw_line.strip():
                     i += 1
                     continue
 
-                indent = self.calculate_indent_level(line)
-                line_content = line.strip()
+                indent_level = self.calculate_indent_level(raw_line)
+                line_content = raw_line.strip()
 
-                # Обработка отступов
-                if indent < self.current_indent:
-                    # Уменьшаем стек scope'ов при уменьшении отступа
-                    while len(self.scope_stack) > 1 and self.current_indent > indent:
+                if indent_level < self.current_indent:
+                    while len(self.scope_stack) > 1 and self.current_indent > indent_level:
                         self.scope_stack.pop()
                         self.current_indent -= 1
 
-                self.current_indent = indent
+                self.current_indent = indent_level
+                current_scope = self.scope_stack[-1] if self.scope_stack else global_scope
+                i = self.parse_line(
+                    line_content,
+                    current_scope,
+                    lines,
+                    i,
+                    indent_level,
+                )
 
-                if line_content:
-                    # Получаем текущую область видимости
-                    current_scope = (
-                        self.scope_stack[-1] if self.scope_stack else global_scope
-                    )
-
-                    i = self.parse_line(line_content, current_scope, lines, i, indent)
-                else:
-                    i += 1
-
-            # ПОСЛЕ завершения парсинга всех строк:
-            # 1. Удаляем дубликаты методов
             self.remove_duplicate_methods()
-
-            # 2. Собираем унаследованные методы
             self.collect_inherited_methods_for_all_classes()
 
-            # Преобразуем SymbolTable в словарь для JSON
-            for scope in self.scopes:
-                if hasattr(scope["symbol_table"], "symbols"):
-                    scope["symbol_table"] = scope["symbol_table"].symbols
+            for current_scope in self.scopes:
+                if hasattr(current_scope["symbol_table"], "symbols"):
+                    current_scope["symbol_table"] = current_scope["symbol_table"].symbols
 
             return self.scopes
+
+        self.reset_state()
 
         if file_path:
             base_dir = os.path.dirname(file_path)
             self.import_processor.base_path = base_dir
+            self.c_import_processor.base_path = base_dir
 
         processed_code = self.import_processor.process_imports(code, file_path)
-
         return _parse_processed_code(processed_code)
 
     def parse_line(
@@ -311,6 +432,14 @@ class Parser:
 
         if not line:
             return current_index + 1
+
+        # Value-only structures used by OS/HPC code.  This is handled before
+        # KEYS so it works even while older constants.py files do not yet list
+        # ``struct`` as a keyword.
+        if line.startswith("struct "):
+            return self.parse_struct_declaration(
+                line, scope, all_lines, current_index
+            )
 
         # ========== ПЕРВОЕ: проверяем многомерное индексное присваивание ==========
         # Паттерн: var_name[0][0] = value (любое количество индексов)
@@ -1566,48 +1695,38 @@ class Parser:
     def parse_function_declaration(
         self, line: str, parent_scope: dict, all_lines: list, current_index: int
     ):
-        """Обрабатывает объявление функции"""
+        """Parse a free function with fully nested type annotations."""
         pattern = r"def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)\s*(?:->\s*(.+?))?\s*:"
         match = re.match(pattern, line)
-
         if not match:
             return current_index + 1
 
-        func_name, params_str, return_type = match.groups()
-        return_type = return_type if return_type else "None"
+        func_name, params_str, return_type_text = match.groups()
+        return_type, return_type_info = self.parse_type_annotation(
+            return_type_text or "None"
+        )
+        parameters = self.parse_parameters(params_str)
 
         logger.debug(f"DEBUG: Найдена функция {func_name}() -> {return_type}")
 
-        # Парсим параметры
-        parameters = []
-        if params_str.strip():
-            param_pattern = r"([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([^,]+(?:\[[^]]+\])?)"
-            params = re.findall(param_pattern, params_str)
-            for param_name, param_type in params:
-                parameters.append({"name": param_name, "type": param_type})
-
-        # Определяем уровень вложенности функции
         parent_level = parent_scope["level"]
         func_level = parent_level + 1
-
-        # Получаем отступ текущей строки
-        indent = (
+        indent_level = (
             self.calculate_indent_level(all_lines[current_index])
             if current_index < len(all_lines)
             else 0
         )
 
-        # Добавляем функцию в таблицу символов родительской области
         symbol_id = parent_scope["symbol_table"].add_symbol(
             name=func_name,
             key="function",
             var_type="function",
             value=None,
-            parameters=parameters,  # ← ЭТО ВАЖНО
-            return_type=return_type,  # ← И ЭТО ТОЖЕ
+            parameters=parameters,
+            return_type=return_type,
+            return_type_info=return_type_info,
         )
 
-        # Создаем узел объявления функции
         func_decl_node = {
             "node": "function_declaration",
             "content": line,
@@ -1615,446 +1734,356 @@ class Parser:
             "symbol_id": symbol_id,
             "parameters": parameters,
             "return_type": return_type,
+            "return_type_info": return_type_info,
             "body_level": func_level,
-            "is_stub": False,  # По умолчанию - не заглушка
+            "is_stub": False,
         }
-
         parent_scope["graph"].append(func_decl_node)
 
-        # Находим тело функции
         body_start = current_index + 1
+        body_end = self.find_indented_block_end(all_lines, body_start, indent_level)
+        is_stub = (
+            body_start < len(all_lines)
+            and all_lines[body_start].strip() == "pass"
+            and self.calculate_indent_level(all_lines[body_start]) == indent_level + 1
+        )
 
-        # Проверяем, есть ли следующая строка
-        if body_start < len(all_lines):
-            next_line = all_lines[body_start]
-            next_line_content = next_line.strip()
-            next_line_indent = self.calculate_indent_level(next_line)
-
-            # Если следующая строка - это 'pass' с правильным отступом
-            if next_line_content == "pass" and next_line_indent == indent + 1:
-                logger.debug(
-                    f"  Функция {func_name} имеет только 'pass' - создаем заглушку"
-                )
-
-                # Помечаем функцию как заглушку
-                func_decl_node["is_stub"] = True
-                func_decl_node["body"] = []
-
-                # Создаем узел для pass
-                pass_node = {
-                    "node": "pass",
-                    "content": "pass",
-                    "operations": [{"type": "PASS"}],
-                }
-
-                # Создаем область видимости для функции-заглушки
-                func_scope = {
-                    "level": func_level,
-                    "type": "function",
-                    "parent_scope": parent_scope["level"],
-                    "function_name": func_name,
-                    "parameters": parameters,
-                    "return_type": return_type,
-                    "local_variables": [],
-                    "graph": [pass_node],  # Добавляем только pass
-                    "symbol_table": SymbolTable(),
-                    "return_info": {
-                        "has_return": False,
-                        "return_value": None,
-                        "return_type": return_type,
-                    },
-                    "is_stub": True,
-                }
-
-                # Добавляем параметры в таблицу символов функции
-                for param in parameters:
-                    func_scope["symbol_table"].add_symbol(
-                        name=param["name"], key="var", var_type=param["type"]
-                    )
-                    func_scope["local_variables"].append(param["name"])
-
-                # Добавляем scope функции в общий список
-                self.scopes.append(func_scope)
-
-                # Возвращаем индекс строки ПОСЛЕ 'pass'
-                return body_start + 1
-            else:
-                # Обычная функция с телом
-                body_end = self.find_indented_block_end(all_lines, body_start, indent)
-
-                # Создаем область видимости для функции
-                func_scope = {
-                    "level": func_level,
-                    "type": "function",
-                    "parent_scope": parent_scope["level"],
-                    "function_name": func_name,
-                    "parameters": parameters,
-                    "return_type": return_type,
-                    "local_variables": [],
-                    "graph": [],
-                    "symbol_table": SymbolTable(),
-                    "return_info": {
-                        "has_return": False,
-                        "return_value": None,
-                        "return_type": return_type,
-                    },
-                    "is_stub": False,
-                }
-
-                # Добавляем параметры в таблицу символов функции
-                for param in parameters:
-                    func_scope["symbol_table"].add_symbol(
-                        name=param["name"], key="var", var_type=param["type"]
-                    )
-                    func_scope["local_variables"].append(param["name"])
-
-                # Добавляем scope функции в общий список и в стек
-                self.scopes.append(func_scope)
-                self.scope_stack.append(func_scope)
-
-                # Сохраняем текущие значения
-                saved_indent = self.current_indent
-
-                # Устанавливаем отступ для тела функции
-                self.current_indent = indent + 1
-
-                # Парсим тело функции
-                i = body_start
-                while i < body_end:
-                    body_line = all_lines[i]
-                    if not body_line.strip():
-                        i += 1
-                        continue
-
-                    body_indent = self.calculate_indent_level(body_line)
-                    body_content = body_line.strip()
-
-                    # Рекурсивно парсим строки в теле функции
-                    i = self.parse_line(
-                        body_content, func_scope, all_lines, i, body_indent
-                    )
-
-                # Восстанавливаем отступ
-                self.current_indent = saved_indent
-
-                # Удаляем scope функции из стека
-                self.scope_stack.pop()
-
-                # Возвращаем индекс строки ПОСЛЕ тела функции
-                return body_end
-        else:
-            # Нет следующей строки - пустая функция
-            logger.debug(f"  Функция {func_name} без тела")
-            func_decl_node["is_stub"] = True
-
-            # Создаем пустую область видимости для функции
-            func_scope = {
-                "level": func_level,
-                "type": "function",
-                "parent_scope": parent_scope["level"],
-                "function_name": func_name,
-                "parameters": parameters,
+        func_scope = {
+            "level": func_level,
+            "type": "function",
+            "parent_scope": parent_scope["level"],
+            "function_name": func_name,
+            "parameters": parameters,
+            "return_type": return_type,
+            "return_type_info": return_type_info,
+            "local_variables": [],
+            "graph": [],
+            "symbol_table": SymbolTable(),
+            "return_info": {
+                "has_return": False,
+                "return_value": None,
                 "return_type": return_type,
-                "local_variables": [],
-                "graph": [],
-                "symbol_table": SymbolTable(),
-                "return_info": {
-                    "has_return": False,
-                    "return_value": None,
-                    "return_type": return_type,
-                },
-                "is_stub": True,
-            }
+                "return_type_info": return_type_info,
+            },
+            "is_stub": is_stub,
+        }
 
+        for param in parameters:
+            func_scope["symbol_table"].add_symbol(
+                name=param["name"],
+                key="parameter",
+                var_type=param["type"],
+                type_info=param.get("type_info"),
+                memory_kind=param.get("memory_kind"),
+            )
+            func_scope["local_variables"].append(param["name"])
+
+        if is_stub:
+            pass_node = {
+                "node": "pass",
+                "content": "pass",
+                "operations": [{"type": "PASS"}],
+            }
+            func_scope["graph"].append(pass_node)
+            func_decl_node["is_stub"] = True
+            func_decl_node["body"] = []
             self.scopes.append(func_scope)
-            return current_index + 1
+            return body_start + 1
+
+        self.scopes.append(func_scope)
+        self.scope_stack.append(func_scope)
+        saved_indent = self.current_indent
+        self.current_indent = indent_level + 1
+
+        i = body_start
+        while i < body_end:
+            body_line = all_lines[i]
+            if not body_line.strip():
+                i += 1
+                continue
+            body_indent = self.calculate_indent_level(body_line)
+            i = self.parse_line(body_line.strip(), func_scope, all_lines, i, body_indent)
+
+        self.current_indent = saved_indent
+        if self.scope_stack and self.scope_stack[-1] is func_scope:
+            self.scope_stack.pop()
+        elif func_scope in self.scope_stack:
+            self.scope_stack.remove(func_scope)
+
+        return body_end
 
     def parse_const(self, line: str, scope: dict):
-        pattern = r"const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)"
-        match = re.match(pattern, line)
+        match = re.match(r"const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.+)$", line)
+        if not match:
+            return False
+        name, rest = match.groups()
+        equals = find_top_level(rest, "=")
+        if equals < 0:
+            return False
+        type_text = rest[:equals].strip()
+        value_text = rest[equals + 1 :].strip()
+        const_type, type_info = self.parse_type_annotation(type_text)
+        value = self.clean_value(value_text)
 
-        if match:
-            name, var_type, value = match.groups()
-            value = self.clean_value(value)
-
-            symbol_id = scope["symbol_table"].add_symbol(
-                name=name, key="const", var_type=var_type, value=value, is_constant=True
-            )
-
-            scope["local_variables"].append(symbol_id)
-
-            scope["graph"].append(
-                {
-                    "node": "declaration",
-                    "content": line,
-                    "symbols": [symbol_id],
-                    "operations": [
-                        {
-                            "type": "NEW_CONST",
-                            "target": symbol_id,
-                            "const_type": var_type,
-                        },
-                        {"type": "ASSIGN", "target": symbol_id, "value": value},
-                    ],
-                }
-            )
-
-            return True
-        return False
+        symbol_id = scope["symbol_table"].add_symbol(
+            name=name,
+            key="const",
+            var_type=const_type,
+            value=value,
+            is_constant=True,
+            type_info=type_info,
+            memory_kind=type_info.get("memory_kind"),
+        )
+        if name not in scope["local_variables"]:
+            scope["local_variables"].append(name)
+        scope["graph"].append(
+            {
+                "node": "declaration",
+                "content": line,
+                "symbols": [name],
+                "var_name": name,
+                "var_type": const_type,
+                "type_info": type_info,
+                "memory_kind": type_info.get("memory_kind"),
+                "operations": [
+                    {"type": "NEW_CONST", "target": name, "const_type": const_type},
+                    {"type": "ASSIGN", "target": name, "value": value},
+                ],
+                "expression_ast": value,
+            }
+        )
+        return True
 
     def parse_var(self, line: str, scope: dict):
-        """Парсит объявление переменной с поддержкой tuple и list"""
+        """Parse a typed variable declaration.
 
-        def find_equals_outside_brackets(s: str) -> int:
-            """Находит позицию символа '=', которая не находится внутри скобок"""
-            depth = 0
-            in_string = False
-            string_char = None
+        Supported memory-oriented forms:
 
-            for i, char in enumerate(s):
-                # Обработка строк
-                if not in_string and char in ['"', "'"]:
-                    in_string = True
-                    string_char = char
-                elif in_string and char == string_char:
-                    # Проверяем экранирование
-                    if i == 0 or s[i - 1] != "\\":
-                        in_string = False
-                # Обработка скобок (только вне строк)
-                elif not in_string:
-                    if char == "[":
-                        depth += 1
-                    elif char == "]":
-                        depth -= 1
-                    elif char == "=" and depth == 0:
-                        return i
-
-            return -1
-
-        # Упрощенный паттерн для захвата всей строки
-        pattern = r"var\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.+)"
-        match = re.match(pattern, line)
-
+        * ``list[T]`` / ``dict[K,V]`` / ``tuple[T]`` -- shared ARC containers;
+        * ``&T`` -- immutable lexical borrow;
+        * ``&mut T`` -- exclusive mutable lexical borrow;
+        * ``*T`` -- raw pointer (unsafe boundary);
+        * ``array[T]`` -- uniquely owned contiguous buffer;
+        * ``tensor[T]`` -- uniquely owned dense tensor literal metadata;
+        * ``shared[T]`` -- explicit thread-shareable/shared wrapper;
+        * ``T?`` -- nullable/optional type.
+        """
+        match = re.match(r"var\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.+)$", line)
         if not match:
             return False
 
         name, type_and_value = match.groups()
-
-        # Разделяем тип и значение - ищем первый "=", который не находится внутри скобок
-        equals_pos = find_equals_outside_brackets(type_and_value)
-        if equals_pos == -1:
+        equals_pos = find_top_level(type_and_value, "=")
+        if equals_pos < 0:
             return False
 
-        var_type_str = type_and_value[:equals_pos].strip()
+        raw_type = type_and_value[:equals_pos].strip()
         value_str = type_and_value[equals_pos + 1 :].strip()
+        var_type, type_info = self.parse_type_annotation(raw_type)
 
-        # Обрабатываем разные варианты типов
-        is_pointer = var_type_str.startswith("*")
-        if is_pointer:
-            var_type_str = var_type_str[1:].strip()
+        is_pointer = type_info.get("kind") == "raw_pointer"
+        is_borrow = type_info.get("kind") in {"borrow", "mut_borrow"}
+        is_mut_borrow = type_info.get("kind") == "mut_borrow"
+        memory_kind = type_info.get("memory_kind", "value")
 
-        # Определяем базовый тип
-        var_type = var_type_str
-        is_tuple_uniform = False  # tuple[T]
-        is_tuple_fixed = False  # tuple[T1, T2, ...]
-        element_type = None
-        tuple_element_types = []
+        # In raw-pointer declarations ``&x`` retains its historical C address-of
+        # meaning.  Everywhere else, borrowing is expressed by the declared &T
+        # / &mut T type and the initializer remains a normal source expression.
+        if is_pointer and value_str.startswith("&") and not value_str.startswith("&mut "):
+            target_text = value_str[1:].strip()
+            if re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", target_text):
+                value_ast = {"type": "address_of", "variable": target_text}
+            else:
+                value_ast = {
+                    "type": "address_of",
+                    "expression": self.parse_expression_to_ast(target_text),
+                }
+        else:
+            value_ast = self.parse_expression_to_ast(value_str)
 
-        # Проверяем tuple[T]
-        tuple_uniform_pattern = r"tuple\[([^\]]+)\]"
-        tuple_uniform_match = re.match(tuple_uniform_pattern, var_type_str)
-
-        if tuple_uniform_match:
-            is_tuple_uniform = True
-            element_type = tuple_uniform_match.group(1)
-            logger.debug(f"DEBUG: Обнаружен tuple[{element_type}]")
-
-        # Проверяем tuple[T1, T2, ...]
-        elif var_type_str.startswith("tuple["):
-            # Извлекаем содержимое скобок
-            inner_content = self.extract_content_inside_brackets(
-                var_type_str, "tuple[", "]"
-            )
-            if inner_content and "," in inner_content:
-                is_tuple_fixed = True
-                # Разделяем по запятым, но учитываем вложенные скобки
-                tuple_element_types = []
-                current_type = ""
-                depth = 0
-
-                for char in inner_content:
-                    if char == "[":
-                        depth += 1
-                        current_type += char
-                    elif char == "]":
-                        depth -= 1
-                        current_type += char
-                    elif char == "," and depth == 0:
-                        tuple_element_types.append(current_type.strip())
-                        current_type = ""
-                    else:
-                        current_type += char
-
-                if current_type:
-                    tuple_element_types.append(current_type.strip())
-
-                logger.debug(
-                    f"DEBUG: Обнаружен tuple с фиксированными типами: {tuple_element_types}"
-                )
-
-        # Парсим значение
-        value_ast = self.parse_expression_to_ast(value_str)
-
-        # Проверяем существование переменной
         existing_symbol = scope["symbol_table"].get_symbol_for_validation(name)
         was_deleted = False
-
         if existing_symbol:
             was_deleted = existing_symbol.get("is_deleted", False)
-
             if not was_deleted:
                 logger.debug(f"Error: переменная '{name}' уже объявлена")
                 return False
-
-            # Восстанавливаем удаленную переменную
             scope["symbol_table"].update_symbol(
                 name,
                 {
                     "type": var_type,
+                    "type_info": type_info,
+                    "memory_kind": memory_kind,
                     "value": value_ast,
                     "is_deleted": False,
                 },
             )
-
             if hasattr(scope["symbol_table"], "deleted_symbols"):
                 scope["symbol_table"].deleted_symbols.discard(name)
         else:
-            # Новая переменная
             scope["symbol_table"].add_symbol(
                 name=name,
                 key="var",
                 var_type=var_type,
                 value=value_ast,
+                type_info=type_info,
+                memory_kind=memory_kind,
+                is_pointer=is_pointer,
+                is_borrow=is_borrow,
+                is_mut_borrow=is_mut_borrow,
             )
 
-        # Добавляем в local_variables если нужно
         if name not in scope["local_variables"]:
             scope["local_variables"].append(name)
 
-        # Определяем тип операции и узла
-        if was_deleted:
-            creation_op_type = "RESTORE_VAR"
-            node_type = "redeclaration"
-        else:
-            creation_op_type = "NEW_VAR"
-            node_type = "declaration"
-
-        # Создаем базовые операции
+        creation_op_type = "RESTORE_VAR" if was_deleted else "NEW_VAR"
+        node_type = "redeclaration" if was_deleted else "declaration"
         operations = [
             {
                 "type": creation_op_type,
                 "target": name,
                 "var_type": var_type,
+                "type_info": type_info,
+                "memory_kind": memory_kind,
                 "was_deleted": was_deleted,
             }
         ]
 
-        # Обработка в зависимости от типа
-        if is_tuple_uniform:
-            # tuple[T] - универсальный кортеж
-            if value_ast.get("type") == "tuple_literal":
-                items = value_ast.get("items", [])
+        base_name = type_info.get("base_name", "")
+        generic_name = type_info.get("name") if type_info.get("kind") == "generic" else ""
 
-                # Проверяем типы элементов (опционально)
-                for i, item in enumerate(items):
-                    if item.get("type") == "literal":
-                        item_type = item.get("data_type", "")
-                        if element_type == "int" and item_type not in ["int", "float"]:
-                            logger.debug(
-                                f"Warning: элемент {i} кортежа '{name}' должен быть {element_type}, а не {item_type}"
-                            )
-                        elif element_type == "str" and item_type != "str":
-                            logger.debug(
-                                f"Warning: элемент {i} кортежа '{name}' должен быть {element_type}, а не {item_type}"
-                            )
-
-                operations.append(
-                    {
-                        "type": "CREATE_TUPLE_UNIFORM",
-                        "target": name,
-                        "items": items,
-                        "size": len(items),
-                        "element_type": element_type,
-                        "is_immutable": True,
-                        "is_uniform": True,  # Все элементы одного типа
-                    }
+        if is_borrow:
+            source = self._borrow_source_from_ast(value_ast)
+            if source is None:
+                logger.debug(
+                    f"Error: borrow '{name}' должен ссылаться на именованную переменную"
                 )
-            else:
-                operations.append(
-                    {"type": "INITIALIZE", "target": name, "value": value_ast}
-                )
-
-        elif is_tuple_fixed:
-            # tuple[T1, T2, ...] - кортеж с фиксированными типами
-            if value_ast.get("type") == "tuple_literal":
-                items = value_ast.get("items", [])
-
-                # Проверяем соответствие количества элементов
-                if len(items) != len(tuple_element_types):
-                    logger.debug(
-                        f"Error: кортеж '{name}' должен содержать {len(tuple_element_types)} элементов, а не {len(items)}"
-                    )
-                    return False
-
-                operations.append(
-                    {
-                        "type": "CREATE_TUPLE_FIXED",
-                        "target": name,
-                        "items": items,
-                        "size": len(items),
-                        "element_types": tuple_element_types,
-                        "is_immutable": True,
-                        "is_uniform": False,  # Элементы разных типов
-                    }
-                )
-            else:
-                operations.append(
-                    {"type": "INITIALIZE", "target": name, "value": value_ast}
-                )
-
-        elif var_type_str.startswith("list["):
-            # list[T] - может быть вложенным list[list[int]]
-            inner_content = self.extract_content_inside_brackets(
-                var_type_str, "list[", "]"
+                return False
+            operations.append(
+                {
+                    "type": "BORROW_MUT" if is_mut_borrow else "BORROW_IMMUT",
+                    "target": name,
+                    "source": source,
+                    "value": value_ast,
+                    "borrow_type": var_type,
+                }
             )
-            if inner_content:
-                element_type = inner_content.strip()
 
-                if value_ast.get("type") == "list_literal":
-                    # Проверяем вложенность
-                    items = value_ast.get("items", [])
-                    is_nested = all(
-                        item.get("type") == "list_literal" for item in items
-                    )
+        elif is_pointer:
+            if value_ast.get("type") == "address_of":
+                operations.append(
+                    {
+                        "type": "GET_ADDRESS",
+                        "target": name,
+                        "of": value_ast.get("variable"),
+                        "operation": "&",
+                    }
+                )
+            elif value_ast.get("type") == "literal" and value_ast.get("value") is None:
+                operations.append({"type": "ASSIGN_NULL", "target": name, "is_null": True})
+            else:
+                operations.append({"type": "ASSIGN_POINTER", "target": name, "value": value_ast})
 
-                    operations.append(
-                        {
-                            "type": "CREATE_LIST",
-                            "target": name,
-                            "items": items,
-                            "size": len(items),
-                            "element_type": element_type,  # Сохраняем полный тип элемента
-                            "is_pointer_array": True,
-                            "is_nested": is_nested,  # Добавляем информацию о вложенности
-                        }
-                    )
-                else:
-                    operations.append(
-                        {"type": "INITIALIZE", "target": name, "value": value_ast}
-                    )
+        elif generic_name == "array":
+            if value_ast.get("type") == "list_literal":
+                element_info = type_info.get("arguments", [{}])[0]
+                operations.append(
+                    {
+                        "type": "CREATE_ARRAY",
+                        "target": name,
+                        "items": value_ast.get("items", []),
+                        "size": len(value_ast.get("items", [])),
+                        "element_type": element_info.get("canonical", "any"),
+                        "element_type_info": element_info,
+                        "contiguous": True,
+                        "ownership": "unique",
+                    }
+                )
+            else:
+                operations.append({"type": "INITIALIZE", "target": name, "value": value_ast})
 
-        elif var_type_str in ["list", "dict", "set"]:
-            # Простые структуры данных
+        elif generic_name == "tensor":
+            if value_ast.get("type") == "list_literal":
+                shape = infer_literal_shape(value_ast)
+                element_info = type_info.get("arguments", [{}])[0]
+                operations.append(
+                    {
+                        "type": "CREATE_TENSOR",
+                        "target": name,
+                        "items": value_ast.get("items", []),
+                        "shape": shape,
+                        "rank": len(shape) if shape is not None else None,
+                        "is_rectangular": shape is not None,
+                        "element_type": element_info.get("canonical", "any"),
+                        "element_type_info": element_info,
+                        "ownership": "unique",
+                    }
+                )
+            else:
+                operations.append({"type": "INITIALIZE", "target": name, "value": value_ast})
+
+        elif generic_name == "shared":
+            operations.append(
+                {
+                    "type": "SHARE_REFERENCE",
+                    "target": name,
+                    "value": value_ast,
+                    "shared_type": var_type,
+                }
+            )
+
+        elif var_type.startswith("tuple["):
+            inner_args = type_info.get("arguments", [])
+            if value_ast.get("type") == "tuple_literal":
+                items = value_ast.get("items", [])
+                operations.append(
+                    {
+                        "type": "CREATE_TUPLE_UNIFORM" if len(inner_args) == 1 else "CREATE_TUPLE_FIXED",
+                        "target": name,
+                        "items": items,
+                        "size": len(items),
+                        "element_type": inner_args[0].get("canonical") if len(inner_args) == 1 else None,
+                        "element_types": [arg.get("canonical") for arg in inner_args] if len(inner_args) > 1 else None,
+                        "is_immutable": True,
+                        "is_uniform": len(inner_args) == 1,
+                    }
+                )
+            else:
+                operations.append({"type": "INITIALIZE", "target": name, "value": value_ast})
+
+        elif var_type.startswith("list["):
+            element_info = type_info.get("arguments", [{}])[0]
+            if value_ast.get("type") == "list_literal":
+                items = value_ast.get("items", [])
+                operations.append(
+                    {
+                        "type": "CREATE_LIST",
+                        "target": name,
+                        "items": items,
+                        "size": len(items),
+                        "element_type": element_info.get("canonical", "any"),
+                        "element_type_info": element_info,
+                        "is_pointer_array": True,
+                        "is_nested": any(item.get("type") == "list_literal" for item in items),
+                    }
+                )
+            else:
+                operations.append({"type": "INITIALIZE", "target": name, "value": value_ast})
+
+        elif var_type.startswith("dict["):
+            if value_ast.get("type") == "dict_literal":
+                operations.append(
+                    {
+                        "type": "CREATE_DICT",
+                        "target": name,
+                        "pairs": value_ast.get("pairs", {}),
+                        "size": len(value_ast.get("pairs", {})),
+                    }
+                )
+            else:
+                operations.append({"type": "INITIALIZE", "target": name, "value": value_ast})
+
+        elif var_type in {"list", "dict", "set"}:
             if value_ast.get("type") == "list_literal":
                 operations.append(
                     {
@@ -2084,51 +2113,24 @@ class Parser:
                     }
                 )
             else:
-                operations.append(
-                    {"type": "INITIALIZE", "target": name, "value": value_ast}
-                )
-
-        elif is_pointer:
-            # Указатели
-            if value_ast.get("type") == "address_of":
-                operations.append(
-                    {
-                        "type": "GET_ADDRESS",
-                        "target": name,
-                        "of": value_ast.get("variable"),
-                        "operation": "&",
-                    }
-                )
-            elif value_ast.get("type") == "literal" and value_ast.get("value") is None:
-                operations.append(
-                    {"type": "ASSIGN_NULL", "target": name, "is_null": True}
-                )
-            else:
-                operations.append(
-                    {"type": "ASSIGN_POINTER", "target": name, "value": value_ast}
-                )
-
+                operations.append({"type": "INITIALIZE", "target": name, "value": value_ast})
         else:
-            # Обычные переменные
             operations.append({"type": "ASSIGN", "target": name, "value": value_ast})
 
-        # Собираем зависимости
-        dependencies = []
-        if value_ast:
-            dependencies = self.extract_dependencies_from_ast(value_ast)
+        dependencies = self.extract_dependencies_from_ast(value_ast) if value_ast else []
+        if is_borrow:
+            source = self._borrow_source_from_ast(value_ast)
+            if source and source not in dependencies:
+                dependencies.append(source)
 
-        # Определяем структуру данных
         data_structure = None
-        if is_tuple_uniform or is_tuple_fixed:
-            data_structure = "tuple"
-        elif var_type_str.startswith("list["):
-            data_structure = "list"
-        elif var_type_str in ["list", "dict", "set"]:
-            data_structure = var_type_str
+        if generic_name in {"list", "dict", "tuple", "array", "tensor", "shared"}:
+            data_structure = generic_name
         elif is_pointer:
             data_structure = "pointer"
+        elif is_borrow:
+            data_structure = "borrow"
 
-        # Создаем узел
         scope["graph"].append(
             {
                 "node": node_type,
@@ -2136,22 +2138,17 @@ class Parser:
                 "symbols": [name],
                 "var_name": name,
                 "var_type": var_type,
+                "type_info": type_info,
+                "memory_kind": memory_kind,
                 "is_pointer": is_pointer,
+                "is_borrow": is_borrow,
+                "is_mut_borrow": is_mut_borrow,
                 "operations": operations,
-                "dependencies": dependencies,
+                "dependencies": list(dict.fromkeys(dependencies)),
                 "expression_ast": value_ast,
                 "data_structure": data_structure,
-                "tuple_info": {
-                    "is_uniform": is_tuple_uniform,
-                    "is_fixed": is_tuple_fixed,
-                    "element_type": element_type if is_tuple_uniform else None,
-                    "element_types": tuple_element_types if is_tuple_fixed else None,
-                }
-                if is_tuple_uniform or is_tuple_fixed
-                else None,
             }
         )
-
         return True
 
     def parse_delete(self, line: str, scope: dict):
@@ -2232,15 +2229,32 @@ class Parser:
         return True
 
     def parse_expression_to_ast(self, expression: str) -> dict:
-        """Парсит выражение в AST (Abstract Syntax Tree) с правильным учетом приоритетов"""
+        """Parse an expression into the transitional Phils AST."""
         expression = expression.strip()
-
         if not expression:
             return {"type": "empty", "value": ""}
 
-        # ========== 1. ПРОСТЫЕ ЛИТЕРАЛЫ ==========
+        # Explicit borrow expression.  Most declarations can simply use
+        # ``var view: &T = owner``; this form is also accepted in call arguments.
+        if expression.startswith("&mut "):
+            inner = expression[5:].strip()
+            return {
+                "type": "borrow",
+                "mutable": True,
+                "source": self.parse_expression_to_ast(inner),
+            }
 
-        # 1.1 Строковые литералы
+        # ``&identifier`` outside raw-pointer declaration context is an immutable
+        # borrow expression. Raw pointers are disambiguated in parse_var().
+        if expression.startswith("&"):
+            inner = expression[1:].strip()
+            if inner and not inner.startswith("&"):
+                return {
+                    "type": "borrow",
+                    "mutable": False,
+                    "source": self.parse_expression_to_ast(inner),
+                }
+
         if (expression.startswith('"') and expression.endswith('"')) or (
             expression.startswith("'") and expression.endswith("'")
         ):
@@ -2248,26 +2262,19 @@ class Parser:
             content = content.replace('\\"', '"').replace("\\'", "'")
             return {"type": "literal", "value": content, "data_type": "str"}
 
-        # 1.2 Целые числа
         if re.match(r"^-?\d+$", expression):
             return {"type": "literal", "value": int(expression), "data_type": "int"}
 
-        # 1.3 Числа с плавающей точкой
         if (
             re.match(r"^-?\d+\.\d+$", expression)
             or re.match(r"^-?\d+\.\d+[eE][+-]?\d+$", expression)
             or re.match(r"^-?\d+[eE][+-]?\d+$", expression)
         ):
             try:
-                return {
-                    "type": "literal",
-                    "value": float(expression),
-                    "data_type": "float",
-                }
+                return {"type": "literal", "value": float(expression), "data_type": "float"}
             except ValueError:
                 pass
 
-        # 1.4 Булевы значения и None
         if expression == "True":
             return {"type": "literal", "value": True, "data_type": "bool"}
         if expression == "False":
@@ -2277,32 +2284,21 @@ class Parser:
         if expression == "null":
             return {"type": "literal", "value": "null", "data_type": "null"}
 
-        # ========== 2. КОМПЛЕКСНЫЕ ЛИТЕРАЛЫ ==========
-
-        # 2.1 Литералы списков
         if expression.startswith("[") and expression.endswith("]"):
             return self.parse_list_literal(expression)
 
-        # 2.2 Литералы кортежей
         if expression.startswith("(") and expression.endswith(")"):
             inner = expression[1:-1].strip()
             if "," in inner or (inner and inner.endswith(",")):
                 return self.parse_tuple_literal(expression)
-            else:
-                # Это выражение в скобках
-                return self.parse_expression_to_ast(inner)
+            return self.parse_expression_to_ast(inner)
 
-        # 2.3 Литералы словарей/множеств
         if expression.startswith("{") and expression.endswith("}"):
             content = expression[1:-1].strip()
             if self.is_dict_literal(content):
                 return self.parse_dict_literal(expression)
-            else:
-                return self.parse_set_literal(expression)
+            return self.parse_set_literal(expression)
 
-        # ========== 3. РЕКУРСИВНЫЙ ПАРСИНГ С ПРИОРИТЕТАМИ ==========
-
-        # Используем новый алгоритм с правильными приоритетами
         return self._parse_with_priorities(expression)
 
     def _parse_with_priorities(self, expression: str) -> dict:
@@ -4532,6 +4528,68 @@ class Parser:
     # CLASSES
     ###############################################################################################
 
+    def parse_struct_declaration(
+        self, line: str, scope: dict, all_lines: list, current_index: int
+    ):
+        """Parse a value-semantic struct.
+
+        Structs intentionally contain fields only in v0.2. Methods can be added
+        later without changing their value/inline memory semantics.
+        """
+        match = re.match(r"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:", line)
+        if not match:
+            return current_index + 1
+
+        struct_name = match.group(1)
+        base_indent = self.calculate_indent_level(all_lines[current_index])
+        body_start = current_index + 1
+        body_end = self.find_indented_block_end(all_lines, body_start, base_indent)
+
+        fields = []
+        i = body_start
+        while i < body_end:
+            raw = all_lines[i]
+            if not raw.strip():
+                i += 1
+                continue
+            field = self._parse_struct_field(raw.strip())
+            if field is None:
+                logger.debug(
+                    f"Error: struct '{struct_name}' содержит неподдерживаемую строку: {raw.strip()}"
+                )
+                i += 1
+                continue
+            fields.append(field)
+            i += 1
+
+        symbol_id = scope["symbol_table"].add_symbol(
+            name=struct_name,
+            key="struct",
+            var_type="struct",
+            value=None,
+            fields=fields,
+            memory_kind="value",
+        )
+
+        scope["graph"].append(
+            {
+                "node": "struct_declaration",
+                "content": line,
+                "struct_name": struct_name,
+                "symbol_id": symbol_id,
+                "fields": fields,
+                "memory_kind": "value",
+                "operations": [
+                    {
+                        "type": "DECLARE_STRUCT",
+                        "struct_name": struct_name,
+                        "fields": fields,
+                    }
+                ],
+            }
+        )
+        return body_end
+
     def parse_class_declaration(
         self, line: str, scope: dict, all_lines: list, current_index: int
     ):
@@ -4664,199 +4722,65 @@ class Parser:
         is_classmethod: bool,
         class_node: dict,
     ):
-        """Парсит объявление метода класса"""
-        # Определяем паттерн для метода
+        """Parse a class method using the same typed parameter parser as functions."""
         pattern = r"def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)\s*(?:->\s*(.+?))?\s*:"
         match = re.match(pattern, line)
-
         if not match:
             return current_index + 1
 
-        method_name, params_str, return_type = match.groups()
-        return_type = return_type if return_type else "None"
-
-        # Парсим параметры
+        method_name, params_str, return_type_text = match.groups()
+        return_type, return_type_info = self.parse_type_annotation(return_type_text or "None")
         parameters = self.parse_parameters(params_str)
 
-        # ДОБАВЛЯЕМ ПРОВЕРКУ НА ДУБЛИКАТЫ
-        existing_methods = class_node.get("methods", [])
-        method_exists = False
-
-        # Парсим параметры
-        parameters = []
-        if params_str.strip():
-            # Разделяем параметры по запятым с учетом вложенных конструкций
-            param_parts = []
-            current = ""
-            depth = 0
-            in_string = False
-            string_char = None
-
-            for char in params_str:
-                if not in_string and char in ['"', "'"]:
-                    in_string = True
-                    string_char = char
-                    current += char
-                elif in_string and char == string_char and current[-1] != "\\":
-                    in_string = False
-                    current += char
-                elif not in_string:
-                    if char in ["[", "{", "("]:
-                        depth += 1
-                        current += char
-                    elif char in ["]", "}", ")"]:
-                        depth -= 1
-                        current += char
-                    elif char == "," and depth == 0 and not in_string:
-                        if current.strip():
-                            param_parts.append(current.strip())
-                        current = ""
-                    else:
-                        current += char
-                else:
-                    current += char
-
-            if current.strip():
-                param_parts.append(current.strip())
-
-            # Обрабатываем каждый параметр
-            for param_str in param_parts:
-                param_str = param_str.strip()
-                if not param_str:
-                    continue
-
-                # Упрощенная обработка параметра
-                param_type = "any"
-                default_value = None
-                param_name = param_str
-
-                # Проверяем наличие типа
-                if ":" in param_str:
-                    name_type_parts = param_str.split(":", 1)
-                    param_name = name_type_parts[0].strip()
-                    type_default = name_type_parts[1].strip()
-
-                    # Проверяем наличие значения по умолчанию
-                    if "=" in type_default:
-                        type_parts = type_default.split("=", 1)
-                        param_type = type_parts[0].strip()
-                        default_value = type_parts[1].strip()
-                    else:
-                        param_type = type_default
-                # Проверяем наличие значения по умолчанию без типа
-                elif "=" in param_str:
-                    name_value_parts = param_str.split("=", 1)
-                    param_name = name_value_parts[0].strip()
-                    default_value = name_value_parts[1].strip()
-
-                # Убираем пробелы из имени параметра
-                param_name = param_name.strip()
-
-                parameters.append(
+        if not is_static and not is_classmethod:
+            self_param = next((p for p in parameters if p["name"] == "self"), None)
+            if self_param is None:
+                self_type, self_type_info = self.parse_type_annotation(f"&mut {class_name}")
+                parameters.insert(
+                    0,
                     {
-                        "name": param_name,
-                        "type": param_type,
-                        "default_value": default_value,
-                    }
+                        "name": "self",
+                        "type": self_type,
+                        "type_info": self_type_info,
+                        "memory_kind": "mut_borrow",
+                        "is_borrow": True,
+                        "is_mut_borrow": True,
+                        "is_pointer": False,
+                        "default_value": None,
+                        "implicit_self": True,
+                    },
                 )
+            else:
+                # Preserve the legacy ClassName type string expected by the current
+                # OOP backend while tagging the receiver as a mutable borrow in metadata.
+                self_type, self_type_info = self.parse_type_annotation(class_name)
+                self_param["type"] = self_type
+                self_param["type_info"] = self_type_info
+                self_param["memory_kind"] = "shared"
+                self_param["object_receiver"] = True
+                self_param["receiver_borrow"] = "mut"
 
-        existing_methods = class_node.get("methods", [])
-        method_exists = False
-
-        for existing_method in existing_methods:
-            if existing_method["name"] == method_name:
-                # Сравниваем параметры
-                if len(existing_method["parameters"]) == len(parameters):
-                    same_params = True
-                    for p1, p2 in zip(existing_method["parameters"], parameters):
-                        if p1["name"] != p2["name"] or p1["type"] != p2["type"]:
-                            same_params = False
-                            break
-
-                    if same_params and existing_method["return_type"] == return_type:
-                        method_exists = True
-                        break
-
-        if method_name == "__init__":
-            # Для __init__ проверяем по имени
-            for method in existing_methods:
-                if method["name"] == "__init__":
-                    method_exists = True
-                    break
-        else:
-            # Для других методов проверяем полностью
-            for method in existing_methods:
-                for method in existing_methods:
-                    if method["name"] == method_name:
-                        # Для методов с одинаковыми именами проверяем параметры
-                        if self.methods_equal(
-                            method,
-                            {
-                                "name": method_name,
-                                "parameters": parameters,
-                                "return_type": return_type,
-                                "is_static": is_static,
-                                "is_classmethod": is_classmethod,
-                            },
-                        ):
-                            method_exists = True
-                            break
-
-        if method_exists:
-            logger.debug(f"DEBUG: Метод '{method_name}' уже существует, пропускаем")
-            # Находим и пропускаем тело метода
-            body_start = current_index + 1
-            body_end = self.find_indented_block_end(all_lines, body_start, indent)
-            return body_end
-
-        # Создаем информацию о методе
         method_info = {
             "name": method_name,
             "parameters": parameters,
             "return_type": return_type,
+            "return_type_info": return_type_info,
             "is_static": is_static,
             "is_classmethod": is_classmethod,
         }
 
-        # Добавляем метод в класс
+        for existing in class_node.get("methods", []) + class_node.get("static_methods", []) + class_node.get("class_methods", []):
+            if self.methods_equal(existing, method_info):
+                body_start = current_index + 1
+                return self.find_indented_block_end(all_lines, body_start, indent)
+
         if is_static:
             class_node.setdefault("static_methods", []).append(method_info)
         elif is_classmethod:
             class_node.setdefault("class_methods", []).append(method_info)
         else:
             class_node.setdefault("methods", []).append(method_info)
-            logger.debug(f"DEBUG: Добавлен метод '{method_name}' в класс")
 
-        # Для обычных методов добавляем self как первый параметр
-        if not is_static and not is_classmethod and method_name != "__init__":
-            has_self = any(p["name"] == "self" for p in parameters)
-            if not has_self:
-                parameters.insert(
-                    0, {"name": "self", "type": class_name, "default_value": None}
-                )
-
-        # Для __init__ также добавляем self если его нет
-        if method_name == "__init__":
-            has_self = any(p["name"] == "self" for p in parameters)
-            if not has_self:
-                parameters.insert(
-                    0, {"name": "self", "type": class_name, "default_value": None}
-                )
-
-            # Обновляем тип self для конструктора
-            for i, param in enumerate(parameters):
-                if param["name"] == "self":
-                    parameters[i]["type"] = class_name
-                    break
-
-        # Для обычных методов (не статических и не classmethod) обновляем тип self
-        elif not is_static and not is_classmethod:
-            for i, param in enumerate(parameters):
-                if param["name"] == "self":
-                    parameters[i]["type"] = class_name
-                    break
-
-        # Добавляем метод в класс
         parent_scope["symbol_table"].add_class_method(
             class_name=class_name,
             method_name=method_name,
@@ -4866,27 +4790,9 @@ class Parser:
             return_type=return_type,
         )
 
-        # Обновляем узел класса
-        method_info = {
-            "name": method_name,
-            "parameters": parameters,
-            "return_type": return_type,
-            "is_static": is_static,
-            "is_classmethod": is_classmethod,
-        }
-
-        if is_static:
-            class_node["static_methods"].append(method_info)
-        elif is_classmethod:
-            class_node["class_methods"].append(method_info)
-        else:
-            class_node["methods"].append(method_info)
-
-        # Находим тело метода
         body_start = current_index + 1
         body_end = self.find_indented_block_end(all_lines, body_start, indent)
 
-        # Определяем тип области видимости метода
         if is_static:
             scope_type = "static_method"
         elif is_classmethod:
@@ -4896,16 +4802,15 @@ class Parser:
         else:
             scope_type = "class_method"
 
-        # Создаем область видимости для метода
-        method_level = parent_scope["level"] + 2
         method_scope = {
-            "level": method_level,
+            "level": parent_scope["level"] + 2,
             "type": scope_type,
             "parent_scope": parent_scope["level"],
             "class_name": class_name,
             "method_name": method_name,
             "parameters": parameters,
             "return_type": return_type,
+            "return_type_info": return_type_info,
             "local_variables": [],
             "graph": [],
             "symbol_table": SymbolTable(),
@@ -4913,24 +4818,22 @@ class Parser:
                 "has_return": False,
                 "return_value": None,
                 "return_type": return_type,
+                "return_type_info": return_type_info,
             },
         }
 
-        # Добавляем параметры в таблицу символов метода
         for param in parameters:
-            param_type = param["type"]
             method_scope["symbol_table"].add_symbol(
-                name=param["name"], key="parameter", var_type=param_type
+                name=param["name"],
+                key="parameter",
+                var_type=param["type"],
+                type_info=param.get("type_info"),
+                memory_kind=param.get("memory_kind"),
             )
             method_scope["local_variables"].append(param["name"])
 
-        # Добавляем область видимости метода в общий список
         self.scopes.append(method_scope)
-
-        # Для конструктора добавляем в стек scope'ов для парсинга тела
         self.scope_stack.append(method_scope)
-
-        # Парсим тело метода
         saved_indent = self.current_indent
         self.current_indent = indent + 1
 
@@ -4940,199 +4843,82 @@ class Parser:
             if not method_line.strip():
                 i += 1
                 continue
-
             method_indent = self.calculate_indent_level(method_line)
             method_content = method_line.strip()
 
-            # ОСОБАЯ ОБРАБОТКА ДЛЯ КОНСТРУКТОРА - парсим присваивания self.attr
-            if method_name == "__init__":
-                # Пробуем распарсить как присваивание атрибута self
-                if method_content.startswith("self.") and "=" in method_content:
-                    # Паттерны для разных форматов:
-                    # 1. self.attr = value
-                    # 2. var self.attr: type = value
+            # Constructor fields accept generic, borrow, owned and optional types:
+            # self.data: array[float32] = [...]
+            if method_name == "__init__" and method_content.startswith("self.") and "=" in method_content:
+                if self.parse_class_attribute_initialization(method_content, method_scope):
+                    i += 1
+                    continue
 
-                    # Убираем var если есть
-                    content_to_parse = method_content
-                    has_var_prefix = content_to_parse.startswith("var ")
-                    if has_var_prefix:
-                        content_to_parse = content_to_parse[4:].strip()
+            i = self.parse_line(method_content, method_scope, all_lines, i, method_indent)
 
-                    # Парсим self.attr = value
-                    pattern = r"self\.([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*([a-zA-Z_][a-zA-Z0-9_\[\]]*))?\s*=\s*(.+)"
-                    match_attr = re.match(pattern, content_to_parse)
-
-                    if match_attr:
-                        attr_name, attr_type, value = match_attr.groups()
-
-                        # Если тип не указан, пытаемся определить из значения
-                        if not attr_type:
-                            # Парсим значение для определения типа
-                            value_ast = self.parse_expression_to_ast(value)
-                            attr_type = self._infer_type_from_ast(value_ast)
-
-                        logger.debug(
-                            f"DEBUG: Найден атрибут в конструкторе: {attr_name}, тип: {attr_type}"
-                        )
-
-                        # ДОБАВЛЯЕМ АТРИБУТ В КЛАСС В ГЛОБАЛЬНОЙ ОБЛАСТИ
-                        for global_scope in self.scopes:
-                            if global_scope.get("level") == 0:  # Глобальная область
-                                class_symbol = global_scope["symbol_table"].get_symbol(
-                                    class_name
-                                )
-                                if class_symbol:
-                                    # Проверяем, нет ли уже такого атрибута
-                                    attr_exists = False
-                                    for attr in class_symbol.get("attributes", []):
-                                        if attr["name"] == attr_name:
-                                            attr_exists = True
-                                            break
-
-                                    if not attr_exists:
-                                        class_symbol["attributes"].append(
-                                            {
-                                                "name": attr_name,
-                                                "type": attr_type,
-                                                "access": "public",
-                                            }
-                                        )
-                                        logger.debug(
-                                            f"DEBUG: Добавлен атрибут {attr_name} в класс {class_name}"
-                                        )
-
-                                        # Также добавляем в узел класса в графе
-                                        for node in global_scope["graph"]:
-                                            if (
-                                                node.get("node") == "class_declaration"
-                                                and node.get("class_name") == class_name
-                                            ):
-                                                if attr_name not in [
-                                                    a["name"]
-                                                    for a in node["attributes"]
-                                                ]:
-                                                    node["attributes"].append(
-                                                        {
-                                                            "name": attr_name,
-                                                            "type": attr_type,
-                                                            "access": "public",
-                                                        }
-                                                    )
-                                                    logger.debug(
-                                                        f"DEBUG: Обновлен узел класса с атрибутом {attr_name}"
-                                                    )
-                                                break
-                                break
-
-                        # Создаем узел для присваивания атрибута
-                        value_ast = self.parse_expression_to_ast(value)
-                        attr_node = {
-                            "node": "attribute_assignment",
-                            "content": method_content,
-                            "object": "self",
-                            "attribute": attr_name,
-                            "value": value_ast,
-                            "operations": [
-                                {
-                                    "type": "ATTRIBUTE_ASSIGN",
-                                    "object": "self",
-                                    "attribute": attr_name,
-                                    "value": value_ast,
-                                }
-                            ],
-                            "dependencies": self.extract_dependencies_from_ast(
-                                value_ast
-                            ),
-                        }
-
-                        method_scope["graph"].append(attr_node)
-                        logger.debug(
-                            "DEBUG: Добавлен узел attribute_assignment в граф конструктора"
-                        )
-
-                        i += 1
-                        continue
-
-            # Стандартный парсинг строки метода
-            i = self.parse_line(
-                method_content, method_scope, all_lines, i, method_indent
-            )
-
-        # Восстанавливаем отступ и удаляем scope метода из стека
         self.current_indent = saved_indent
         if method_scope in self.scope_stack:
             self.scope_stack.remove(method_scope)
-
         return body_end
 
     def parse_class_attribute(
         self, line: str, scope: dict, class_name: str, class_node: dict
     ):
-        """Парсит атрибут класса (var self.attr: type = value)"""
-        # Расширенный паттерн для поддержки разных форматов
-        patterns = [
-            r"var\s+self\.([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_\[\]]*)\s*=\s*(.+)",  # с типом и значением
-            r"var\s+self\.([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_\[\]]*)",  # только с типом
-            r"var\s+self\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)",  # только со значением
-            r"self\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)",  # простое присваивание в конструкторе
-        ]
+        """Parse ``var self.attr: Type [= value]`` with nested types."""
+        match = re.match(r"var\s+self\.([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.+)$", line)
+        if not match:
+            return False
+        attr_name, rest = match.groups()
+        equals = find_top_level(rest, "=")
+        if equals >= 0:
+            type_text = rest[:equals].strip()
+            value_text = rest[equals + 1 :].strip()
+            value_ast = self.parse_expression_to_ast(value_text)
+        else:
+            type_text = rest.strip()
+            value_ast = None
 
-        for pattern in patterns:
-            match = re.match(pattern, line)
-            if match:
-                if pattern == patterns[0]:  # с типом и значением
-                    attr_name, attr_type, value = match.groups()
-                    value_ast = self.parse_expression_to_ast(value)
-                elif pattern == patterns[1]:  # только с типом
-                    attr_name, attr_type = match.groups()
-                    value_ast = None
-                elif pattern == patterns[2]:  # только со значением
-                    attr_name, value = match.groups()
-                    attr_type = "any"
-                    value_ast = self.parse_expression_to_ast(value)
-                else:  # простое присваивание в конструкторе
-                    attr_name, value = match.groups()
-                    attr_type = "any"
-                    value_ast = self.parse_expression_to_ast(value)
+        attr_type, type_info = self.parse_type_annotation(type_text)
+        attribute_data = {
+            "name": attr_name,
+            "type": attr_type,
+            "type_info": type_info,
+            "memory_kind": type_info.get("memory_kind"),
+            "access": "public",
+        }
 
-                # Добавляем атрибут в класс
-                scope["symbol_table"].add_class_attribute(
-                    class_name=class_name,
-                    attribute_name=attr_name,
-                    attribute_type=attr_type,
-                )
+        try:
+            scope["symbol_table"].add_class_attribute(
+                class_name=class_name,
+                attribute_name=attr_name,
+                attribute_type=attr_type,
+            )
+        except Exception:
+            pass
 
-                # Добавляем в узел класса
-                class_node["attributes"].append(
+        if not any(a.get("name") == attr_name for a in class_node.get("attributes", [])):
+            class_node.setdefault("attributes", []).append(attribute_data)
+
+        scope["graph"].append(
+            {
+                "node": "class_attribute_init",
+                "content": line,
+                "class_name": class_name,
+                "attribute_name": attr_name,
+                "attribute_type": attr_type,
+                "attribute_type_info": type_info,
+                "value": value_ast,
+                "operations": [
                     {
-                        "name": attr_name,
-                        "type": attr_type,
-                        "access": "public",
+                        "type": "CLASS_ATTRIBUTE_INIT",
+                        "class_name": class_name,
+                        "attribute": attr_name,
+                        "value": value_ast,
+                        "attribute_type": attr_type,
                     }
-                )
-
-                # Создаем узел для инициализации атрибута
-                attr_node = {
-                    "node": "class_attribute_init",
-                    "content": line,
-                    "class_name": class_name,
-                    "attribute_name": attr_name,
-                    "attribute_type": attr_type,
-                    "value": value_ast,
-                    "operations": [
-                        {
-                            "type": "CLASS_ATTRIBUTE_INIT",
-                            "class_name": class_name,
-                            "attribute": attr_name,
-                            "value": value_ast,
-                        }
-                    ],
-                }
-
-                scope["graph"].append(attr_node)
-                return True
-
-        return False
+                ],
+            }
+        )
+        return True
 
     def parse_object_creation(self, expression: str) -> dict:
         """Парсит создание объекта: ClassName(arg1, arg2, ...)"""
@@ -5341,92 +5127,80 @@ class Parser:
         return False
 
     def parse_class_attribute_initialization(self, line: str, scope: dict) -> bool:
-        """Парсит инициализацию атрибута класса в конструкторе"""
-        logger.debug(f"DEBUG: Парсим инициализацию атрибута: {line}")
+        """Parse ``self.attr [: Type] = value`` in a constructor."""
+        match = re.match(r"self\.([a-zA-Z_][a-zA-Z0-9_]*)\s*(.*)$", line)
+        if not match:
+            return False
 
-        # Паттерн 1: self.attr = value
-        pattern_simple = r"self\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)"
-        match_simple = re.match(pattern_simple, line)
+        attr_name, rest = match.groups()
+        rest = rest.strip()
+        declared_type = None
 
-        if match_simple:
-            attr_name, value = match_simple.groups()
-            logger.debug(
-                f"DEBUG: Найден атрибут простой: {attr_name}, значение: {value}"
-            )
+        if rest.startswith(":"):
+            rest = rest[1:].strip()
+            equals = find_top_level(rest, "=")
+            if equals < 0:
+                return False
+            declared_type = rest[:equals].strip()
+            value_text = rest[equals + 1 :].strip()
+        elif rest.startswith("="):
+            value_text = rest[1:].strip()
+        else:
+            return False
 
-            # Парсим значение
-            value_ast = self.parse_expression_to_ast(value)
-            logger.debug(f"DEBUG: Значение как AST: {value_ast}")
-
-            container_info = self._extract_container_info(value_ast)
-
-            # Получаем имя класса из scope
-            class_name = scope.get("class_name", "")
-            logger.debug(f"DEBUG: Имя класса: {class_name}")
-
-            # Определяем тип атрибута из AST значения
+        value_ast = self.parse_expression_to_ast(value_text)
+        if declared_type:
+            attr_type, type_info = self.parse_type_annotation(declared_type)
+        else:
             attr_type = self._infer_type_from_ast(value_ast)
-            logger.debug(f"DEBUG: Выведенный тип: {attr_type}")
+            attr_type, type_info = self.parse_type_annotation(attr_type)
 
+        container_info = self._extract_container_info(value_ast)
+        class_name = scope.get("class_name", "")
+
+        for global_scope in self.scopes:
+            if global_scope.get("level") != 0:
+                continue
+            class_symbol = global_scope["symbol_table"].get_symbol(class_name)
+            if not class_symbol:
+                break
+            attributes = class_symbol.setdefault("attributes", [])
+            existing = next((a for a in attributes if a.get("name") == attr_name), None)
+            attribute_data = {
+                "name": attr_name,
+                "type": attr_type,
+                "type_info": type_info,
+                "memory_kind": type_info.get("memory_kind"),
+                "access": "public",
+            }
             if container_info:
-                attr_type = container_info["type"]
+                attribute_data["container_info"] = container_info
+            if existing is None:
+                attributes.append(attribute_data)
+            else:
+                existing.update(attribute_data)
 
-            # Находим глобальную область и обновляем информацию о классе
-            for global_scope in self.scopes:
-                if global_scope.get("level") == 0:  # Глобальная область
-                    class_symbol = global_scope["symbol_table"].get_symbol(class_name)
-                    if class_symbol:
-                        # Добавляем атрибут в класс с дополнительной информацией
-                        attribute_data = {
-                            "name": attr_name,
-                            "type": attr_type,
-                            "access": "public",
-                        }
-
-                        # Добавляем информацию о контейнере, если есть
-                        if container_info:
-                            attribute_data["container_info"] = container_info
-
-                        class_symbol["attributes"].append(attribute_data)
-
-                        logger.debug(
-                            f"DEBUG: Добавлен атрибут {attr_name} в класс {class_name}"
-                        )
-
-                        # Обновляем узел класса в графе
-                        for node in global_scope["graph"]:
-                            if (
-                                node.get("node") == "class_declaration"
-                                and node.get("class_name") == class_name
-                            ):
-                                if attr_name not in [
-                                    a["name"] for a in node["attributes"]
-                                ]:
-                                    node_attr_data = {
-                                        "name": attr_name,
-                                        "type": attr_type,
-                                        "access": "public",
-                                    }
-                                    if container_info:
-                                        node_attr_data["container_info"] = (
-                                            container_info
-                                        )
-                                    node["attributes"].append(node_attr_data)
-                                    logger.debug(
-                                        f"DEBUG: Обновлен узел класса с атрибутом {attr_name}"
-                                    )
-                                break
+            for node in global_scope["graph"]:
+                if node.get("node") == "class_declaration" and node.get("class_name") == class_name:
+                    node_attributes = node.setdefault("attributes", [])
+                    node_existing = next((a for a in node_attributes if a.get("name") == attr_name), None)
+                    if node_existing is None:
+                        node_attributes.append(dict(attribute_data))
+                    else:
+                        node_existing.update(attribute_data)
                     break
+            break
 
-            # Создаем узел для инициализации атрибута
-            attr_node = {
+        scope["graph"].append(
+            {
                 "node": "attribute_assignment",
                 "content": line,
                 "object": "self",
                 "attribute": attr_name,
                 "value": value_ast,
-                "attribute_type": attr_type,  # Сохраняем тип атрибута
-                "container_info": container_info,  # Сохраняем информацию о контейнере
+                "attribute_type": attr_type,
+                "attribute_type_info": type_info,
+                "container_info": container_info,
                 "operations": [
                     {
                         "type": "ATTRIBUTE_ASSIGN",
@@ -5434,95 +5208,13 @@ class Parser:
                         "attribute": attr_name,
                         "value": value_ast,
                         "attribute_type": attr_type,
+                        "attribute_type_info": type_info,
                     }
                 ],
                 "dependencies": self.extract_dependencies_from_ast(value_ast),
             }
-            scope["graph"].append(attr_node)
-            logger.debug(f"DEBUG: Добавлен узел attribute_assignment в граф scope")
-            return True
-
-        # Паттерн 2: var self.attr: type = value
-        pattern_with_type = (
-            r"self\.([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)"
         )
-        match_with_type = re.match(pattern_with_type, line)
-
-        if match_with_type:
-            attr_name, attr_type, value = match_with_type.groups()
-            logger.debug(
-                f"DEBUG: Найден атрибут с типом: {attr_name}, тип: {attr_type}, значение: {value}"
-            )
-
-            # Парсим значение
-            value_ast = self.parse_expression_to_ast(value)
-            logger.debug(f"DEBUG: Значение как AST: {value_ast}")
-
-            # Получаем имя класса из scope
-            class_name = scope.get("class_name", "")
-            logger.debug(f"DEBUG: Имя класса: {class_name}")
-
-            # Находим глобальную область и обновляем информацию о классе
-            for global_scope in self.scopes:
-                if global_scope.get("level") == 0:  # Глобальная область
-                    class_symbol = global_scope["symbol_table"].get_symbol(class_name)
-                    if class_symbol:
-                        # Добавляем атрибут в класс
-                        class_symbol["attributes"].append(
-                            {"name": attr_name, "type": attr_type, "access": "public"}
-                        )
-                        logger.debug(
-                            f"DEBUG: Добавлен атрибут {attr_name} в класс {class_name}"
-                        )
-
-                        # Обновляем узел класса в графе
-                        for node in global_scope["graph"]:
-                            if (
-                                node.get("node") == "class_declaration"
-                                and node.get("class_name") == class_name
-                            ):
-                                if attr_name not in [
-                                    a["name"] for a in node["attributes"]
-                                ]:
-                                    node["attributes"].append(
-                                        {
-                                            "name": attr_name,
-                                            "type": attr_type,
-                                            "access": "public",
-                                        }
-                                    )
-                                    logger.debug(
-                                        f"DEBUG: Обновлен узел класса с атрибутом {attr_name}"
-                                    )
-                                break
-                    break
-
-            # Создаем узел для инициализации атрибута
-            attr_node = {
-                "node": "attribute_assignment",  # ИЗМЕНЕНО: было "class_attribute_init"
-                "content": line,
-                "object": "self",
-                "attribute": attr_name,
-                "value": value_ast,
-                "operations": [
-                    {
-                        "type": "ATTRIBUTE_ASSIGN",
-                        "object": "self",
-                        "attribute": attr_name,
-                        "value": value_ast,
-                    }
-                ],
-                "dependencies": self.extract_dependencies_from_ast(value_ast),
-            }
-
-            scope["graph"].append(attr_node)
-            logger.debug(f"DEBUG: Добавлен узел attribute_assignment в граф scope")
-            return True
-
-        logger.debug(
-            f"DEBUG: Не удалось распарсить строку как инициализацию атрибута: {line}"
-        )
-        return False
+        return True
 
     ###############################################################################################
     # EXTRACT
@@ -5665,6 +5357,9 @@ class Parser:
                 traverse(node.get("true_expr"))
                 traverse(node.get("false_expr"))
 
+            elif node_type == "borrow":
+                traverse(node.get("source"))
+
             elif node_type == "address_of":
                 expr = node.get("expression") or node.get("variable")
                 if isinstance(expr, dict):
@@ -5740,6 +5435,13 @@ class Parser:
                 "size": len(items),
                 "is_dynamic": True,
             }
+
+        elif node_type == "borrow":
+            source_ast = ast.get("source", {})
+            source_type = self._infer_type_from_ast(source_ast)
+            if ast.get("mutable"):
+                return f"&mut {source_type}"
+            return f"&{source_type}"
 
         elif node_type == "variable":
             # Пытаемся определить тип переменной
@@ -6081,35 +5783,52 @@ class Parser:
         return ast
 
     def parse_single_parameter(self, param_str: str) -> dict:
-        """Парсит один параметр: name: type = default_value"""
+        """Parse ``name: Type = default`` with nested generic/borrow types."""
         param_str = param_str.strip()
         if not param_str:
             return None
 
-        # Проверяем наличие типа и значения по умолчанию
-        if ":" in param_str and "=" in param_str:
-            # name: type = value
-            name_type_part, value_part = param_str.split("=", 1)
-            if ":" in name_type_part:
-                name, type_part = name_type_part.split(":", 1)
-                return {
-                    "name": name.strip(),
-                    "type": type_part.strip(),
-                    "default_value": value_part.strip(),
-                }
-        elif ":" in param_str:
-            # name: type
-            name, type_part = param_str.split(":", 1)
-            return {"name": name.strip(), "type": type_part.strip()}
-        elif "=" in param_str:
-            # name = value
-            name, value = param_str.split("=", 1)
-            return {"name": name.strip(), "type": "any", "default_value": value.strip()}
-        else:
-            # Просто name
-            return {"name": param_str.strip(), "type": "any"}
+        colon = find_top_level(param_str, ":")
+        equals = find_top_level(param_str, "=")
 
-        return None
+        if colon >= 0:
+            name = param_str[:colon].strip()
+            typed_part = param_str[colon + 1 :].strip()
+            typed_equals = find_top_level(typed_part, "=")
+            if typed_equals >= 0:
+                type_text = typed_part[:typed_equals].strip()
+                default_value = typed_part[typed_equals + 1 :].strip()
+            else:
+                type_text = typed_part
+                default_value = None
+        elif equals >= 0:
+            name = param_str[:equals].strip()
+            type_text = "any"
+            default_value = param_str[equals + 1 :].strip()
+        else:
+            name = param_str
+            type_text = "any"
+            default_value = None
+
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name):
+            return None
+
+        canonical, type_info = self.parse_type_annotation(type_text)
+        result = {
+            "name": name,
+            "type": canonical,
+            "type_info": type_info,
+            "memory_kind": type_info.get("memory_kind", "value"),
+            "is_borrow": type_info.get("kind") in {"borrow", "mut_borrow"},
+            "is_mut_borrow": type_info.get("kind") == "mut_borrow",
+            "is_pointer": type_info.get("kind") == "raw_pointer",
+        }
+        if default_value is not None:
+            result["default_value"] = default_value
+            result["default_ast"] = self.parse_expression_to_ast(default_value)
+        else:
+            result["default_value"] = None
+        return result
 
     def _infer_type_from_ast(self, ast: dict) -> str:
         """Выводит тип из AST выражения"""
@@ -6228,61 +5947,15 @@ class Parser:
         return True
 
     def parse_parameters(self, params_str: str) -> list:
-        """Парсит параметры метода"""
-
-        def _split_by_commas_outside_brackets(s: str) -> list:
-            """Разделяет строку по запятым вне скобок"""
-            result = []
-            current = ""
-            depth = 0
-            in_string = False
-            string_char = None
-
-            for char in s:
-                if not in_string and char in ['"', "'"]:
-                    in_string = True
-                    string_char = char
-                    current += char
-                elif in_string and char == string_char:
-                    in_string = False
-                    current += char
-                elif not in_string:
-                    if char == "[":
-                        depth += 1
-                        current += char
-                    elif char == "]":
-                        depth -= 1
-                        current += char
-                    elif char == "," and depth == 0:
-                        result.append(current.strip())
-                        current = ""
-                    else:
-                        current += char
-                else:
-                    current += char
-
-            if current.strip():
-                result.append(current.strip())
-
-            return result
-
+        """Parse a comma-separated parameter list at top level."""
         if not params_str.strip():
             return []
-
-        params = []
-        param_parts = _split_by_commas_outside_brackets(params_str)
-
-        for param_str in param_parts:
-            param_str = param_str.strip()
-            if not param_str:
-                continue
-
-            # Парсим отдельный параметр
-            param_info = self.parse_single_parameter(param_str)
-            if param_info:
-                params.append(param_info)
-
-        return params
+        parameters = []
+        for part in split_top_level(params_str):
+            parsed = self.parse_single_parameter(part)
+            if parsed:
+                parameters.append(parsed)
+        return parameters
 
     def remove_duplicate_methods(self):
         """Удаляет дублирующиеся методы из классов"""
