@@ -1033,10 +1033,49 @@ class TypesMixin:
             current_type = self.strip_borrow_type(current_type)
             if not self._is_class_type(current_type):
                 return "", c_expression
-            field_type = self.class_fields.get(current_type, {}).get(attribute)
+            field_type, field_expression = self.resolve_class_field(
+                current_type, c_expression, attribute
+            )
             if not field_type:
                 return "", c_expression
-            c_expression = f"{c_expression}->{attribute}"
+            c_expression = field_expression
             current_type = field_type
 
         return current_type, c_expression
+
+    def resolve_class_field(self, class_name: str, object_expression: str, attribute: str):
+        """Resolve a class field, including fields inherited through ``base``.
+
+        Derived objects embed their parent at offset zero.  A field declared by
+        the current class is therefore addressed with ``->field`` while a
+        field declared by an ancestor is addressed through one or more
+        embedded ``base`` members (for example ``self->base.value``).
+        """
+        current = self.strip_borrow_type(class_name)
+        path = object_expression
+        visited = set()
+
+        while current:
+            if current in visited:
+                raise RuntimeError(f"inheritance cycle involving {class_name}")
+            visited.add(current)
+
+            fields = self.class_fields.get(current, {})
+            if attribute in fields:
+                if current == class_name:
+                    expression = f"{path}->{attribute}"
+                else:
+                    expression = f"{path}.{attribute}"
+                return fields[attribute], expression
+
+            parents = self.class_hierarchy.get(current, [])
+            if not parents:
+                break
+            if len(parents) > 1:
+                raise RuntimeError(
+                    f"multiple inheritance for class '{class_name}' is not supported"
+                )
+            path = f"{path}->base"
+            current = self.strip_borrow_type(parents[0])
+
+        return None, None

@@ -217,17 +217,18 @@ class StatementsMixin:
         else:
             info = self.get_variable_info(object_name)
             class_name = self.strip_borrow_type(info.get("py_type", "")) if info else None
-            object_expr = object_name
+            _, object_expr = self.resolve_object_path(object_name)
             if info:
                 self.assert_can_mutate(object_name)
 
         value_expr = self.generate_expression(value_ast)
-        field_type = None
-        if class_name and class_name in self.class_fields:
-            field_type = self.class_fields[class_name].get(attribute)
+        field_type, field_lvalue = self.resolve_class_field(
+            class_name, object_expr, attribute
+        ) if class_name else (None, None)
+        field_lvalue = field_lvalue or f"{object_expr}->{attribute}"
 
         if not field_type:
-            self.add_line(f"{object_expr}->{attribute} = {value_expr};")
+            self.add_line(f"{field_lvalue} = {value_expr};")
             return
 
         memory_kind = self.memory_kind_for_type(field_type)
@@ -240,8 +241,8 @@ class StatementsMixin:
             self.add_line(f"{c_type} {temp} = {value_expr};")
             if ownership == "borrowed":
                 self.add_line(f"ocean_retain({temp});")
-            self.add_line(f"ocean_release({object_expr}->{attribute});")
-            self.add_line(f"{object_expr}->{attribute} = {temp};")
+            self.add_line(f"ocean_release({field_lvalue});")
+            self.add_line(f"{field_lvalue} = {temp};")
             self.consume_owned_expression(value_expr, ownership)
         elif memory_kind == self.MEMORY_STRING:
             temp = f"ocean_field_string_{self.temp_var_counter}"
@@ -250,11 +251,11 @@ class StatementsMixin:
                 self.add_line(f"char* {temp} = ocean_strdup({value_expr});")
             else:
                 self.add_line(f"char* {temp} = {value_expr};")
-            self.add_line(f"free({object_expr}->{attribute});")
-            self.add_line(f"{object_expr}->{attribute} = {temp};")
+            self.add_line(f"free({field_lvalue});")
+            self.add_line(f"{field_lvalue} = {temp};")
             self.consume_owned_expression(value_expr, ownership)
         else:
-            self.add_line(f"{object_expr}->{attribute} = {value_expr};")
+            self.add_line(f"{field_lvalue} = {value_expr};")
 
     def generate_assignment(self, node: Dict):
         """Generate assignment with ARC/string ownership and borrow checks."""

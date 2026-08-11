@@ -341,7 +341,12 @@ class ExpressionsMixin:
         if obj_name != "self" and "." not in obj_name:
             self.assert_can_read(obj_name)
 
-        _, object_expression = self.resolve_object_path(obj_name)
+        object_type, object_expression = self.resolve_object_path(obj_name)
+        _, field_expression = self.resolve_class_field(
+            object_type, object_expression, attr_name
+        ) if object_type else (None, None)
+        if field_expression:
+            return field_expression
         if object_expression != obj_name or obj_name == "self":
             return f"{object_expression}->{attr_name}"
 
