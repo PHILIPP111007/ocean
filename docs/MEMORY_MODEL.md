@@ -48,8 +48,9 @@ Conceptually:
 ocean_list_int* borrowed = owner;
 ```
 
-No retain/release is emitted. The compiler prevents the owner from being invalidated while the
-borrow is alive.
+No retain/release is emitted. The validator tracks borrow state through straight-line code and
+conservatively merges states across branches and loops, preventing the owner from being invalidated
+while the borrow is alive.
 
 ## Return ABI
 

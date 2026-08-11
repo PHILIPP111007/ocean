@@ -21,9 +21,9 @@ class OwnershipMixin:
     * ``&mut T``: exclusive lexical mutable borrow, no retain/release;
     * raw C pointers: outside automatic ownership and therefore unsafe.
 
-    The borrow checker is deliberately lexical in v1.  It is conservative and
-    can later be replaced by a non-lexical lifetime/data-flow pass without
-    changing the generated runtime ABI.
+    The backend's runtime lowering remains lexical in v1.  The JSON validator
+    performs the conservative intra-function data-flow checks before lowering;
+    both layers share the same ownership metadata and generated ABI.
     """
 
     MEMORY_VALUE = "value"

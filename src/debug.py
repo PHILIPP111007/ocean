@@ -1,4 +1,5 @@
 import re
+from copy import deepcopy
 from typing import Dict, List, Optional
 
 from src.modules.constants import DATA_TYPES
@@ -371,6 +372,9 @@ class JSONValidator:
             self.validate_function_return_type(scope, scope_idx)
             # Проверка всех путей возврата
             self.validate_return_paths(scope, scope_idx)
+            # Ownership/borrow data-flow pass.  The legacy graph checks above
+            # remain for compatibility; this pass tracks lifetimes explicitly.
+            self.validate_lifetimes(scope, scope_idx)
 
         # Проверка неиспользуемых параметров для всех типов функций/методов
         if scope_type in ["function", "constructor", "class_method"]:
@@ -489,6 +493,386 @@ class JSONValidator:
             return any(self._contains_unsafe_ffi(child) for child in value)
         return False
 
+    # ------------------------------------------------------------------
+    # Ownership / lifetime data-flow
+    # ------------------------------------------------------------------
+
+    def _lifetime_state(self, py_type: str) -> Dict:
+        return {
+            "type": py_type or "",
+            "status": "active",
+            "borrow_source": None,
+            "borrow_mutable": False,
+            "shared_borrows": set(),
+            "mutable_borrow": None,
+        }
+
+    def _lifetime_is_dead(self, state: Optional[Dict]) -> bool:
+        return bool(state and state.get("status") in {"dead", "moved", "maybe_dead"})
+
+    def _lifetime_is_unique(self, py_type: str) -> bool:
+        value = (py_type or "").strip()
+        if value.startswith("&mut "):
+            value = value[5:].strip()
+        elif value.startswith("&"):
+            value = value[1:].strip()
+        return value.startswith(("array[", "tensor["))
+
+    def _lifetime_variable_names(self, value) -> set[str]:
+        """Collect variable references from expression ASTs only."""
+        names: set[str] = set()
+        if isinstance(value, list):
+            for item in value:
+                names.update(self._lifetime_variable_names(item))
+            return names
+        if not isinstance(value, dict):
+            return names
+
+        ast_type = value.get("type")
+        if ast_type == "variable":
+            name = value.get("name") or value.get("value")
+            if isinstance(name, str):
+                names.add(name)
+            return names
+        if ast_type in {"literal", "empty", "unknown"}:
+            return names
+
+        if ast_type in {"attribute_access", "complex_attribute_access", "method_call"}:
+            obj = value.get("object")
+            if isinstance(obj, str):
+                names.add(obj)
+
+        for key, child in value.items():
+            if key in {
+                "type", "name", "value", "attribute", "function", "method",
+                "operator", "operator_symbol", "data_type", "original",
+            }:
+                continue
+            names.update(self._lifetime_variable_names(child))
+        return names
+
+    def _lifetime_node_reads(self, node: Dict) -> set[str]:
+        names: set[str] = set()
+        for dependency in node.get("dependencies", []) or []:
+            if isinstance(dependency, str) and re.match(r"^[A-Za-z_]\w*$", dependency):
+                names.add(dependency)
+
+        for key in (
+            "expression_ast", "condition", "condition_ast", "iterable",
+            "arguments", "argument", "value", "index", "indices",
+        ):
+            names.update(self._lifetime_variable_names(node.get(key)))
+
+        obj = node.get("object")
+        if isinstance(obj, str) and re.match(r"^[A-Za-z_]\w*$", obj):
+            names.add(obj)
+        return names
+
+    def _lifetime_error(self, message: str, scope_idx: int, node_idx: int) -> None:
+        self.add_error(message, scope_idx, node_idx)
+
+    def _lifetime_check_reads(
+        self, names: set[str], env: Dict[str, Dict], scope_idx: int, node_idx: int
+    ) -> None:
+        for name in sorted(names):
+            state = env.get(name)
+            if not state:
+                continue
+            if state.get("status") == "dead":
+                self._lifetime_error(
+                    f"use of deleted value '{name}'", scope_idx, node_idx
+                )
+            elif state.get("status") == "moved":
+                self._lifetime_error(
+                    f"use of moved value '{name}'", scope_idx, node_idx
+                )
+            elif state.get("status") == "maybe_dead":
+                self._lifetime_error(
+                    f"value '{name}' may be deleted or moved on another control-flow path",
+                    scope_idx,
+                    node_idx,
+                )
+            elif state.get("mutable_borrow") and state.get("borrow_source") is None:
+                self._lifetime_error(
+                    f"cannot read owner '{name}' while a mutable borrow is active",
+                    scope_idx,
+                    node_idx,
+                )
+
+    def _lifetime_check_mutation(
+        self, name: str, env: Dict[str, Dict], scope_idx: int, node_idx: int
+    ) -> None:
+        state = env.get(name)
+        if not state:
+            return
+        if self._lifetime_is_dead(state):
+            self._lifetime_check_reads({name}, env, scope_idx, node_idx)
+            return
+        if state.get("borrow_source") and not state.get("borrow_mutable"):
+            self._lifetime_error(
+                f"cannot mutate through immutable borrow '{name}'", scope_idx, node_idx
+            )
+        elif state.get("borrow_source"):
+            return
+        elif state.get("shared_borrows") or state.get("mutable_borrow"):
+            self._lifetime_error(
+                f"cannot mutate '{name}' while it is borrowed", scope_idx, node_idx
+            )
+
+    def _lifetime_release_borrow(self, name: str, env: Dict[str, Dict]) -> None:
+        state = env.get(name)
+        if not state or not state.get("borrow_source"):
+            return
+        source = env.get(state["borrow_source"])
+        if source:
+            if state.get("borrow_mutable"):
+                if source.get("mutable_borrow") == name:
+                    source["mutable_borrow"] = None
+            else:
+                source.setdefault("shared_borrows", set()).discard(name)
+
+    def _lifetime_register_borrow(
+        self,
+        target: str,
+        source_name: str,
+        mutable: bool,
+        env: Dict[str, Dict],
+        scope_idx: int,
+        node_idx: int,
+    ) -> None:
+        source = env.get(source_name)
+        if not source or self._lifetime_is_dead(source):
+            self._lifetime_error(
+                f"cannot borrow dead value '{source_name}'", scope_idx, node_idx
+            )
+            return
+        if source.get("borrow_source"):
+            self._lifetime_error(
+                f"reborrowing '{source_name}' is not allowed", scope_idx, node_idx
+            )
+            return
+        if mutable and (source.get("shared_borrows") or source.get("mutable_borrow")):
+            self._lifetime_error(
+                f"cannot mutably borrow '{source_name}': another borrow is active",
+                scope_idx,
+                node_idx,
+            )
+            return
+        if not mutable and source.get("mutable_borrow"):
+            self._lifetime_error(
+                f"cannot immutably borrow '{source_name}': mutable borrow is active",
+                scope_idx,
+                node_idx,
+            )
+            return
+
+        borrow = env[target]
+        borrow["borrow_source"] = source_name
+        borrow["borrow_mutable"] = mutable
+        if mutable:
+            source["mutable_borrow"] = target
+        else:
+            source.setdefault("shared_borrows", set()).add(target)
+
+    def _lifetime_call_escape_check(
+        self, node: Dict, env: Dict[str, Dict], scope_idx: int, node_idx: int
+    ) -> None:
+        function_name = node.get("function", "")
+        arguments = node.get("arguments", []) or []
+        parameter_types = []
+        for candidate in self.all_scopes:
+            if candidate.get("type") == "function" and candidate.get("function_name") == function_name:
+                parameter_types = [p.get("type", "") for p in candidate.get("parameters", [])]
+                break
+
+        for index, argument in enumerate(arguments):
+            argument_names = self._lifetime_variable_names(argument)
+            for name in argument_names:
+                state = env.get(name)
+                if not state or not state.get("borrow_source"):
+                    continue
+                expected = parameter_types[index] if index < len(parameter_types) else ""
+                if node.get("node") == "c_call" or not expected.startswith("&"):
+                    self._lifetime_error(
+                        f"borrow '{name}' escapes through call '{function_name}'",
+                        scope_idx,
+                        node_idx,
+                    )
+
+    def _lifetime_analyze_node(
+        self, node: Dict, env: Dict[str, Dict], scope_idx: int, node_idx: int
+    ) -> None:
+        node_type = node.get("node", "")
+        reads = self._lifetime_node_reads(node)
+
+        if node_type == "declaration":
+            target = node.get("var_name", "")
+            var_type = node.get("var_type", "")
+            self._lifetime_check_reads(reads, env, scope_idx, node_idx)
+            env[target] = self._lifetime_state(var_type)
+            borrow_ops = [op for op in node.get("operations", []) if op.get("type", "").startswith("BORROW_")]
+            if borrow_ops:
+                operation = borrow_ops[0]
+                self._lifetime_register_borrow(
+                    target,
+                    operation.get("source", ""),
+                    operation.get("type") == "BORROW_MUT",
+                    env,
+                    scope_idx,
+                    node_idx,
+                )
+            elif self._lifetime_is_unique(var_type):
+                source_ast = node.get("expression_ast") or {}
+                source = source_ast.get("name") or source_ast.get("value") if source_ast.get("type") == "variable" else None
+                if source and source != target and source in env:
+                    self._lifetime_check_mutation(source, env, scope_idx, node_idx)
+                    env[source]["status"] = "moved"
+            if "&" in var_type and not var_type.strip().startswith("&"):
+                self._lifetime_error(
+                    f"borrow cannot be stored inside '{var_type}'", scope_idx, node_idx
+                )
+            return
+
+        if node_type in {"assignment", "augmented_assignment"}:
+            self._lifetime_check_reads(reads, env, scope_idx, node_idx)
+            target = (node.get("symbols") or [""])[0]
+            self._lifetime_check_mutation(target, env, scope_idx, node_idx)
+            state = env.get(target)
+            if state and self._lifetime_is_unique(state.get("type", "")):
+                ast = node.get("expression_ast") or {}
+                source = (ast.get("name") or ast.get("value")) if ast.get("type") == "variable" else None
+                if source and source != target and source in env:
+                    env[source]["status"] = "moved"
+                    state["status"] = "active"
+            return
+
+        if node_type == "delete":
+            for target in node.get("symbols", []):
+                state = env.get(target)
+                if not state:
+                    continue
+                if state.get("borrow_source"):
+                    self._lifetime_release_borrow(target, env)
+                    state["status"] = "dead"
+                elif state.get("shared_borrows") or state.get("mutable_borrow"):
+                    self._lifetime_error(
+                        f"cannot delete '{target}' while it is borrowed", scope_idx, node_idx
+                    )
+                else:
+                    state["status"] = "dead"
+            return
+
+        if node_type == "return":
+            self._lifetime_check_reads(reads, env, scope_idx, node_idx)
+            return_ast = (node.get("operations") or [{}])[0].get("value") or {}
+            return_type = self._function_scope_return_type(scope_idx)
+            if return_type.startswith("&") or any(
+                env.get(name, {}).get("borrow_source") for name in self._lifetime_variable_names(return_ast)
+            ):
+                self._lifetime_error(
+                    "borrow cannot escape through a function return", scope_idx, node_idx
+                )
+            for name in self._lifetime_variable_names(return_ast):
+                state = env.get(name)
+                if state and self._lifetime_is_unique(state.get("type", "")) and not state.get("borrow_source"):
+                    state["status"] = "moved"
+            return
+
+        if node_type in {
+            "index_assignment", "nested_index_assignment", "slice_assignment",
+            "attribute_assignment",
+        }:
+            self._lifetime_check_reads(reads, env, scope_idx, node_idx)
+            target = node.get("variable") or node.get("object") or ""
+            if isinstance(target, str):
+                self._lifetime_check_mutation(target, env, scope_idx, node_idx)
+            return
+
+        if node_type == "method_call":
+            self._lifetime_check_reads(reads, env, scope_idx, node_idx)
+            if node.get("method") in {"append", "extend", "insert", "remove", "pop", "clear", "sort", "reverse"}:
+                self._lifetime_check_mutation(node.get("object", ""), env, scope_idx, node_idx)
+            return
+
+        if node_type in {"function_call", "function_call_assignment", "c_call", "builtin_function_call"}:
+            self._lifetime_check_reads(reads, env, scope_idx, node_idx)
+            if node_type != "builtin_function_call":
+                self._lifetime_call_escape_check(node, env, scope_idx, node_idx)
+            return
+
+        self._lifetime_check_reads(reads, env, scope_idx, node_idx)
+
+    def _function_scope_return_type(self, scope_idx: int) -> str:
+        if 0 <= scope_idx < len(self.all_scopes):
+            return self.all_scopes[scope_idx].get("return_type", "None")
+        return "None"
+
+    def _lifetime_cleanup_block(self, env: Dict[str, Dict], outer_names: set[str]) -> None:
+        for name in list(env):
+            if name not in outer_names:
+                self._lifetime_release_borrow(name, env)
+                del env[name]
+
+    def _lifetime_merge(self, base: Dict[str, Dict], branches: list[Dict[str, Dict]]) -> Dict[str, Dict]:
+        merged = deepcopy(base)
+        for name, state in merged.items():
+            statuses = [branch.get(name, state).get("status", "active") for branch in branches]
+            if all(status == statuses[0] for status in statuses):
+                state["status"] = statuses[0]
+            elif any(status in {"dead", "moved", "maybe_dead"} for status in statuses):
+                state["status"] = "maybe_dead"
+            state["shared_borrows"] = set()
+            state["mutable_borrow"] = None
+        return merged
+
+    def _lifetime_analyze_sequence(
+        self,
+        nodes: list[Dict],
+        env: Dict[str, Dict],
+        scope_idx: int,
+        *,
+        block: bool = False,
+    ) -> None:
+        outer_names = set(env)
+        for node_idx, node in enumerate(nodes):
+            node_type = node.get("node", "")
+            if node_type == "if_statement":
+                self._lifetime_check_reads(self._lifetime_node_reads(node), env, scope_idx, node_idx)
+                branch_envs = []
+                for body in [node.get("body", [])] + [item.get("body", []) for item in node.get("elif_blocks", [])]:
+                    branch = deepcopy(env)
+                    self._lifetime_analyze_sequence(body, branch, scope_idx, block=True)
+                    branch_envs.append(branch)
+                else_block = node.get("else_block")
+                if else_block is not None:
+                    branch = deepcopy(env)
+                    self._lifetime_analyze_sequence(else_block.get("body", []), branch, scope_idx, block=True)
+                    branch_envs.append(branch)
+                else:
+                    branch_envs.append(deepcopy(env))
+                env.update(self._lifetime_merge(env, branch_envs))
+            elif node_type in {"while_loop", "for_loop"}:
+                self._lifetime_check_reads(self._lifetime_node_reads(node), env, scope_idx, node_idx)
+                body = deepcopy(env)
+                if node_type == "for_loop":
+                    loop_var = node.get("loop_variable", "")
+                    if loop_var:
+                        body[loop_var] = self._lifetime_state("int")
+                self._lifetime_analyze_sequence(node.get("body", []), body, scope_idx, block=True)
+                env.update(self._lifetime_merge(env, [env, body]))
+            else:
+                self._lifetime_analyze_node(node, env, scope_idx, node_idx)
+        if block:
+            self._lifetime_cleanup_block(env, outer_names)
+
+    def validate_lifetimes(self, scope: Dict, scope_idx: int) -> None:
+        env: Dict[str, Dict] = {}
+        for parameter in scope.get("parameters", []) or []:
+            name = parameter.get("name", "")
+            if name:
+                env[name] = self._lifetime_state(parameter.get("type", ""))
+        self._lifetime_analyze_sequence(scope.get("graph", []), env, scope_idx)
+
     def check_duplicate_declarations_in_scope(self, scope: Dict, scope_idx: int):
         """Проверяет дублирование переменных в local_variables"""
         local_vars = scope.get("local_variables", [])
@@ -567,7 +951,11 @@ class JSONValidator:
         level = scope.get("level", 0)
 
         # Отслеживаем состояние переменных в процессе валидации
-        variable_states = {}  # {var_name: "active"/"deleted"/"pointer_deleted"}
+        variable_states = {
+            parameter.get("name"): "active"
+            for parameter in scope.get("parameters", []) or []
+            if parameter.get("name")
+        }  # {var_name: "active"/"deleted"/"pointer_deleted"}
 
         for node_idx, node in enumerate(graph):
             node_type = node.get("node", "unknown")

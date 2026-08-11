@@ -49,7 +49,7 @@ typedef struct ocean_object_header {
 Strings are currently uniquely-owned C buffers: aliases are duplicated with `ocean_strdup()`.
 This deliberately avoids mixing static string literals with owned heap strings.
 
-### 3. Lexical hybrid borrow checker v1
+### 3. Hybrid borrow checker v1
 
 The backend understands these type spellings in the AST:
 
@@ -58,13 +58,16 @@ The backend understands these type spellings in the AST:
 &mut T
 ```
 
-The first implementation is lexical and zero-runtime-overhead:
+The C backend enforces the rules lexically and with zero runtime overhead. The JSON validator adds a
+conservative intra-function data-flow pass, including branch/loop state merging:
 
 - `&T` allows multiple immutable borrows;
 - `&mut T` is exclusive;
 - an owner cannot be mutated or deleted while borrowed;
 - while `&mut T` exists, the owner cannot be accessed directly;
 - a borrow ends at lexical scope exit;
+- deletion/move states are checked after control-flow joins;
+- borrows cannot escape through returns, unsafe C calls, or incompatible function parameters;
 - borrow variables do not retain/release the object;
 - rebinding a borrow is rejected in v1;
 - reborrowing a borrow is rejected in v1.
@@ -146,7 +149,7 @@ Current deliberate boundaries:
 - managed global variables are rejected in v1 until module initialization/destruction is formalized;
 - heterogeneous tuples are rejected in ownership v1;
 - multiple class inheritance is rejected in safe v1;
-- borrow lifetimes are lexical, not non-lexical/data-flow inferred;
+- interprocedural lifetime parameters and proven non-lexical lifetimes are not implemented yet;
 - raw C pointers are not automatically freed;
 - scalar/value borrows are not implemented yet;
 - full integer-overflow semantics, `Shared[T]`, `Send`/`Sync`, arenas and owned `array`/`tensor` are future work.
