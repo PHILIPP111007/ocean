@@ -7,11 +7,21 @@ from src.modules.logger import logger
 
 
 class JSONValidator:
+    """Validate the parser's typed graph before C code generation.
+
+    The validator is intentionally split into small phases: symbol collection,
+    structural/type checks, ownership data-flow, and diagnostics.  The parser
+    emits a transitional AST, so every phase must tolerate missing optional
+    fields and must never rely on a second, implicit parser pass.
+    """
+
     def __init__(self):
         self.errors = []
         self.warnings = []
         self.scope_symbols = {}  # {scope_level: {var_name: var_info}}
         self.all_scopes = []  # Сохраняем все scopes для поиска родительских
+        self.scopes_info = []  # Compatibility alias used by older helpers
+        self._active_scope = None
         self.functions = {}  # {func_name: func_info}
         self.source_map = {}  # Сопоставление узлов с исходными строками
         self.builtin_functions = {
@@ -33,17 +43,20 @@ class JSONValidator:
         self.warnings = []
         self.scope_symbols = {}
         self.functions = {}
-        self.all_scopes = json_data
+        self.all_scopes = json_data if isinstance(json_data, list) else []
+        self.scopes_info = self.all_scopes
+        self._active_scope = None
         self.source_map = {}
         self.variable_history = {}  # Оставляем, но не используем
         self.variable_states = {}  # Оставляем, но не используем
 
-        # Собираем информацию о всех узлах и их строках
-        self.build_source_map(json_data)
-
         if not isinstance(json_data, list):
             self.add_error("JSON должен быть списком scope'ов")
             return self.get_report()
+
+        # Собираем информацию о всех узлах и их строках only after the input
+        # shape has been checked.
+        self.build_source_map(json_data)
 
         # Собираем информацию о всех scope'ах и символах
         self.collect_symbols(json_data)
@@ -53,6 +66,9 @@ class JSONValidator:
 
         # Проверяем каждый scope
         for scope_idx, scope in enumerate(json_data):
+            if not isinstance(scope, dict):
+                self.add_error(f"Scope {scope_idx} должен быть объектом")
+                continue
             self.validate_scope(scope, scope_idx, json_data)
 
         return self.get_report()
@@ -60,13 +76,17 @@ class JSONValidator:
     def collect_symbols(self, json_data: List[Dict]):
         """Собирает информацию о всех символах в системе"""
         for scope_idx, scope in enumerate(json_data):
+            if not isinstance(scope, dict):
+                continue
             level = scope.get("level", 0)
 
-            if "symbol_table" in scope and scope["symbol_table"]:
+            if isinstance(scope.get("symbol_table"), dict) and scope["symbol_table"]:
                 if level not in self.scope_symbols:
                     self.scope_symbols[level] = {}
 
                 for symbol_name, symbol_info in scope["symbol_table"].items():
+                    if not isinstance(symbol_info, dict):
+                        continue
                     key = symbol_info.get("key")
 
                     # Сохраняем функции отдельно
@@ -103,10 +123,16 @@ class JSONValidator:
         global_line_counter = 1
 
         for scope_idx, scope in enumerate(json_data):
+            if not isinstance(scope, dict):
+                continue
             level = scope.get("level", 0)
             graph = scope.get("graph", [])
+            if not isinstance(graph, list):
+                continue
 
             for node_idx, node in enumerate(graph):
+                if not isinstance(node, dict):
+                    continue
                 node_id = f"{scope_idx}.{node_idx}"
                 content = node.get("content", "")
 
@@ -342,6 +368,7 @@ class JSONValidator:
 
     def validate_scope(self, scope: Dict, scope_idx: int, all_scopes: List[Dict]):
         """Валидирует отдельный scope с учетом всех новых проверок"""
+        self._active_scope = scope
         level = scope.get("level", 0)
         scope_type = scope.get("type", "unknown")
 
@@ -414,10 +441,8 @@ class JSONValidator:
                 self.validate_unsafe_boundary(node, node_idx, scope_idx)
                 self.validate_c_function_calls(node, node_idx, scope_idx, level)
 
-                # 4.5 ПРОВЕРКА ТИПОВ В УЗЛАХ
-                self.validate_node_types(node, node_idx, scope_idx, level)
-
-                # 4.6 ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА ДЕЛЕНИЯ НА НОЛЬ
+                # 4.5 Дополнительная проверка деления на ноль.  Structural
+                # and expression type checks already run once in validate_graph.
                 self.check_division_by_zero(node, node_idx, scope_idx, level)
 
                 # 4.7 ПРОВЕРКА ОПЕРАЦИЙ С КОРТЕЖАМИ (неизменяемость)
@@ -436,8 +461,9 @@ class JSONValidator:
                                 node_idx,
                             )
 
-                # 4.8 ПРОВЕРКА НЕОПРЕДЕЛЕННЫХ МЕТОДОВ (важно для ООП)
-                self.check_undefined_methods(scope, scope_idx)
+            # Method lookup is a scope-level check; running it once avoids
+            # repeating the same warning for every unrelated graph node.
+            self.check_undefined_methods(scope, scope_idx)
 
             # 5. ПОСТ-ПРОВЕРКИ ПОСЛЕ АНАЛИЗА ГРАФА
 
@@ -487,7 +513,7 @@ class JSONValidator:
                 node_idx,
             )
 
-        if self._contains_unsafe_ffi(node) and not node.get("unsafe", False):
+        if node_type != "c_call" and self._contains_unsafe_ffi(node) and not node.get("unsafe", False):
             self.add_error(
                 "C FFI expressions require an explicit unsafe: block",
                 scope_idx,
@@ -955,7 +981,12 @@ class JSONValidator:
         if symbol_name == "self":
             return
 
-        if var_type not in DATA_TYPES and not var_type.startswith("*"):
+        type_info = symbol_info.get("type_info") or {}
+        known_generic = (
+            type_info.get("kind") in {"generic", "borrow", "mut_borrow", "raw_pointer", "optional"}
+            or var_type.startswith(("list[", "dict[", "tuple[", "array[", "tensor[", "shared["))
+        )
+        if var_type not in DATA_TYPES and not var_type.startswith("*") and not known_generic:
             # Проверяем, не является ли это пользовательским классом
             if var_type not in self.classes:
                 self.add_warning(
@@ -1339,61 +1370,25 @@ class JSONValidator:
     def validate_declaration_types(
         self, node: Dict, node_idx: int, scope_idx: int, level: int
     ):
-        """Валидирует типы при объявлении"""
-        content = node.get("content", "")
+        """Проверяет тип объявления по типизированному AST."""
+        var_type = node.get("var_type", "")
+        expression_ast = node.get("expression_ast")
 
-        if not content:
+        if not var_type or not expression_ast:
             return
 
-        # Парсим строку объявления
-        patterns = [
-            r"var\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)",
-            r"const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)",
-        ]
+        value_type = self.get_type_from_ast(expression_ast, scope_idx, node_idx, level)
+        if value_type == "unknown":
+            return
 
-        for pattern in patterns:
-            match = re.match(pattern, content)
-            if match:
-                var_name, var_type, value = match.groups()
+        if not self.are_types_compatible(var_type, value_type):
+            self.add_error(
+                f"нельзя присвоить значение типа '{value_type}' переменной типа '{var_type}'",
+                scope_idx,
+                node_idx,
+            )
 
-                # Для выражений с операциями используем более сложную логику
-                if any(op in value for op in ["+", "-", "*", "/", "(", ")"]):
-                    # Определяем тип выражения
-                    if var_type == "int":
-                        # Проверяем, что это числовое выражение
-                        if '"' in value or "'" in value:
-                            self.add_error(
-                                f"нельзя присвоить строку переменной типа int",
-                                scope_idx,
-                                node_idx,
-                            )
-                        elif "True" in value or "False" in value:
-                            self.add_error(
-                                f"нельзя присвоить bool переменной типа int",
-                                scope_idx,
-                                node_idx,
-                            )
-                    elif var_type == "str":
-                        # Проверяем, что выражение возвращает строку
-                        if value.isdigit():
-                            self.add_warning(
-                                f"присвоение числа строковой переменной",
-                                scope_idx,
-                                node_idx,
-                            )
-                else:
-                    # Простое значение
-                    value_type = self.guess_type_from_value(value)
-
-                    # Проверяем совместимость типов
-                    if not self.are_types_compatible(var_type, value_type):
-                        self.add_warning(
-                            f"инициализация переменной '{var_name}' типа '{var_type}' "
-                            f"значением типа '{value_type}' может вызвать проблемы",
-                            scope_idx,
-                            node_idx,
-                        )
-                break
+        self.validate_ast_types(expression_ast, node_idx, scope_idx, level)
 
     def validate_return_types(
         self, node: Dict, node_idx: int, scope_idx: int, level: int
@@ -1571,10 +1566,13 @@ class JSONValidator:
                 # Проверяем выражение инициализации
                 self.validate_expression(value, scope_idx, node_idx, level)
 
-                # Проверяем совместимость типов при инициализации
-                self.validate_type_compatibility(
-                    var_name, value, scope_idx, node_idx, level
-                )
+                # Новые parser nodes carry expression_ast and are validated by
+                # validate_declaration_types.  Keep the text fallback only for
+                # old serialized graphs without an AST.
+                if not node.get("expression_ast"):
+                    self.validate_type_compatibility(
+                        var_name, value, scope_idx, node_idx, level
+                    )
 
     def validate_expression(
         self, expression: str, scope_idx: int, node_idx: int, level: int
@@ -1702,7 +1700,7 @@ class JSONValidator:
                     node_idx,
                 )
 
-    def validate_assignment(
+    def _legacy_validate_assignment(
         self, node: Dict, node_idx: int, scope_idx: int, symbol_table: Dict, level: int
     ):
         """Валидирует присваивание"""
@@ -2030,7 +2028,7 @@ class JSONValidator:
 
             for dep in dependencies:
                 if not self.find_symbol_in_scope(dep, level):
-                    self.add_warning(
+                    self.add_error(
                         f"переменная '{dep}' в аргументе функции '{func_name}' не объявлена",
                         scope_idx,
                         node_idx,
@@ -2147,7 +2145,7 @@ class JSONValidator:
         traverse(ast)
         return dependencies
 
-    def validate_builtin_function_call(
+    def _legacy_validate_builtin_function_call(
         self, node: Dict, node_idx: int, scope_idx: int, symbol_table: Dict, level: int
     ):
         """Валидирует вызов встроенной функции"""
@@ -2704,6 +2702,32 @@ class JSONValidator:
                 if var_info:
                     return var_info.get("type", "unknown")
 
+        elif ast_type in {"attribute_access", "complex_attribute_access"}:
+            attribute = ast.get("attribute", "")
+            if attribute in {"length", "size", "ndim"}:
+                return "int"
+            if attribute == "shape" and ast_type == "complex_attribute_access":
+                return "int"
+
+        elif ast_type == "list_literal":
+            return "list"
+
+        elif ast_type in {"index_access", "tensor_index_access"}:
+            variable = ast.get("variable")
+            if variable:
+                var_info = self.get_symbol_info(variable, level)
+                if var_info:
+                    var_type = var_info.get("type", "")
+                    match = re.search(r"\[(.+)\]", var_type)
+                    if match:
+                        return match.group(1)
+                    if ast_type == "index_access" and var_type == "str":
+                        return "str"
+
+        elif ast_type == "method_call":
+            if ast.get("object") == "tensor" and ast.get("method") == "zeros":
+                return "tensor"
+
         elif ast_type == "binary_operation":
             # Определяем тип результата бинарной операции
             operator = ast.get("operator_symbol", "")
@@ -3149,75 +3173,57 @@ class JSONValidator:
         return True
 
     def check_unused_variables(self, scope: Dict, scope_idx: int):
-        """Проверяет объявленные, но неиспользуемые переменные"""
+        """Warn about locals unused across the complete nested graph."""
         local_vars = scope.get("local_variables", [])
         graph = scope.get("graph", [])
-        level = scope.get("level", 0)
 
         if not local_vars:
             return
 
         used_vars = set()
 
-        # Собираем все используемые переменные из графа
-        for node in graph:
+        def visit(node: Dict) -> None:
+            if not isinstance(node, dict):
+                return
             node_type = node.get("node", "")
 
-            # Пропускаем узлы declaration, так как они объявляют переменные
-            if node_type == "declaration":
-                continue
+            for dependency in node.get("dependencies", []) or []:
+                if isinstance(dependency, str) and re.match(r"^[A-Za-z_]\w*$", dependency):
+                    used_vars.add(dependency)
 
-            # Проверяем зависимости
-            if "dependencies" in node:
-                for dep in node["dependencies"]:
-                    if (
-                        isinstance(dep, str)
-                        and dep.isalpha()
-                        and dep not in ["True", "False", "None", "NULL"]
-                    ):
-                        used_vars.add(dep)
-
-            # Проверяем символы в узлах
-            if "symbols" in node:
-                for symbol in node["symbols"]:
-                    if isinstance(symbol, str) and symbol not in [
-                        "True",
-                        "False",
-                        "None",
-                        "NULL",
-                    ]:
+            # An assignment target is also a meaningful use for the current
+            # language model (compound assignments and indexed writes rely on
+            # this), but a declaration only introduces its target.
+            if node_type != "declaration":
+                for symbol in node.get("symbols", []) or []:
+                    if isinstance(symbol, str) and re.match(r"^[A-Za-z_]\w*$", symbol):
                         used_vars.add(symbol)
 
-            # Проверяем аргументы в вызовах функций
-            if "arguments" in node:
-                for arg in node["arguments"]:
-                    if (
-                        isinstance(arg, str)
-                        and arg.isalpha()
-                        and arg not in ["True", "False", "None", "NULL"]
-                    ):
-                        used_vars.add(arg)
+            for key, value in node.items():
+                if key in {"node", "content", "dependencies", "symbols", "source_line"}:
+                    continue
+                if isinstance(value, dict):
+                    if value.get("type"):
+                        self._collect_vars_from_ast(value, used_vars)
+                    elif key in {"body", "else_block"}:
+                        if isinstance(value.get("body"), list):
+                            for child in value["body"]:
+                                visit(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        if isinstance(child, dict):
+                            if child.get("node"):
+                                visit(child)
+                            elif child.get("type"):
+                                self._collect_vars_from_ast(child, used_vars)
 
-            # Проверяем условия в if/while (через AST)
-            if node_type in ["if_statement", "while_loop"]:
-                condition_ast = node.get("condition_ast")
-                if condition_ast:
-                    self._collect_vars_from_ast(condition_ast, used_vars)
-
-            # Проверяем возвращаемые значения
-            if node_type == "return":
-                # Проверяем expression_ast если есть
-                if "expression_ast" in node:
-                    expression_ast = node["expression_ast"]
-                    self._collect_vars_from_ast(expression_ast, used_vars)
-                # Или проверяем зависимости
-                elif "dependencies" in node:
-                    for dep in node["dependencies"]:
-                        if isinstance(dep, str) and dep.isalpha():
-                            used_vars.add(dep)
+        for node in graph:
+            visit(node)
 
         # Находим неиспользуемые переменные
         for var in local_vars:
+            if var == "_":
+                continue
             # Пропускаем параметр 'self' в методах
             if var == "self" and scope.get("type") in ["constructor", "class_method"]:
                 continue
@@ -3229,7 +3235,7 @@ class JSONValidator:
                     None,
                 )
 
-    def _collect_vars_from_ast(self, ast: Dict, used_vars: set):
+    def _legacy_collect_vars_from_ast(self, ast: Dict, used_vars: set):
         """Собирает переменные из AST"""
         if not isinstance(ast, dict):
             return
@@ -3537,6 +3543,15 @@ class JSONValidator:
         if value_type == "None" and target_type == "None":
             return True
 
+        # Container literals and factory methods carry their element type in
+        # the declaration, while the expression AST only knows the container
+        # kind at this stage.
+        generic_containers = ("list[", "dict[", "tuple[", "array[", "tensor[")
+        if target_type.startswith(generic_containers) and value_type in {
+            "list", "dict", "tuple", "array", "tensor"
+        }:
+            return target_type.startswith(f"{value_type}[")
+
         # Ошибка: если функция должна возвращать int, а возвращает str
         if target_type == "int" and value_type == "str":
             return False
@@ -3576,25 +3591,25 @@ class JSONValidator:
         if symbol_name in self.classes:
             return True
 
-        # Проверяем текущий scope
-        if (
-            current_level in self.scope_symbols
-            and symbol_name in self.scope_symbols[current_level]
-        ):
-            return True
+        current_scope = self._active_scope
+        if not current_scope or current_scope.get("level") != current_level:
+            current_scope = next(
+                (scope for scope in reversed(self.all_scopes)
+                 if scope.get("level") == current_level),
+                None,
+            )
 
-        # Находим текущий scope в all_scopes
-        current_scope = None
-        for scope in self.all_scopes:
-            if scope.get("level") == current_level:
-                current_scope = scope
-                break
-
-        if current_scope:
-            # Проверяем родительский scope
+        visited = set()
+        while current_scope is not None and id(current_scope) not in visited:
+            visited.add(id(current_scope))
+            if symbol_name in (current_scope.get("symbol_table") or {}):
+                return True
             parent_level = current_scope.get("parent_scope")
-            if parent_level is not None:
-                return self.find_symbol_in_scope(symbol_name, parent_level)
+            current_scope = next(
+                (scope for scope in reversed(self.all_scopes)
+                 if scope.get("level") == parent_level),
+                None,
+            ) if parent_level is not None else None
 
         return False
 
@@ -3612,17 +3627,26 @@ class JSONValidator:
         if symbol_name in self.classes:
             return self.classes[symbol_name]
 
-        # Сначала проверяем текущий scope
-        if (
-            current_level in self.scope_symbols
-            and symbol_name in self.scope_symbols[current_level]
-        ):
-            return self.scope_symbols[current_level][symbol_name]
+        current_scope = self._active_scope
+        if not current_scope or current_scope.get("level") != current_level:
+            current_scope = next(
+                (scope for scope in reversed(self.all_scopes)
+                 if scope.get("level") == current_level),
+                None,
+            )
 
-        # Если не нашли в текущем scope, ищем во всех scope'ах
-        for level, symbols in self.scope_symbols.items():
-            if symbol_name in symbols:
-                return symbols[symbol_name]
+        visited = set()
+        while current_scope is not None and id(current_scope) not in visited:
+            visited.add(id(current_scope))
+            symbol_table = current_scope.get("symbol_table") or {}
+            if symbol_name in symbol_table:
+                return symbol_table[symbol_name]
+            parent_level = current_scope.get("parent_scope")
+            current_scope = next(
+                (scope for scope in reversed(self.all_scopes)
+                 if scope.get("level") == parent_level),
+                None,
+            ) if parent_level is not None else None
 
         return None
 
@@ -3959,27 +3983,39 @@ class JSONValidator:
         used_vars = set()
         graph = scope.get("graph", [])
 
+        def visit(node: Dict) -> None:
+            if not isinstance(node, dict):
+                return
+            for dep in node.get("dependencies", []) or []:
+                if isinstance(dep, str) and re.match(r"^[A-Za-z_]\w*$", dep):
+                    used_vars.add(dep)
+            for symbol in node.get("symbols", []) or []:
+                if isinstance(symbol, str) and re.match(r"^[A-Za-z_]\w*$", symbol):
+                    used_vars.add(symbol)
+            for value in node.values():
+                if isinstance(value, dict):
+                    if value.get("node"):
+                        visit(value)
+                    elif value.get("type"):
+                        self._collect_vars_from_ast(value, used_vars)
+                elif isinstance(value, list):
+                    for child in value:
+                        if isinstance(child, dict):
+                            if child.get("node"):
+                                visit(child)
+                            elif child.get("type"):
+                                self._collect_vars_from_ast(child, used_vars)
+
         for node in graph:
-            # Собираем зависимости
-            if "dependencies" in node:
-                for dep in node["dependencies"]:
-                    if isinstance(dep, str) and dep.isalpha():
-                        used_vars.add(dep)
-
-            # Собираем символы
-            if "symbols" in node:
-                for symbol in node["symbols"]:
-                    if isinstance(symbol, str) and symbol.isalpha():
-                        used_vars.add(symbol)
-
-            # Собираем переменные из AST
-            if "expression_ast" in node:
-                self._collect_vars_from_ast(node["expression_ast"], used_vars)
+            visit(node)
 
         # Проверяем каждый параметр
         for param in parameters:
             param_name = param.get("name")
             if not param_name:
+                continue
+
+            if param_name == "_":
                 continue
 
             # Пропускаем self в методах
@@ -4295,34 +4331,47 @@ class JSONValidator:
     # Вспомогательные методы
 
     def _collect_vars_from_ast(self, ast: Dict, used_vars: set):
-        """Собирает переменные из AST (уже есть, но дополним)"""
+        """Collect variable references from any expression AST variant."""
         if not isinstance(ast, dict):
             return
 
         node_type = ast.get("type")
 
         if node_type == "variable":
-            var_name = ast.get("value")
-            if var_name and var_name.isalpha():
+            var_name = ast.get("value") or ast.get("name")
+            if var_name and re.match(r"^[A-Za-z_]\w*$", var_name):
                 used_vars.add(var_name)
+            return
 
-        elif node_type == "binary_operation":
-            self._collect_vars_from_ast(ast.get("left"), used_vars)
-            self._collect_vars_from_ast(ast.get("right"), used_vars)
+        if node_type == "RANGE_CALL":
+            arguments = ast.get("arguments", {})
+            if isinstance(arguments, dict):
+                for value in arguments.values():
+                    if isinstance(value, str) and re.match(r"^[A-Za-z_]\w*$", value):
+                        used_vars.add(value)
+            return
 
-        elif node_type == "unary_operation":
-            self._collect_vars_from_ast(ast.get("operand"), used_vars)
+        if node_type in {"literal", "unknown", "empty"}:
+            return
 
-        elif node_type == "function_call":
-            for arg in ast.get("arguments", []):
-                self._collect_vars_from_ast(arg, used_vars)
-
-        elif node_type == "method_call":
+        if node_type in {"attribute_access", "complex_attribute_access", "method_call"}:
             obj_name = ast.get("object")
-            if obj_name and obj_name.isalpha():
+            if obj_name and re.match(r"^[A-Za-z_]\w*$", obj_name):
                 used_vars.add(obj_name)
-            for arg in ast.get("arguments", []):
-                self._collect_vars_from_ast(arg, used_vars)
+
+        ignored_keys = {
+            "type", "name", "value", "attribute", "function", "method",
+            "operator", "operator_symbol", "data_type", "original",
+        }
+        for key, child in ast.items():
+            if key in ignored_keys:
+                continue
+            if isinstance(child, dict):
+                self._collect_vars_from_ast(child, used_vars)
+            elif isinstance(child, list):
+                for item in child:
+                    if isinstance(item, dict):
+                        self._collect_vars_from_ast(item, used_vars)
 
     def _get_static_value_from_ast(self, ast: Dict, level: int):
         """Пытается получить статическое значение из AST"""
