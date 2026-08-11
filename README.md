@@ -85,12 +85,13 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 
 pytest -v
-python main.py
+python main.py build
 ```
 
-`python main.py` parses `examples/main.oc`, validates it, generates
-`examples/generated_code.c`, and builds the executable with GCC. For a reproducible baseline
-without optimization flags:
+`python main.py build` parses `examples/main.oc`, validates it, generates package artifacts under
+`build/debug/`, and builds the executable with GCC. Running `python main.py` or the installed
+`ocean` command without arguments only displays help. For a reproducible baseline without
+optimization flags:
 
 ```bash
 python benchmarks/benchmark_main.py --runs 3
@@ -114,8 +115,8 @@ group, `--no-compile` to stop after C generation, or `--run --run-arg VALUE` to 
 Run `python main.py --help` for the complete option list.
 
 This repository also contains an `ocean.toml` package manifest. Use `python main.py build` to use
-the package layout and write artifacts to `build/debug/`; the no-argument command remains available
-as a legacy single-file shortcut.
+the package layout and write artifacts to `build/debug/`. The legacy single-file workflow remains
+available when a source path is passed explicitly, for example `python main.py examples/main.oc`.
 
 ## Packages and CLI
 

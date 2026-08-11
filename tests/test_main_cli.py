@@ -1,6 +1,25 @@
 from pathlib import Path
 
-from main import build_argument_parser, parse_cli_paths
+from main import build_argument_parser, cli, parse_cli_paths
+
+
+def test_empty_cli_prints_help_without_running_pipeline(capsys):
+    assert cli([]) == 0
+
+    output = capsys.readouterr().out
+    assert "usage: ocean" in output
+    assert "Commands: init, check, build, run, test, clean" in output
+
+
+def test_parser_does_not_assign_source_or_output_paths_by_default():
+    args = build_argument_parser().parse_args([])
+
+    assert args.command_or_source is None
+    assert args.source_arg is None
+    assert args.source_override is None
+    assert args.json_output is None
+    assert args.c_output is None
+    assert args.binary_output is None
 
 
 def test_cli_preserves_legacy_default_paths():

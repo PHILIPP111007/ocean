@@ -22,11 +22,12 @@ pytest --verbose
 Run the sample compiler pipeline with:
 
 ```bash
-python main.py
+python main.py build
 ```
 
-This parses `examples/main.oc`, emits `examples/parsed_code.json` and
-`examples/generated_code.c`, then compiles the C output with `gcc`. For generated C, use C11 and
+This parses `examples/main.oc`, emits package artifacts under `build/<profile>/`, then compiles the
+C output with `gcc`. Running `python main.py` with no arguments prints help and performs no build.
+For generated C, use C11 and
 strict diagnostics; add `-pthread` for pthread examples. Sanitizers are recommended during runtime
 testing (`-fsanitize=address,undefined`).
 
@@ -35,7 +36,7 @@ The CLI accepts a custom source path plus `--base-path`, `--json-output`, `--c-o
 use `--no-compile` for generation-only checks and `--run` to execute the compiled binary.
 Package workflows use `python main.py init|check|build|run|test|clean` and configure
 `ocean.toml`; package artifacts are written to `build/<profile>/`. A source path without a command
-continues to use the legacy single-file layout.
+continues to use the legacy single-file layout, while an empty CLI invocation only prints help.
 
 Build the Python distribution with `python -m build` and inspect it with `python -m twine check
 dist/*`. The installed console entry point is `ocean`; package metadata and the entry point live in

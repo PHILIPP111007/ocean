@@ -259,8 +259,12 @@ def main(base_path: str, p_path: str, json_path: str, c_path: str):
 
 def cli(argv: Sequence[str] | None = None) -> int:
     """Entry point used by the installed ``ocean`` console script."""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if not arguments:
+        build_argument_parser().print_help()
+        return 0
     try:
-        return run_cli(build_argument_parser().parse_args(argv))
+        return run_cli(build_argument_parser().parse_args(arguments))
     except (OSError, PackageError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
