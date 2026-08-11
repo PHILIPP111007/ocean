@@ -6,7 +6,8 @@ def test_c_code_math():
 cimport <math.h>
 
 def main() -> float:
-    var a: float = @sqrt(16)   # C code -> function should starts with @
+    unsafe:
+        var a: float = @sqrt(16)   # C code -> function should starts with @
     return a
 """
 
@@ -45,8 +46,9 @@ def main() -> int:
     var thread: pthread_t = None
     var backward_thread_data: Object = Object(100)
 
-    @pthread_create(&thread, NULL, backward_worker, backward_thread_data)
-    @pthread_join(thread, NULL)
+    unsafe:
+        @pthread_create(&thread, NULL, backward_worker, backward_thread_data)
+        @pthread_join(thread, NULL)
     return 0
 """
 

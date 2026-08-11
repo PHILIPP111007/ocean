@@ -10,6 +10,7 @@ KEYS = [
     "break",
     "continue",
     "class",
+    "unsafe",
 ]  # Добавили break и continue
 
 DATA_TYPES = [

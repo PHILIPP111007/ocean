@@ -106,7 +106,7 @@ For explicit deletion, use:
 del value
 ```
 
-This is usually not necessary: owned objects are automatically freed at the end of the scope. Direct C calls via `@` remain unsafe and may violate ownership rules.
+This is usually not necessary: owned objects are automatically freed at the end of the scope. Direct C calls via `@` are only permitted inside an explicit `unsafe:` block and may violate ownership rules.
 
 Reference counting in the current version is non-atomic, so ARC objects are intended primarily for thread-confined use.
 
@@ -198,13 +198,15 @@ A larger example with dot products, matrix multiplication, bias, and a 3D tensor
 
 `array[T]` and `tensor[T]` own their allocated storage and are released automatically at the end of the scope. `&T` parameters are immutable borrows; `&mut T` parameters are exclusive mutable borrows. Borrow paths do not add ARC retain/release operations to generated C.
 
-Direct C calls use `@` and remain an unsafe FFI boundary:
+Direct C calls use `@` and must be placed in an explicit `unsafe:` block:
 
 ```python
 cimport <math.h>
 
 def main() -> float:
-    return @sqrt(16.0)
+    unsafe:
+        var result: float = @sqrt(16.0)
+    return result
 ```
 
 ## Legacy Examples Using Current Patterns
@@ -277,13 +279,14 @@ def main() -> int:
     return 0
 ```
 
-C/POSIX calls remain explicitly separated from safe code with `@`:
+C/POSIX calls remain explicitly separated from safe code with `unsafe:` and `@`:
 
 ```python
 cimport <math.h>
 
 def main() -> float:
-    var result: float32 = @sqrt(16.0)
+    unsafe:
+        var result: float32 = @sqrt(16.0)
     return result
 ```
 

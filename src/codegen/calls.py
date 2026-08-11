@@ -294,6 +294,10 @@ class CallsMixin:
 
     def generate_c_call(self, node: Dict):
         """Генерирует прямой вызов C-функции"""
+        if not node.get("unsafe", False):
+            raise RuntimeError(
+                "direct C calls require an explicit unsafe: block"
+            )
         func_name = node.get("function", "")
         args = node.get("arguments", [])
 

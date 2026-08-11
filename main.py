@@ -46,6 +46,10 @@ def main(base_path: str, p_path: str, json_path: str, c_path: str):
 
     if not result_validation["errors"]:
         print("\nOK")
+    else:
+        raise RuntimeError(
+            "Compilation stopped: validation failed; generated C was not emitted"
+        )
 
     print("\n=========== CCodeGenerator ===========\n")
 

@@ -110,6 +110,19 @@ class OrchestratorMixin:
         """Генерирует код для узла графа"""
         node_type = node.get("node")
 
+        if self._contains_unsafe_ffi(node) and not node.get("unsafe", False):
+            raise RuntimeError(
+                "C FFI expressions require an explicit unsafe: block"
+            )
+        if (
+            node_type in {"declaration", "redeclaration"}
+            and self.is_raw_pointer_type(node.get("var_type", ""))
+            and not node.get("unsafe", False)
+        ):
+            raise RuntimeError(
+                "raw pointer declarations require an explicit unsafe: block"
+            )
+
         if node_type == "declaration":
             self.generate_declaration(node)
         elif node_type == "redeclaration":  # ДОБАВЬТЕ ЭТО!
@@ -165,6 +178,16 @@ class OrchestratorMixin:
             pass
         else:
             raise RuntimeError(f"unsupported AST node in safe backend: {node_type!r}")
+
+    def _contains_unsafe_ffi(self, value) -> bool:
+        """Return whether an AST value contains a direct ``@c_function(...)``."""
+        if isinstance(value, str):
+            return bool(re.search(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(", value))
+        if isinstance(value, dict):
+            return any(self._contains_unsafe_ffi(child) for child in value.values())
+        if isinstance(value, list):
+            return any(self._contains_unsafe_ffi(child) for child in value)
+        return False
 
     def generate_global_declaration(self, node: Dict):
         """Генерирует объявление глобальной переменной"""

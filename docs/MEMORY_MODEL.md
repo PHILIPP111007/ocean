@@ -75,5 +75,16 @@ The two container entries each hold a reference. Destruction releases them indep
 ## FFI
 
 `@function(...)` / direct C calls do not become safe merely because surrounding Phils code is safe.
-The C ABI can retain pointers, free pointers, access them asynchronously, or violate aliasing rules.
-Treat direct C interop as the v1 unsafe escape hatch.
+They must be placed inside an explicit lexical `unsafe:` block:
+
+```python
+def log_value(value: int) -> None:
+    unsafe:
+        @printf("%d\n", value)
+    return None
+```
+
+Raw pointer declarations (`*T`) follow the same rule. The C ABI can retain pointers, free pointers,
+access them asynchronously, or violate aliasing rules, so the validator and backend reject these
+operations outside `unsafe:`. The block is an explicit escape hatch, not a proof that the enclosed C
+code is memory-safe.

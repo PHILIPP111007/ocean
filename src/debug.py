@@ -397,6 +397,7 @@ class JSONValidator:
                 self.validate_string_operations(node, node_idx, scope_idx, level)
 
                 # 4.4 ПРОВЕРКА C-ФУНКЦИЙ (безопасность и корректность)
+                self.validate_unsafe_boundary(node, node_idx, scope_idx)
                 self.validate_c_function_calls(node, node_idx, scope_idx, level)
 
                 # 4.5 ПРОВЕРКА ТИПОВ В УЗЛАХ
@@ -448,6 +449,45 @@ class JSONValidator:
         # 8. СБОР МЕТРИК КОДА (информация для разработчика)
         if scope_type == "function" or scope_type == "class_method":
             self._collect_function_metrics(scope, scope_idx)
+
+    def validate_unsafe_boundary(self, node: Dict, node_idx: int, scope_idx: int):
+        """Reject raw pointers and direct C FFI unless explicitly marked unsafe."""
+        node_type = node.get("node")
+        if node_type == "c_call" and not node.get("unsafe", False):
+            self.add_error(
+                "direct C calls require an explicit unsafe: block",
+                scope_idx,
+                node_idx,
+            )
+
+        var_type = node.get("var_type", "")
+        type_info = node.get("type_info", {}) or {}
+        if (
+            node_type in {"declaration", "redeclaration"}
+            and (type_info.get("kind") == "raw_pointer" or var_type.startswith("*"))
+            and not node.get("unsafe", False)
+        ):
+            self.add_error(
+                "raw pointer declarations require an explicit unsafe: block",
+                scope_idx,
+                node_idx,
+            )
+
+        if self._contains_unsafe_ffi(node) and not node.get("unsafe", False):
+            self.add_error(
+                "C FFI expressions require an explicit unsafe: block",
+                scope_idx,
+                node_idx,
+            )
+
+    def _contains_unsafe_ffi(self, value) -> bool:
+        if isinstance(value, str):
+            return bool(re.search(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(", value))
+        if isinstance(value, dict):
+            return any(self._contains_unsafe_ffi(child) for child in value.values())
+        if isinstance(value, list):
+            return any(self._contains_unsafe_ffi(child) for child in value)
+        return False
 
     def check_duplicate_declarations_in_scope(self, scope: Dict, scope_idx: int):
         """Проверяет дублирование переменных в local_variables"""
@@ -1217,6 +1257,10 @@ class JSONValidator:
         for func_name in func_calls:
             # Простое удаление вызовов функций
             temp_expr = temp_expr.replace(f"{func_name}(", "")
+
+        # Attribute names (for example ``tensor.shape``) are not standalone
+        # variables.  Keep only the receiver for declaration checks.
+        temp_expr = re.sub(r"\.[a-zA-Z_][a-zA-Z0-9_]*", "", temp_expr)
 
         # Ищем переменные
         var_pattern = r'(?<!["\'])(?<![a-zA-Z0-9_])\b([a-zA-Z_][a-zA-Z0-9_]+)\b(?![a-zA-Z0-9_])(?!["\'])'

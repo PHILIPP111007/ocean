@@ -52,6 +52,7 @@ C or memory-model implications, and include documentation or example updates whe
 
 ## Safety & Configuration Notes
 
-Direct C/POSIX calls are an unsafe FFI boundary. The ownership model is non-atomic and intended for
-thread-confined managed objects; validate generated code with strict warnings and sanitizers before
-relying on it.
+Direct C/POSIX calls use `@` and must be inside an explicit `unsafe:` block; raw pointer declarations
+(`*T`) follow the same rule. Safe code cannot cross this boundary implicitly. The ownership model is
+non-atomic and intended for thread-confined managed objects; validate generated code with strict
+warnings and sanitizers before relying on it.

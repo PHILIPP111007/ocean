@@ -44,6 +44,18 @@ class Parser:
         self.current_indent = 0
         self.indent_size = None
         self.indent_char = None
+        self.unsafe_depth = 0
+
+    def _mark_unsafe_nodes(self, value) -> None:
+        """Mark graph nodes parsed inside an explicit ``unsafe:`` block."""
+        if isinstance(value, dict):
+            if "node" in value:
+                value["unsafe"] = True
+            for child in value.values():
+                self._mark_unsafe_nodes(child)
+        elif isinstance(value, list):
+            for child in value:
+                self._mark_unsafe_nodes(child)
 
 
     def parse_type_annotation(self, type_text: str) -> tuple[str, dict]:
@@ -634,7 +646,11 @@ class Parser:
         # ========== ОБРАБОТКА КЛЮЧЕВЫХ СЛОВ ==========
 
         for key in KEYS:
-            if line.startswith(key + " ") or line == key:
+            if (
+                line.startswith(key + " ")
+                or line.startswith(key + ":")
+                or line == key
+            ):
                 if key == "const":
                     parsed = self.parse_const(line, current_scope)
                     return current_index + 1
@@ -695,6 +711,10 @@ class Parser:
                 elif key == "continue":
                     parsed = self.parse_continue(line, current_scope)
                     return current_index + 1
+                elif key == "unsafe":
+                    return self.parse_unsafe_block(
+                        line, current_scope, all_lines, current_index, actual_indent
+                    )
 
         # ========== ОБРАБОТКА C ИМПОРТОВ ==========
 
@@ -904,6 +924,42 @@ class Parser:
         )
 
         return current_index + 1
+
+    def parse_unsafe_block(
+        self, line: str, scope: dict, all_lines: list, current_index: int, indent: int
+    ):
+        """Parse an explicit unsafe region without changing runtime semantics.
+
+        ``unsafe:`` is a lexical marker.  Its body remains in the surrounding
+        function scope, while every emitted graph node is tagged so the
+        validator and backend can enforce the same boundary independently.
+        """
+        if not re.match(r"unsafe\s*:\s*$", line):
+            return current_index + 1
+
+        body_start = current_index + 1
+        body_end = self.find_indented_block_end(all_lines, body_start, indent)
+        graph_start = len(scope.get("graph", []))
+        self.unsafe_depth += 1
+        try:
+            i = body_start
+            while i < body_end:
+                if not all_lines[i].strip():
+                    i += 1
+                    continue
+                body_indent = self.calculate_indent_level(all_lines[i])
+                i = self.parse_line(
+                    all_lines[i].strip(), scope, all_lines, i, body_indent
+                )
+        finally:
+            self.unsafe_depth -= 1
+            # Keep the surrounding function scope active for the next sibling
+            # statement (for example ``return`` after ``unsafe:``).
+            self.current_indent = indent
+
+        new_nodes = scope.get("graph", [])[graph_start:]
+        self._mark_unsafe_nodes(new_nodes)
+        return body_end
 
     def parse_nested_index_assignment(
         self, line: str, scope: dict, var_name: str, indices_str: str, value: str
@@ -4531,6 +4587,7 @@ class Parser:
                 "arguments": args,
                 "operations": operations,
                 "dependencies": dependencies,
+                "unsafe": self.unsafe_depth > 0,
             }
         )
 
