@@ -135,7 +135,7 @@ def compile_pipeline(base_path: str | Path, p_path: str | Path, json_path: str |
         print("\n=========== PARSER ===========")
     data = Parser(base_path=str(base_path)).parse_code(code, file_path=str(source_path))
     _ensure_parent(json_output_path)
-    json_output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    # json_output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
 
     if not quiet:
         print("\n=========== DEBUGGER ===========")

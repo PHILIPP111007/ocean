@@ -171,8 +171,7 @@ The editable install exposes the `ocean` command:
 
 ```bash
 ocean --help
-ocean check
-ocean build --profile release
+ocean run examples/neural_network.oc
 ```
 
 The package metadata is defined in `pyproject.toml`. The compiler is currently distributed as an
