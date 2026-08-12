@@ -1,7 +1,7 @@
 {
   "main.py": {
-    "mtime": 1786530548.8378742,
-    "ast_hash": "2e4d0d51aaf845bc27661c1143fef395",
+    "mtime": 1786567153.2062082,
+    "ast_hash": "c2fe2db20aee5a836541b52520dd4b37",
     "semantic_hash": ""
   },
   "src/__init__.py": {
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "src/codegen/orchestrator.py": {
-    "mtime": 1786484660.8217103,
-    "ast_hash": "e32ad99d2e1abef8fed541d0ed002f02",
+    "mtime": 1786566874.4907002,
+    "ast_hash": "4c0eb50b90179f552f8a9db170dbff57",
     "semantic_hash": ""
   },
   "src/codegen/ownership.py": {
@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "src/codegen/statements.py": {
-    "mtime": 1786482547.7112691,
-    "ast_hash": "95623f21623960b382981c8320ba0c57",
+    "mtime": 1786566999.236274,
+    "ast_hash": "8f97a803659eda9078957924aac3b92d",
     "semantic_hash": ""
   },
   "src/codegen/tuple_codegen.py": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "src/debug.py": {
-    "mtime": 1786480364.3528538,
-    "ast_hash": "98dbaa60997c7a9eae5d2d0d7af2e453",
+    "mtime": 1786566999.4522767,
+    "ast_hash": "7d7303d15368c8d240d647234cb04d79",
     "semantic_hash": ""
   },
   "src/modules/constants.py": {
@@ -135,8 +135,8 @@
     "semantic_hash": "03411aa14aa8636f16dc65eb57a08a28"
   },
   "src/parser.py": {
-    "mtime": 1786482036.5570302,
-    "ast_hash": "d36c9efc66a0513407eed5997e5db6b8",
+    "mtime": 1786566874.2666974,
+    "ast_hash": "5bc969a173d9d89930cda9b8d1dc4d7d",
     "semantic_hash": ""
   },
   "tests/__init__.py": {
@@ -315,8 +315,8 @@
     "semantic_hash": ""
   },
   "src/typed_ir.py": {
-    "mtime": 1786477156.681761,
-    "ast_hash": "f8053ea4bc175afb2b0a92fc010fbd84",
+    "mtime": 1786566740.0689955,
+    "ast_hash": "0ca55947ec63764c2fe09d42409d993f",
     "semantic_hash": ""
   },
   "tests/test_debug_validator.py": {
@@ -325,8 +325,8 @@
     "semantic_hash": ""
   },
   "tests/test_main_cli.py": {
-    "mtime": 1786481782.7019372,
-    "ast_hash": "58ee2b70a4798670a1fd199570a78e68",
+    "mtime": 1786565982.2155883,
+    "ast_hash": "3c28db01a931e2357b39fc542f8f47a7",
     "semantic_hash": ""
   },
   "tests/test_memory_safety.py": {
@@ -345,8 +345,8 @@
     "semantic_hash": ""
   },
   "requirements.txt": {
-    "mtime": 1786478429.4020417,
-    "ast_hash": "d1f78a464b74c6d60b73baa8c846169e",
+    "mtime": 1786531688.795196,
+    "ast_hash": "792953ae4dd227912bacaf5cae13845c",
     "semantic_hash": ""
   },
   "src/codegen/class_model.py": {
@@ -357,6 +357,21 @@
   "tests/test_oop_advanced.py": {
     "mtime": 1786484365.3418067,
     "ast_hash": "a3ba6dc17c69b2461742589996bc1e54",
+    "semantic_hash": ""
+  },
+  "examples/transformer_pytorch.py": {
+    "mtime": 1786565346.6997583,
+    "ast_hash": "6ff74584355ee2cf674502f5479536e9",
+    "semantic_hash": ""
+  },
+  "tests/test_openmp.py": {
+    "mtime": 1786566984.4680882,
+    "ast_hash": "b6981f29ad7983cbae43d009d3bb24ee",
+    "semantic_hash": ""
+  },
+  "docs/OpenMP.md": {
+    "mtime": 1786566999.6802797,
+    "ast_hash": "66f80bf1e269e07fbc8615f2fcb5e644",
     "semantic_hash": ""
   }
 }
