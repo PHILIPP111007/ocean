@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from main import build_argument_parser, cli, parse_cli_paths
+from main import build_argument_parser, cli, compile_c, parse_cli_paths
 
 
 def test_empty_cli_prints_help_without_running_pipeline(capsys):
@@ -89,3 +89,21 @@ def test_positional_source_does_not_use_package_entry():
     assert json_path == source.with_suffix(".parsed.json")
     assert c_path == source.with_suffix(".generated.c")
     assert binary_path == source.with_suffix("")
+
+
+def test_compile_c_adds_libm_for_generated_math_import(tmp_path, monkeypatch):
+    c_file = tmp_path / "math.c"
+    binary = tmp_path / "math"
+    c_file.write_text("#include <math.h>\nint main(void) { return (int)sqrt(4.0); }\n", encoding="utf-8")
+    captured = {}
+
+    def fake_run(command, check):
+        captured["command"] = command
+        assert check is True
+
+    monkeypatch.setattr("main.subprocess.run", fake_run)
+
+    command = compile_c(c_file, binary)
+
+    assert command == captured["command"]
+    assert command[-1] == "-lm"
