@@ -171,7 +171,11 @@ class OrchestratorMixin:
         elif node_type == "method_call":
             self.generate_method_call(node)
         elif node_type == "static_method_call":  # ДОБАВЬТЕ ЭТО!
-            self.generate_object_method_call(node)
+            class_name = node.get("class_name", "")
+            method_name = node.get("method", "")
+            args = node.get("arguments", [])
+            arg_strings = [self.generate_expression(arg) for arg in args]
+            self.add_line(f"{class_name}_{method_name}({', '.join(arg_strings)});")
         elif node_type in [
             "index_assignment",
             "nested_index_assignment",

@@ -335,6 +335,7 @@ class CallsMixin:
             # Создаем форматную строку
             format_parts = []
             value_parts = []
+            temporary_cleanup = []
 
             for arg in args:
                 if isinstance(arg, dict):
@@ -404,6 +405,21 @@ class CallsMixin:
                         else:
                             format_parts.append("%d")
                             value_parts.append(str(value))
+                    elif arg.get("type") == "method_call":
+                        expr = self.generate_expression(arg)
+                        method_name = arg.get("method", "")
+                        if method_name == "device":
+                            temporary = f"ocean_print_tmp_{self.temp_var_counter}"
+                            self.temp_var_counter += 1
+                            self.add_line(f"char* {temporary} = {expr};")
+                            expr = temporary
+                            temporary_cleanup.append(temporary)
+                            format_parts.append("%s")
+                        elif method_name == "size":
+                            format_parts.append("%zu")
+                        else:
+                            format_parts.append("%d")
+                        value_parts.append(expr)
                     elif arg.get("type") in {"index_access", "tensor_index_access"}:
                         expr = self.generate_expression(arg)
                         source = arg.get("variable", "")
@@ -436,6 +452,8 @@ class CallsMixin:
             args_str = ", ".join(value_parts)
 
             self.add_line(f"printf({format_str}, {args_str});")
+            for temporary in temporary_cleanup:
+                self.add_line(f"free({temporary});")
         elif func_name == "input":
             # Для input() без присваивания
             self.generate_input_statement(node)

@@ -189,6 +189,11 @@ class OopMixin:
                 self.add_line(f"free({access});")
             elif kind == self.MEMORY_OWNED:
                 self.add_line(self._owned_free_call(access, field_type))
+            elif field_type == "ocean_tensor_handle_t":
+                # The standard Tensor facade stores an opaque C handle.  It is
+                # not a raw pointer in Ocean source, but its destructor still
+                # has an explicit runtime release operation.
+                self.add_line(f"ocean_tensor_release({access});")
         self.add_line("free(self);")
         self.indent_level -= 1
         self.add_line("}")

@@ -214,7 +214,7 @@ def build_class_registry(json_data: List[Dict[str, Any]]) -> ClassRegistry:
     method_scopes: Dict[tuple[str, str], Dict[str, Any]] = {}
 
     for scope in json_data:
-        if scope.get("type") in {"constructor", "class_method"}:
+        if scope.get("type") in {"constructor", "class_method", "static_method", "classmethod"}:
             class_name = scope.get("class_name", "")
             method_name = scope.get("method_name", "")
             if class_name and method_name:

@@ -74,6 +74,7 @@ KNOWN_C_TYPES = set(
         "pthread_cond_t",
         "time_t",
         "clock_t",
+        "ocean_tensor_handle_t",
     ]
 )
 

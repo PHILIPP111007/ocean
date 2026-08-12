@@ -120,6 +120,58 @@ def compile_c(c_path: Path, binary_path: Path, compiler: str = "gcc", cflags: li
     """Compile generated C and return the exact command that was executed."""
     flags = list(cflags or DEFAULT_CFLAGS)
     generated_c = c_path.read_text(encoding="utf-8")
+    runtime_sources: list[str] = []
+    runtime_root: Path | None = None
+    if '"std/tensor/tensor_runtime.h"' in generated_c:
+        candidates = [c_path.parent, *c_path.parents, Path.cwd()]
+        for candidate in candidates:
+            runtime_source = candidate / "std" / "tensor" / "tensor_runtime.c"
+            if runtime_source.exists():
+                runtime_root = candidate
+                runtime_sources.append(str(runtime_source))
+                break
+        if runtime_root is None:
+            raise RuntimeError(
+                "Tensor standard runtime was requested, but std/tensor/tensor_runtime.c "
+                "could not be found"
+            )
+        include_flag = f"-I{runtime_root}"
+        if include_flag not in flags:
+            flags.append(include_flag)
+
+    runtime_link_flags: list[str] = []
+    if runtime_sources and shutil.which("pkg-config"):
+        opencl_probe = subprocess.run(
+            ["pkg-config", "--exists", "OpenCL"],
+            check=False,
+        )
+        if opencl_probe.returncode == 0:
+            opencl_cflags = subprocess.run(
+                ["pkg-config", "--cflags", "OpenCL"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            opencl_libs = subprocess.run(
+                ["pkg-config", "--libs", "OpenCL"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            flags.extend(
+                flag for flag in shlex.split(opencl_cflags.stdout)
+                if flag not in flags
+            )
+            flags.extend(
+                flag for flag in shlex.split(opencl_libs.stdout)
+                if not flag.startswith("-l") and flag not in flags
+            )
+            runtime_link_flags.extend(
+                flag for flag in shlex.split(opencl_libs.stdout)
+                if flag.startswith("-l") and flag not in runtime_link_flags
+            )
+            if "-DOCEAN_TENSOR_ENABLE_OPENCL" not in flags:
+                flags.append("-DOCEAN_TENSOR_ENABLE_OPENCL")
     # A bare OpenMP pragma is otherwise accepted by some C compilers as an
     # ignored extension, silently changing a parallel program into a serial
     # one.  Derive the required compiler/linker flag from generated C unless
@@ -139,7 +191,16 @@ def compile_c(c_path: Path, binary_path: Path, compiler: str = "gcc", cflags: li
     flags = [flag for flag in flags if flag != "-lm"]
     if "#include <math.h>" in generated_c and not link_flags:
         link_flags.append("-lm")
-    command = [compiler, *flags, str(c_path), "-o", str(binary_path), *link_flags]
+    command = [
+        compiler,
+        *flags,
+        str(c_path),
+        *runtime_sources,
+        "-o",
+        str(binary_path),
+        *link_flags,
+        *runtime_link_flags,
+    ]
     _ensure_parent(binary_path)
     print("\n=========== C compiler ===========")
     print("$ " + " ".join(command))
@@ -156,10 +217,10 @@ def compile_pipeline(base_path: str | Path, p_path: str | Path, json_path: str |
         print("\n=========== PARSER ===========")
     data = Parser(base_path=str(base_path)).parse_code(code, file_path=str(source_path))
     _ensure_parent(json_output_path)
-    # json_output_path.write_text(
-    #     json.dumps(data, indent=2, ensure_ascii=False, default=str),
-    #     encoding="utf-8",
-    # )
+    json_output_path.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
 
     if not quiet:
         print("\n=========== DEBUGGER ===========")

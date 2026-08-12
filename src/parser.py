@@ -2594,6 +2594,24 @@ class Parser:
             return self._parse_chained_index_access(expression)
 
         # 4.3 Вызов метода объекта: obj.method(args)
+        static_method_pattern = (
+            r"^([A-Z][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"
+        )
+        static_method_match = re.match(static_method_pattern, expression)
+        if static_method_match:
+            class_name, method_name, args_str = static_method_match.groups()
+            args = (
+                self.parse_function_arguments_to_ast(args_str)
+                if args_str.strip()
+                else []
+            )
+            return {
+                "type": "static_method_call",
+                "class_name": class_name,
+                "method": method_name,
+                "arguments": args,
+            }
+
         obj_method_pattern = (
             r"^([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\."
             r"([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"

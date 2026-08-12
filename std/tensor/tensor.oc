@@ -1,0 +1,45 @@
+cimport "std/tensor/tensor_runtime.h"
+
+# Public device-aware Tensor facade.  The C handle is intentionally opaque;
+# users manipulate Tensor values and never see CPU pointers or cl_mem.
+class Tensor:
+    def __init__(self, handle: ocean_tensor_handle_t):
+        self.handle = handle
+
+    @staticmethod
+    def zeros(rows: int, cols: int, device: str) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_zeros(rows, cols, device)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def to(self, device: str) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_to(self.handle, device)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def copy(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_copy(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def matmul(self, other: &Tensor) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_matmul(self.handle, other.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def shape(self, axis: int) -> int:
+        return ocean_tensor_shape(self.handle, axis)
+
+    def ndim(self) -> int:
+        return ocean_tensor_ndim(self.handle)
+
+    def size(self) -> size_t:
+        return ocean_tensor_size(self.handle)
+
+    def device(self) -> str:
+        return ocean_tensor_device(self.handle)
+
+    def release(self) -> None:
+        ocean_tensor_release(self.handle)
+        self.handle = None
+        return None

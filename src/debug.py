@@ -24,6 +24,7 @@ class JSONValidator:
         self.scopes_info = []  # Compatibility alias used by older helpers
         self._active_scope = None
         self.functions = {}  # {func_name: func_info}
+        self.external_c_functions = set()
         self.source_map = {}  # Сопоставление узлов с исходными строками
         self.builtin_functions = {
             "print": {"return_type": "None", "min_args": 0, "max_args": None},
@@ -46,6 +47,7 @@ class JSONValidator:
         self.warnings = []
         self.scope_symbols = {}
         self.functions = {}
+        self.external_c_functions = set()
         self.all_scopes = json_data if isinstance(json_data, list) else []
         self.scopes_info = self.all_scopes
         self._active_scope = None
@@ -81,6 +83,25 @@ class JSONValidator:
         for scope_idx, scope in enumerate(json_data):
             if not isinstance(scope, dict):
                 continue
+            for node in scope.get("graph", []):
+                if (
+                    isinstance(node, dict)
+                    and node.get("node") == "c_import"
+                    and node.get("header") == "std/tensor/tensor_runtime.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "ocean_tensor_zeros",
+                            "ocean_tensor_copy",
+                            "ocean_tensor_to",
+                            "ocean_tensor_matmul",
+                            "ocean_tensor_shape",
+                            "ocean_tensor_ndim",
+                            "ocean_tensor_size",
+                            "ocean_tensor_device",
+                            "ocean_tensor_release",
+                        }
+                    )
             level = scope.get("level", 0)
 
             if isinstance(scope.get("symbol_table"), dict) and scope["symbol_table"]:
@@ -1006,7 +1027,12 @@ class JSONValidator:
             type_info.get("kind") in {"generic", "borrow", "mut_borrow", "raw_pointer", "optional"}
             or var_type.startswith(("list[", "dict[", "tuple[", "array[", "tensor[", "shared["))
         )
-        if var_type not in DATA_TYPES and not var_type.startswith("*") and not known_generic:
+        if (
+            var_type not in DATA_TYPES
+            and var_type not in {"ocean_tensor_handle_t"}
+            and not var_type.startswith("*")
+            and not known_generic
+        ):
             # Проверяем, не является ли это пользовательским классом
             if var_type not in self.classes:
                 self.add_warning(
@@ -1687,6 +1713,7 @@ class JSONValidator:
             if (
                 func_name not in self.functions
                 and func_name not in self.builtin_functions
+                and func_name not in self.external_c_functions
             ):
                 self.add_error(
                     f"функция '{func_name}' не объявлена", scope_idx, node_idx
@@ -1992,7 +2019,11 @@ class JSONValidator:
             return  # Завершаем проверку для этой функции
 
         # Проверяем, что функция существует или является встроенной
-        if func_name not in self.functions and func_name not in self.builtin_functions:
+        if (
+            func_name not in self.functions
+            and func_name not in self.builtin_functions
+            and func_name not in self.external_c_functions
+        ):
             self.add_error(
                 f"вызываемая функция '{func_name}' не объявлена", scope_idx, node_idx
             )

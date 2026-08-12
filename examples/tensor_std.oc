@@ -1,0 +1,11 @@
+import "../std/tensor/tensor.oc"
+
+def main() -> int:
+    var left: Tensor = Tensor.zeros(2, 3, "cpu")
+    var right: Tensor = Tensor.zeros(3, 2, "cpu")
+    var product: Tensor = left.matmul(right)
+    var cpu_product: Tensor = product.to("cpu")
+    print(cpu_product.shape(0))
+    print(cpu_product.shape(1))
+    print(cpu_product.device())
+    return 0

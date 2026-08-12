@@ -208,6 +208,14 @@ class ExpressionsMixin:
                 f"/* ERROR: Неизвестный вызов метода {object_name}.{method_name}() */"
             )
 
+        elif node_type == "static_method_call":
+            class_name = ast.get("class_name", "")
+            method_name = ast.get("method", "")
+            args = ast.get("arguments", [])
+            arg_strings = [self.generate_expression(arg) for arg in args]
+            args_str = ", ".join(arg_strings)
+            return f"{class_name}_{method_name}({args_str})"
+
         elif node_type == "function_call":
             func_name = ast.get("function", "")
 
