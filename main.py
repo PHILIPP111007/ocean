@@ -119,12 +119,21 @@ def _ensure_parent(path: Path) -> None:
 def compile_c(c_path: Path, binary_path: Path, compiler: str = "gcc", cflags: list[str] | None = None) -> list[str]:
     """Compile generated C and return the exact command that was executed."""
     flags = list(cflags or DEFAULT_CFLAGS)
+    generated_c = c_path.read_text(encoding="utf-8")
+    # A bare OpenMP pragma is otherwise accepted by some C compilers as an
+    # ignored extension, silently changing a parallel program into a serial
+    # one.  Derive the required compiler/linker flag from generated C unless
+    # the caller already supplied an OpenMP setting explicitly.
+    if "#pragma omp " in generated_c and not any(
+        flag in {"-fopenmp", "-fopenmp-simd"} for flag in flags
+    ):
+        flags.append("-fopenmp")
     # ``math.h`` declares functions supplied by libm on GCC and Clang.  Keep
     # the FFI source syntax simple: a ``cimport <math.h>`` automatically makes
     # the corresponding linker dependency available to the generated program.
     link_flags = [flag for flag in flags if flag == "-lm"]
     flags = [flag for flag in flags if flag != "-lm"]
-    if "#include <math.h>" in c_path.read_text(encoding="utf-8") and not link_flags:
+    if "#include <math.h>" in generated_c and not link_flags:
         link_flags.append("-lm")
     command = [compiler, *flags, str(c_path), "-o", str(binary_path), *link_flags]
     _ensure_parent(binary_path)
@@ -143,7 +152,10 @@ def compile_pipeline(base_path: str | Path, p_path: str | Path, json_path: str |
         print("\n=========== PARSER ===========")
     data = Parser(base_path=str(base_path)).parse_code(code, file_path=str(source_path))
     _ensure_parent(json_output_path)
-    # json_output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    # json_output_path.write_text(
+    #     json.dumps(data, indent=2, ensure_ascii=False, default=str),
+    #     encoding="utf-8",
+    # )
 
     if not quiet:
         print("\n=========== DEBUGGER ===========")

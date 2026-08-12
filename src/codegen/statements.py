@@ -180,12 +180,34 @@ class StatementsMixin:
         if str(step).strip() in {"0", "+0", "-0"}:
             raise RuntimeError("range() step cannot be zero")
 
+        openmp = node.get("openmp")
+        if openmp:
+            if openmp.get("error"):
+                raise RuntimeError(openmp["error"])
+            if openmp.get("backend") != "openmp" or openmp.get("directive") != "parallel for":
+                raise RuntimeError("unsupported OpenMP loop directive")
+            self.add_line(self._format_openmp_pragma(openmp))
+
         # loop variable belongs to the loop's C declaration, not an owning object.
-        self.add_line(
-            f"for (int {loop_var} = {start}; "
-            f"(({step}) > 0 ? {loop_var} < {stop} : {loop_var} > {stop}); "
-            f"{loop_var} += {step}) {{"
-        )
+        if openmp:
+            try:
+                numeric_step = int(str(step).strip())
+            except ValueError as error:
+                raise RuntimeError(
+                    "OpenMP parallel for requires a constant integer range step"
+                ) from error
+            comparison = "<" if numeric_step > 0 else ">"
+            loop_header = (
+                f"for (int {loop_var} = {start}; {loop_var} {comparison} {stop}; "
+                f"{loop_var} += {step}) {{"
+            )
+        else:
+            loop_header = (
+                f"for (int {loop_var} = {start}; "
+                f"(({step}) > 0 ? {loop_var} < {stop} : {loop_var} > {stop}); "
+                f"{loop_var} += {step}) {{"
+            )
+        self.add_line(loop_header)
         self.indent_level += 1
         self.enter_scope("loop")
         self.declare_variable(loop_var, "int")
@@ -204,6 +226,36 @@ class StatementsMixin:
         self.exit_scope()
         self.indent_level -= 1
         self.add_line("}")
+
+    def _format_openmp_pragma(self, metadata: Dict) -> str:
+        """Render validated structured OpenMP metadata as one C pragma."""
+        allowed = {
+            "schedule",
+            "reduction",
+            "private",
+            "firstprivate",
+            "lastprivate",
+            "shared",
+            "default",
+            "nowait",
+            "ordered",
+        }
+        rendered = []
+        for clause in metadata.get("clauses", []) or []:
+            name = str(clause.get("name", "")).strip()
+            arguments = str(clause.get("arguments", "")).strip()
+            if name not in allowed:
+                raise RuntimeError(f"unsupported OpenMP clause: {name!r}")
+            if name in {"nowait", "ordered"}:
+                if arguments:
+                    raise RuntimeError(f"OpenMP clause '{name}' does not take arguments")
+                rendered.append(name)
+                continue
+            if not arguments or not re.match(r"^[A-Za-z0-9_+%*/:.,\-\s]+$", arguments):
+                raise RuntimeError(f"invalid arguments for OpenMP clause '{name}'")
+            rendered.append(f"{name}({arguments})")
+        suffix = " " + " ".join(rendered) if rendered else ""
+        return f"#pragma omp parallel for{suffix}"
 
     def generate_attribute_assignment(self, node: Dict):
         """Ownership-safe class field assignment."""
@@ -341,6 +393,25 @@ class StatementsMixin:
             return
 
         self.add_line(f"{target} = {expr};")
+
+    def generate_augmented_assignment(self, node: Dict):
+        """Generate a scalar compound assignment, including OpenMP reductions."""
+        symbols = node.get("symbols", [])
+        operations = node.get("operations", []) or []
+        if not symbols or not operations:
+            return
+        target = symbols[0]
+        operator = operations[0].get("operator_symbol", "+=")
+        value_ast = node.get("value_ast") or {}
+        info = self.get_variable_info(target)
+        if info:
+            self.assert_can_mutate(target)
+            if self.memory_kind_for_type(info.get("py_type", "")) != self.MEMORY_VALUE:
+                raise RuntimeError(
+                    f"compound assignment is only supported for scalar values, got '{target}'"
+                )
+        value_expr = self.generate_expression(value_ast)
+        self.add_line(f"{target} {operator} {value_expr};")
 
     def generate_declaration(self, node: Dict):
         """Declare a value and establish its ownership state."""

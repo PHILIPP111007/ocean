@@ -46,6 +46,7 @@ class Parser:
         self.indent_char = None
         self.unsafe_depth = 0
         self.current_source_line = None
+        self._pending_openmp_pragma = None
 
     def _mark_unsafe_nodes(self, value) -> None:
         """Mark graph nodes parsed inside an explicit ``unsafe:`` block."""
@@ -69,6 +70,13 @@ class Parser:
         """Remove ``#`` comments without corrupting string literals."""
         result = []
         for line in code.splitlines():
+            # OpenMP pragmas are language syntax, not comments.  Preserve
+            # both the canonical spelling (``omp``) and the historical typo
+            # accepted by the frontend (``opm``); code generation always emits
+            # the standard ``omp`` spelling.
+            if re.match(r"^\s*#pragma\s+(?:omp|opm)\b", line):
+                result.append(line)
+                continue
             out = []
             in_string = False
             quote = ""
@@ -391,6 +399,7 @@ class Parser:
             self.scopes.append(global_scope)
             self.scope_stack = [global_scope]
             self.current_indent = 0
+            self._pending_openmp_pragma = None
 
             i = 0
             while i < len(lines):
@@ -416,6 +425,20 @@ class Parser:
                     i,
                     indent_level,
                 )
+
+            # A directive that reaches EOF without a following ``for`` must
+            # remain visible to the validator instead of being silently lost.
+            if self._pending_openmp_pragma is not None:
+                global_scope["graph"].append(
+                    {
+                        "node": "openmp_pragma",
+                        "content": self._pending_openmp_pragma.get("content", ""),
+                        "openmp": self._pending_openmp_pragma,
+                        "error": "OpenMP pragma must be immediately followed by a for loop",
+                        "source_line": self._pending_openmp_pragma.get("source_line"),
+                    }
+                )
+                self._pending_openmp_pragma = None
 
             self.remove_duplicate_methods()
             self.collect_inherited_methods_for_all_classes()
@@ -460,6 +483,47 @@ class Parser:
 
         if not line:
             return current_index + 1
+
+        # ``#pragma omp parallel for`` belongs to the immediately following
+        # Ocean ``for`` node.  Keep the parser state outside the graph until
+        # that node is seen so normal code generation never has to deal with
+        # a standalone preprocessor directive.
+        if line.startswith("#pragma"):
+            pragma = self.parse_openmp_pragma(line, current_index + 1)
+            if self._pending_openmp_pragma is not None:
+                scope["graph"].append(
+                    {
+                        "node": "openmp_pragma",
+                        "content": self._pending_openmp_pragma.get("content", ""),
+                        "openmp": self._pending_openmp_pragma,
+                        "error": "multiple OpenMP pragmas before one for loop",
+                        "source_line": self._pending_openmp_pragma.get("source_line"),
+                    }
+                )
+            self._pending_openmp_pragma = pragma or {
+                "backend": "openmp",
+                "directive": "invalid",
+                "content": line,
+                "source_line": current_index + 1,
+                "error": "expected '#pragma omp parallel for'",
+            }
+            return current_index + 1
+
+        if self._pending_openmp_pragma is not None:
+            # Blank lines are skipped by parse_code and loop-body parsers.  Any
+            # actual statement other than ``for`` makes the pragma invalid.
+            if not re.match(r"^for\s+[A-Za-z_][A-Za-z0-9_]*\s+in\s+.+:\s*$", line):
+                pending = self._pending_openmp_pragma
+                scope["graph"].append(
+                    {
+                        "node": "openmp_pragma",
+                        "content": pending.get("content", ""),
+                        "openmp": pending,
+                        "error": "OpenMP pragma must be immediately followed by a for loop",
+                        "source_line": pending.get("source_line"),
+                    }
+                )
+                self._pending_openmp_pragma = None
 
         # Value-only structures used by OS/HPC code.  This is handled before
         # KEYS so it works even while older constants.py files do not yet list
@@ -3190,9 +3254,8 @@ class Parser:
             }
         ]
 
-        dependencies = []
-        if value.isalpha() and value not in KEYS and value not in DATA_TYPES:
-            dependencies.append(value)
+        value_ast = self.parse_expression_to_ast(value)
+        dependencies = self.extract_dependencies_from_ast(value_ast)
 
         # Обновляем значение переменной
         scope["symbol_table"].add_symbol(
@@ -3209,6 +3272,7 @@ class Parser:
                 "symbols": [name],
                 "operations": operations,
                 "dependencies": dependencies,
+                "value_ast": value_ast,
             }
         )
 
@@ -3761,6 +3825,50 @@ class Parser:
         # Другие итерируемые объекты
         return {"type": "ITERABLE", "expression": iterable_expr}
 
+    def parse_openmp_pragma(self, line: str, source_line: int) -> dict | None:
+        """Parse the supported OpenMP loop directive into structured metadata."""
+        match = re.match(
+            r"^#pragma\s+(omp|opm)\s+parallel\s+for(?:\s+(.*?))?\s*$",
+            line,
+        )
+        if not match:
+            return None
+
+        clauses_text = (match.group(2) or "").strip()
+        clauses = []
+        position = 0
+        clause_pattern = re.compile(
+            r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?:\s*\((?P<args>[^()]*)\))?"
+        )
+        while position < len(clauses_text):
+            while position < len(clauses_text) and clauses_text[position].isspace():
+                position += 1
+            clause_match = clause_pattern.match(clauses_text, position)
+            if not clause_match:
+                return {
+                    "backend": "openmp",
+                    "directive": "parallel for",
+                    "clauses": [],
+                    "content": line,
+                    "source_line": source_line,
+                    "error": f"invalid OpenMP clause syntax: {clauses_text!r}",
+                }
+            clauses.append(
+                {
+                    "name": clause_match.group("name"),
+                    "arguments": (clause_match.group("args") or "").strip(),
+                }
+            )
+            position = clause_match.end()
+
+        return {
+            "backend": "openmp",
+            "directive": "parallel for",
+            "clauses": clauses,
+            "content": line,
+            "source_line": source_line,
+        }
+
     def parse_while_loop(
         self, line: str, scope: dict, all_lines: list, current_index: int, indent: int
     ):
@@ -3863,6 +3971,10 @@ class Parser:
             "body_level": scope["level"] + 1,
             "body": [],  # Пока пустое
         }
+
+        if self._pending_openmp_pragma is not None:
+            loop_node["openmp"] = self._pending_openmp_pragma
+            self._pending_openmp_pragma = None
 
         # Добавляем узел цикла в граф текущего scope
         scope["graph"].append(loop_node)

@@ -67,6 +67,12 @@ class TypedNode:
     def source_line(self) -> int | None:
         return self.raw.get("source_line")
 
+    @property
+    def openmp(self) -> dict[str, Any] | None:
+        """Structured OpenMP metadata attached to a loop, if present."""
+        value = self.raw.get("openmp")
+        return value if isinstance(value, dict) else None
+
 
 @dataclass(frozen=True)
 class TypedScope:
@@ -160,6 +166,9 @@ class TypedIRBuilder:
             effect = "call"
         elif node_type == "return":
             effect = "return"
+
+        if node_type == "for_loop" and node.get("openmp"):
+            effect = "parallel_loop"
 
         return TypedNode(deepcopy(node), node_type, result, reads, writes, effect)
 

@@ -141,6 +141,8 @@ class OrchestratorMixin:
             self.generate_delete(node)
         elif node_type == "assignment":
             self.generate_assignment(node)
+        elif node_type == "augmented_assignment":
+            self.generate_augmented_assignment(node)
         elif node_type == "function_call":
             self.generate_function_call(node)
         elif node_type == "builtin_function_call":  # НОВОЕ!

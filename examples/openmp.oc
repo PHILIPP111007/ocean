@@ -1,0 +1,9 @@
+def main() -> int:
+    var total: int = 0
+
+    #pragma omp parallel for reduction(+:total) schedule(static)
+    for i in range(0, 1000):
+        total += i
+
+    print(total)
+    return 0

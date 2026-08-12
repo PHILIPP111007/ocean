@@ -1344,6 +1344,15 @@ class JSONValidator:
         """Валидирует типы в узле"""
         node_type = node.get("node", "")
 
+        if node_type == "openmp_pragma":
+            self.add_error(
+                node.get("error", "OpenMP pragma must be attached to a for loop"),
+                scope_idx,
+                node_idx,
+                source_line=node.get("source_line"),
+            )
+            return
+
         if node_type == "assignment":
             self.validate_assignment_types(node, node_idx, scope_idx, level)
         elif node_type == "declaration":
@@ -2562,6 +2571,282 @@ class JSONValidator:
                                 scope_idx,
                                 node_idx,
                             )
+
+            if node.get("openmp"):
+                self.validate_openmp_loop(node, node_idx, scope_idx, level)
+
+    def _openmp_clause_arguments(self, metadata: Dict) -> dict[str, list[str]]:
+        """Return OpenMP clauses grouped by name, preserving duplicates."""
+        grouped: dict[str, list[str]] = {}
+        for clause in metadata.get("clauses", []) or []:
+            name = str(clause.get("name", "")).strip()
+            arguments = str(clause.get("arguments", "")).strip()
+            grouped.setdefault(name, []).append(arguments)
+        return grouped
+
+    def _openmp_csv_identifiers(self, arguments: str) -> list[str] | None:
+        values = [item.strip() for item in arguments.split(",") if item.strip()]
+        if not values or any(not re.match(r"^[A-Za-z_]\w*$", item) for item in values):
+            return None
+        return values
+
+    def _openmp_reduction_arguments(self, arguments: str) -> tuple[str, list[str]] | None:
+        match = re.match(r"^([+\-*\/%]|&&|\|\||max|min)\s*:\s*(.+)$", arguments)
+        if not match:
+            return None
+        variables = self._openmp_csv_identifiers(match.group(2))
+        if variables is None:
+            return None
+        return match.group(1), variables
+
+    def _openmp_indices_contain_loop_var(self, indices, loop_var: str) -> bool:
+        names = set()
+        if isinstance(indices, list):
+            for index in indices:
+                if isinstance(index, dict):
+                    self._collect_vars_from_ast(index, names)
+        elif isinstance(indices, dict):
+            self._collect_vars_from_ast(indices, names)
+        elif isinstance(indices, str):
+            names.add(indices)
+        return loop_var in names
+
+    def _openmp_scalar_type(self, type_name: str) -> bool:
+        """Whether a type is safe to create/use as a private scalar."""
+        normalized = (type_name or "").strip()
+        while normalized.startswith("&mut ") or normalized.startswith("&"):
+            normalized = normalized[1:].strip()
+            if normalized.startswith("mut "):
+                normalized = normalized[4:].strip()
+        return normalized in {
+            "bool",
+            "int",
+            "float",
+            "float16",
+            "float32",
+            "float64",
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "uint8",
+            "uint16",
+            "uint32",
+            "uint64",
+        }
+
+    def _validate_openmp_body(
+        self,
+        body: list[Dict],
+        loop_var: str,
+        level: int,
+        reduction_vars: set[str],
+        private_vars: set[str],
+        scope_idx: int,
+        node_idx: int,
+    ) -> None:
+        """Validate the deliberately conservative, race-aware OpenMP subset."""
+        declared_private = set()
+        for body_node in body:
+            if body_node.get("node") in {"declaration", "redeclaration"}:
+                declared_private.update(body_node.get("symbols", []))
+
+        forbidden = {
+            "break",
+            "continue",
+            "return",
+            "while_loop",
+            "function_call",
+            "function_call_assignment",
+            "builtin_function_call",
+            "builtin_function_call_assignment",
+            "method_call",
+            "static_method_call",
+            "c_call",
+            "attribute_assignment",
+            "slice_assignment",
+            "delete",
+        }
+
+        for body_node in body:
+            body_type = body_node.get("node", "")
+            if body_type in forbidden:
+                self.add_error(
+                    f"узел '{body_type}' запрещен внутри OpenMP parallel for; "
+                    "требуется потокобезопасная аннотация",
+                    scope_idx,
+                    node_idx,
+                )
+                continue
+
+            if body_type in {"declaration", "redeclaration"}:
+                var_type = body_node.get("var_type", "")
+                if not self._openmp_scalar_type(var_type):
+                    self.add_error(
+                        f"тип '{var_type}' нельзя объявлять внутри OpenMP parallel for; "
+                        "управляемые объекты пока не являются потокобезопасными",
+                        scope_idx,
+                        node_idx,
+                    )
+                continue
+
+            if body_type in {"assignment", "augmented_assignment"}:
+                targets = set(body_node.get("symbols", []))
+                allowed_private = declared_private | private_vars
+                if body_type == "augmented_assignment":
+                    allowed_private |= reduction_vars
+                invalid_targets = targets - allowed_private
+                if invalid_targets:
+                    self.add_error(
+                        "запись в общую scalar-переменную внутри OpenMP loop "
+                        f"без reduction/private: {', '.join(sorted(invalid_targets))}",
+                        scope_idx,
+                        node_idx,
+                    )
+                continue
+
+            if body_type in {
+                "index_assignment",
+                "nested_index_assignment",
+                "augmented_index_assignment",
+            }:
+                variable = body_node.get("variable", "")
+                info = self.get_symbol_info(variable, level)
+                var_type = info.get("type", "") if info else ""
+                normalized_type = var_type.replace("&mut ", "").replace("&", "").strip()
+                indices = body_node.get("indices")
+                if indices is None:
+                    indices = body_node.get("index")
+                if not normalized_type.startswith(("array[", "tensor[")):
+                    self.add_error(
+                        f"запись в '{variable}' внутри OpenMP loop разрешена только для "
+                        "array/tensor",
+                        scope_idx,
+                        node_idx,
+                    )
+                elif not self._openmp_indices_contain_loop_var(indices, loop_var):
+                    self.add_error(
+                        f"индекс записи в '{variable}' не содержит переменную цикла "
+                        f"'{loop_var}', возможна гонка данных",
+                        scope_idx,
+                        node_idx,
+                    )
+                continue
+
+            if body_type == "if_statement":
+                nested = list(body_node.get("body", []))
+                nested.extend(
+                    item.get("body", []) for item in body_node.get("elif_blocks", [])
+                )
+                else_block = body_node.get("else_block") or {}
+                nested.extend(else_block.get("body", []))
+                self._validate_openmp_body(
+                    nested,
+                    loop_var,
+                    level,
+                    reduction_vars,
+                    private_vars,
+                    scope_idx,
+                    node_idx,
+                )
+                continue
+
+            if body_type == "for_loop":
+                self.add_error(
+                    "вложенный цикл внутри OpenMP parallel for пока не поддерживается; "
+                    "добавьте collapse в следующей версии",
+                    scope_idx,
+                    node_idx,
+                )
+
+    def validate_openmp_loop(self, node: Dict, node_idx: int, scope_idx: int, level: int):
+        """Validate structured OpenMP metadata before C code generation."""
+        metadata = node.get("openmp") or {}
+        if metadata.get("error"):
+            self.add_error(metadata["error"], scope_idx, node_idx)
+            return
+        if metadata.get("backend") != "openmp" or metadata.get("directive") != "parallel for":
+            self.add_error("поддерживается только '#pragma omp parallel for'", scope_idx, node_idx)
+            return
+
+        if node.get("iterable", {}).get("type") != "RANGE_CALL":
+            self.add_error(
+                "OpenMP parallel for требует цикл по range(...)", scope_idx, node_idx
+            )
+            return
+
+        step = str((node.get("iterable", {}).get("arguments", {}) or {}).get("step", "1")).strip()
+        if not re.match(r"^[+-]?[0-9]+$", step) or int(step) == 0:
+            self.add_error(
+                "OpenMP parallel for пока требует постоянный ненулевой целочисленный шаг range",
+                scope_idx,
+                node_idx,
+            )
+
+        grouped = self._openmp_clause_arguments(metadata)
+        allowed = {
+            "schedule",
+            "reduction",
+            "private",
+            "firstprivate",
+            "lastprivate",
+            "shared",
+            "default",
+            "nowait",
+            "ordered",
+        }
+        for name in grouped:
+            if name not in allowed:
+                self.add_error(f"неподдерживаемая OpenMP clause '{name}'", scope_idx, node_idx)
+
+        for argument in grouped.get("schedule", []):
+            if not re.match(r"^(static|dynamic|guided|runtime|auto)(?:\s*,\s*[^,]+)?$", argument):
+                self.add_error(f"некорректная OpenMP clause schedule({argument})", scope_idx, node_idx)
+
+        reduction_vars = set()
+        for argument in grouped.get("reduction", []):
+            reduction = self._openmp_reduction_arguments(argument)
+            if reduction is None:
+                self.add_error(f"некорректная OpenMP clause reduction({argument})", scope_idx, node_idx)
+                continue
+            _, variables = reduction
+            reduction_vars.update(variables)
+            for variable in variables:
+                info = self.get_symbol_info(variable, level)
+                if not info or not self._openmp_scalar_type(info.get("type", "")):
+                    self.add_error(
+                        f"reduction-переменная '{variable}' должна быть scalar",
+                        scope_idx,
+                        node_idx,
+                    )
+
+        private_vars = set()
+        for clause_name in {"private", "firstprivate", "lastprivate", "shared"}:
+            for argument in grouped.get(clause_name, []):
+                variables = self._openmp_csv_identifiers(argument)
+                if variables is None:
+                    self.add_error(f"некорректная OpenMP clause {clause_name}({argument})", scope_idx, node_idx)
+                    continue
+                if clause_name != "shared":
+                    private_vars.update(variables)
+                for variable in variables:
+                    if not self.find_symbol_in_scope(variable, level):
+                        self.add_error(f"OpenMP variable '{variable}' не объявлена", scope_idx, node_idx)
+
+        for clause_name in {"nowait", "ordered"}:
+            for argument in grouped.get(clause_name, []):
+                if argument:
+                    self.add_error(f"OpenMP clause '{clause_name}' не принимает аргументы", scope_idx, node_idx)
+
+        self._validate_openmp_body(
+            node.get("body", []) or [],
+            node.get("loop_variable", ""),
+            level,
+            reduction_vars,
+            private_vars,
+            scope_idx,
+            node_idx,
+        )
 
     def validate_function_return(self, scope: Dict, scope_idx: int):
         """Проверяет, что функция имеет return если нужно"""
