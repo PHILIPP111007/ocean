@@ -2,13 +2,26 @@ import <std/tensor/tensor.oc>
 
 def main() -> int:
     var native: tensor[float32] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
-    var left: Tensor = Tensor.from_tensor(native, "cpu")
-    var right: Tensor = Tensor.zeros(3, 2, "cpu")
-    var product: Tensor = left.matmul(right)
-    var cpu_product: Tensor = product.to("cpu")
+    var left: Tensor[float32] = Tensor[float32].from_tensor(native, "cpu")
+    var right: Tensor[float32] = Tensor[float32].zeros(3, 2, "cpu")
+    var product: Tensor[float32] = left.matmul(right)
+    var cpu_product: Tensor[float32] = product.to("cpu")
     var restored: tensor[float32] = cpu_product.to_tensor()
+    var native_int: tensor[int32] = [[1, 2], [3, 4]]
+    var int_tensor: Tensor[int32] = Tensor[int32].from_tensor(native_int, "cpu")
+    var int_cube: Tensor[int32] = Tensor[int32].zeros(2, 2, 2, "cpu")
+    var native_cube: tensor[int32] = [[[7, 8], [9, 10]], [[11, 12], [13, 14]]]
+    var cube_tensor: Tensor[int32] = Tensor[int32].from_tensor(native_cube, "cpu")
+    var restored_int: tensor[int32] = int_tensor.to_tensor()
+    var restored_cube: tensor[int32] = cube_tensor.to_tensor()
     print(cpu_product.shape(0))
     print(cpu_product.shape(1))
     print(cpu_product.device())
     print(restored[0, 0])
+    print(int_tensor.ndim())
+    print(int_cube.ndim())
+    print(int_cube.shape(2))
+    print(restored_int[0, 0])
+    print(cube_tensor.ndim())
+    print(restored_cube[1, 0, 1])
     return 0

@@ -21,6 +21,10 @@ class TypesMixin:
             # Если это известный C тип, возвращаем как есть
             return py_type
 
+        if self.is_device_tensor_type(py_type):
+            c_type = "Tensor*"
+            return f"{c_type}*" if is_pointer else c_type
+
         if self._is_class_type(py_type):
             # Классы в C - это указатели на структуры
             if is_pointer:

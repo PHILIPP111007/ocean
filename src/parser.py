@@ -856,7 +856,8 @@ class Parser:
 
         # 2. Статический вызов метода: Class.method(args)
         static_method_pattern = (
-            r"^([A-Z][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"
+            r"^([A-Z][a-zA-Z0-9_]*(?:\[[^\]]+\])?)\."
+            r"([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"
         )
         static_method_match = re.match(static_method_pattern, line)
 
@@ -894,11 +895,17 @@ class Parser:
 
         # 3. Вызов статического метода
         if static_method_match:
-            class_name, method_name, args_str = static_method_match.groups()
+            class_type, method_name, args_str = static_method_match.groups()
+            class_name = class_type.split("[", 1)[0]
             # Упрощенная проверка - начинается с заглавной буквы
             if class_name and class_name[0].isupper():
                 parsed = self.parse_static_method_call_node(
-                    line, current_scope, class_name, method_name, args_str
+                    line,
+                    current_scope,
+                    class_name,
+                    method_name,
+                    args_str,
+                    class_type=class_type,
                 )
                 return current_index + 1
 
@@ -2595,11 +2602,13 @@ class Parser:
 
         # 4.3 Вызов метода объекта: obj.method(args)
         static_method_pattern = (
-            r"^([A-Z][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"
+            r"^([A-Z][a-zA-Z0-9_]*(?:\[[^\]]+\])?)\."
+            r"([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"
         )
         static_method_match = re.match(static_method_pattern, expression)
         if static_method_match:
-            class_name, method_name, args_str = static_method_match.groups()
+            class_type, method_name, args_str = static_method_match.groups()
+            class_name = class_type.split("[", 1)[0]
             args = (
                 self.parse_function_arguments_to_ast(args_str)
                 if args_str.strip()
@@ -2608,6 +2617,7 @@ class Parser:
             return {
                 "type": "static_method_call",
                 "class_name": class_name,
+                "class_type": class_type,
                 "method": method_name,
                 "arguments": args,
             }
@@ -5356,7 +5366,13 @@ class Parser:
         return True
 
     def parse_static_method_call_node(
-        self, line: str, scope: dict, class_name: str, method_name: str, args_str: str
+        self,
+        line: str,
+        scope: dict,
+        class_name: str,
+        method_name: str,
+        args_str: str,
+        class_type: str | None = None,
     ) -> bool:
         """Парсит вызов статического метода: Class.method(args)"""
         # Парсим аргументы из строки в список AST
@@ -5368,6 +5384,7 @@ class Parser:
             {
                 "type": "STATIC_METHOD_CALL",
                 "class_name": class_name,
+                "class_type": class_type or class_name,
                 "method": method_name,
                 "arguments": args,
             }

@@ -171,6 +171,10 @@ class OrchestratorMixin:
         elif node_type == "method_call":
             self.generate_method_call(node)
         elif node_type == "static_method_call":  # ДОБАВЬТЕ ЭТО!
+            device_tensor_expr = self._device_tensor_static_call(node)
+            if device_tensor_expr is not None:
+                self.add_line(f"(void){device_tensor_expr};")
+                return
             class_name = node.get("class_name", "")
             method_name = node.get("method", "")
             args = node.get("arguments", [])

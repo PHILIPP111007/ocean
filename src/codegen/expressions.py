@@ -177,6 +177,13 @@ class ExpressionsMixin:
             if var_info:
                 obj_type = var_info.get("py_type", "")
 
+                if self.is_device_tensor_type(obj_type):
+                    arg_strings = [self.generate_expression(arg) for arg in args]
+                    full_args = object_name
+                    if arg_strings:
+                        full_args += ", " + ", ".join(arg_strings)
+                    return f"Tensor_{method_name}({full_args})"
+
                 if self._is_class_type(obj_type):
                     # Это вызов метода класса: obj.method(args)
                     arg_strings = [self.generate_expression(arg) for arg in args]
@@ -184,7 +191,8 @@ class ExpressionsMixin:
                     full_args = f"{object_name}"
                     if args_str:
                         full_args = f"{object_name}, {args_str}"
-                    return f"{obj_type}_{method_name}({full_args})"
+                    class_name = obj_type.split("[", 1)[0]
+                    return f"{class_name}_{method_name}({full_args})"
 
                 elif object_name == "self":
                     # self.method(args) внутри метода класса
@@ -209,6 +217,9 @@ class ExpressionsMixin:
             )
 
         elif node_type == "static_method_call":
+            device_tensor_expr = self._device_tensor_static_call(ast)
+            if device_tensor_expr is not None:
+                return device_tensor_expr
             class_name = ast.get("class_name", "")
             method_name = ast.get("method", "")
             args = ast.get("arguments", [])

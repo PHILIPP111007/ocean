@@ -1,4 +1,4 @@
-# `Tensor`
+# `Tensor[T]`
 
 ## Purpose
 
@@ -6,13 +6,14 @@
 separate from the existing lower-case `tensor[T]` primitive:
 
 ```text
-tensor[float32]  # typed CPU storage primitive
-Tensor           # standard-library facade with a device
+tensor[float32]   # typed CPU storage primitive
+Tensor[float32]   # standard-library facade with a device
 ```
 
-The first implementation targets `float32`. The facade should become
-monomorphized as `Tensor[T]` when generic classes are available in the type
-system; the backend ABI must not be redesigned at that point.
+The facade accepts numeric `T`: `bool`, signed/unsigned integer types,
+`size_t`/`intptr_t`/`uintptr_t`, `float16`, `float32`, and `float64`.
+`str` and other reference types are rejected. `Tensor` without a type
+argument is an alias for `Tensor[float32]`.
 
 ## Public API
 
@@ -21,14 +22,14 @@ The initial API contract is:
 ```text
 class Tensor:
     @staticmethod
-    def zeros(rows: int, cols: int, device: str) -> Tensor
+    def zeros(*shape: int, device: str) -> Tensor[T]
     @staticmethod
-    def from_tensor(source: &tensor[float32], device: str) -> Tensor
+    def from_tensor(source: &tensor[T], device: str) -> Tensor[T]
 
-    def to(self, device: str) -> Tensor
-    def to_tensor(self) -> tensor[float32]
-    def matmul(self, other: &Tensor) -> Tensor
-    def copy(self) -> Tensor
+    def to(self, device: str) -> Tensor[T]
+    def to_tensor(self) -> pointer
+    def matmul(self, other: &Tensor[T]) -> Tensor[T]
+    def copy(self) -> Tensor[T]
     def shape(self, axis: int) -> int
     def ndim() -> int
     def size() -> size_t
@@ -40,13 +41,13 @@ Valid device strings in v1 are exactly `"cpu"` and `"gpu"`.
 Example:
 
 ```text
-var A: Tensor = Tensor.zeros(100, 100, "cpu")
-var B: Tensor = Tensor.zeros(100, 100, "cpu")
+var A: Tensor[float32] = Tensor[float32].zeros(100, 100, "cpu")
+var B: Tensor[float32] = Tensor[float32].zeros(100, 100, "cpu")
 
-var A_gpu: Tensor = A.to("gpu")
-var B_gpu: Tensor = B.to("gpu")
-var C_gpu: Tensor = A_gpu.matmul(B_gpu)
-var C: Tensor = C_gpu.to("cpu")
+var A_gpu: Tensor[float32] = A.to("gpu")
+var B_gpu: Tensor[float32] = B.to("gpu")
+var C_gpu: Tensor[float32] = A_gpu.matmul(B_gpu)
+var C: Tensor[float32] = C_gpu.to("cpu")
 ```
 
 ## Semantics of `.to(device)`
@@ -68,14 +69,14 @@ be added, but it must be explicit because it changes the owned backend storage.
 The compiler-native tensor[T] remains the CPU storage type. The standard
 facade provides explicit conversions for the first backend version:
 
-    var cpu: tensor[float32] = [[1.0, 2.0], [3.0, 4.0]]
-    var device_tensor: Tensor = Tensor.from_tensor(cpu, "cpu")
-    var gpu_tensor: Tensor = device_tensor.to("gpu")
-    var restored: tensor[float32] = gpu_tensor.to_tensor()
+var cpu: tensor[int32] = [[1, 2], [3, 4]]
+var device_tensor: Tensor[int32] = Tensor[int32].from_tensor(cpu, "cpu")
+var gpu_tensor: Tensor[int32] = device_tensor.to("gpu")
+var restored: tensor[int32] = gpu_tensor.to_tensor()
 
-from_tensor() copies source data into backend-owned storage. It accepts 2D
-tensor[float32] values and preserves tensor views by using their shape and
-strides. to_tensor() always returns a new CPU tensor; a GPU source is
+from_tensor() copies source data into backend-owned storage for any rank and
+numeric `T`, preserving tensor views through their shape and strides.
+to_tensor() always returns a new CPU tensor; a GPU source is
 downloaded first. This copy boundary keeps native tensor ownership separate
 from the opaque device handle.
 
@@ -86,7 +87,7 @@ The backend payload is opaque to Ocean code. Conceptually it is a tagged union:
 ```text
 Tensor {
     device: "cpu" | "gpu"
-    dtype: "float32"
+    dtype: numeric T
     shape: metadata
     strides: metadata
     storage: CpuStorage | GpuStorage
@@ -104,8 +105,9 @@ owns an opaque runtime handle and its OpenCL context association.
 - `A.shape[1] == B.shape[0]` is required;
 - both tensors must be on the same device in v1;
 - the result is allocated on that device;
-- CPU dispatches to the existing tensor implementation;
-- GPU dispatches to the OpenCL `matmul_gpu` kernel;
+- CPU dispatches through a dtype-generic implementation;
+- GPU uses the OpenCL `float32` kernel and a correct CPU fallback for other
+  numeric dtypes until specialized OpenCL kernels are added;
 - the operation must not transpose `B` implicitly.
 
 Mixed-device matmul is rejected in v1. An explicit `.to("cpu")` or

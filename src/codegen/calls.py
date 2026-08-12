@@ -73,6 +73,15 @@ class CallsMixin:
             return self._generate_tensor_method_call(
                 object_expression, obj_type, method_name, arg_strings, is_standalone, target_var
             )
+        if self.is_device_tensor_type(obj_type):
+            full_args = object_expression
+            if arg_strings:
+                full_args += ", " + ", ".join(arg_strings)
+            expr = f"Tensor_{method_name}({full_args})"
+            if is_standalone:
+                self.add_line(f"{expr};")
+                return None
+            return expr
 
         if self._is_class_type(obj_type):
             full_args = object_expression

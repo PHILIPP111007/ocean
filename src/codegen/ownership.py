@@ -114,6 +114,8 @@ static char* ocean_strdup(const char* src) {
         base = self.strip_borrow_type(py_type)
         if not base:
             return False
+        if self.is_device_tensor_type(base):
+            return True
         if base.startswith(("list[", "dict[", "tuple[")):
             return True
         return self._is_class_type(base)

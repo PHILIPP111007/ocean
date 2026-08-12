@@ -3,6 +3,7 @@ from copy import deepcopy
 from typing import Dict, List, Optional
 
 from src.modules.constants import DATA_TYPES
+from src.parsing.type_system import TENSOR_DTYPES
 from src.modules.logger import logger
 from src.typed_ir import TypedModule
 
@@ -92,7 +93,9 @@ class JSONValidator:
                     self.external_c_functions.update(
                         {
                             "ocean_tensor_zeros",
+                            "ocean_tensor_zeros_nd",
                             "ocean_tensor_from_cpu_strided",
+                            "ocean_tensor_from_cpu_native",
                             "ocean_tensor_copy",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",
@@ -101,6 +104,7 @@ class JSONValidator:
                             "ocean_tensor_size",
                             "ocean_tensor_device",
                             "ocean_tensor_to_cpu_tensor",
+                            "ocean_tensor_export_free",
                             "ocean_tensor_release",
                         }
                     )
@@ -1025,6 +1029,14 @@ class JSONValidator:
             return
 
         type_info = symbol_info.get("type_info") or {}
+        if var_type.startswith("Tensor[") and var_type.endswith("]"):
+            tensor_dtype = var_type[len("Tensor[") : -1].strip()
+            if tensor_dtype not in TENSOR_DTYPES:
+                self.add_error(
+                    f"Tensor dtype '{tensor_dtype}' must be a numeric scalar type",
+                    scope_idx,
+                    None,
+                )
         known_generic = (
             type_info.get("kind") in {"generic", "borrow", "mut_borrow", "raw_pointer", "optional"}
             or var_type.startswith(("list[", "dict[", "tuple[", "array[", "tensor[", "shared["))

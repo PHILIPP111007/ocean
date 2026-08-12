@@ -13,8 +13,8 @@ class Tensor:
         return value
 
     @staticmethod
-    def from_tensor(source: &tensor[float32], device: str) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_from_cpu_strided(source.data, source.shape, source.strides, source.ndim, device)
+    def from_tensor(source: pointer, device: str) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_from_cpu_native(source, "float32", device)
         var value: Tensor = Tensor(handle)
         return value
 
@@ -45,7 +45,7 @@ class Tensor:
     def device(self) -> str:
         return ocean_tensor_device(self.handle)
 
-    def to_tensor(self) -> tensor[float32]:
+    def to_tensor(self) -> pointer:
         return ocean_tensor_to_cpu_tensor(self.handle)
 
     def release(self) -> None:

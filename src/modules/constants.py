@@ -30,6 +30,7 @@ DATA_TYPES = [
     "uint64_t",
     "str",
     "None",
+    "pointer",
     "list",
     "dict",
     "set",

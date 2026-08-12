@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
-from src.parsing.type_system import TypeParser
+from src.parsing.type_system import TENSOR_DTYPES, TypeParser
 
 
 class ArrayCodegenMixin:
@@ -13,6 +13,40 @@ class ArrayCodegenMixin:
 
     def is_tensor_type(self, py_type: str) -> bool:
         return self.strip_borrow_type(py_type).startswith("tensor[")
+
+    def is_device_tensor_type(self, py_type: str) -> bool:
+        base = self.strip_borrow_type(py_type)
+        return base == "Tensor" or (
+            base.startswith("Tensor[") and base.endswith("]")
+        )
+
+    def device_tensor_dtype(self, py_type: str) -> str:
+        base = self.strip_borrow_type(py_type)
+        if base == "Tensor":
+            return "float32"
+        dtype = base[len("Tensor[") : -1].strip()
+        if dtype not in TENSOR_DTYPES:
+            raise RuntimeError(
+                f"Tensor dtype '{dtype}' is not numeric or is not supported"
+            )
+        return dtype
+
+    def canonical_tensor_dtype(self, dtype: str) -> str:
+        return {
+            "float": "float64",
+            "double": "float64",
+            "float64": "float64",
+            "float32": "float32",
+            "int": "int32",
+            "int32_t": "int32",
+            "uint32_t": "uint32",
+            "int8_t": "int8",
+            "int16_t": "int16",
+            "int64_t": "int64",
+            "uint8_t": "uint8",
+            "uint16_t": "uint16",
+            "uint64_t": "uint64",
+        }.get(dtype, dtype)
 
     def is_owned_buffer_type(self, py_type: str) -> bool:
         return self.is_array_type(py_type) or self.is_tensor_type(py_type)

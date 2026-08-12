@@ -6,6 +6,63 @@ from typing import Dict, Iterable, List
 class TensorCodegenMixin:
     """Lower dense row-major ``tensor[T]`` values with owned storage."""
 
+    def _device_tensor_static_call(self, ast: Dict):
+        """Lower Tensor[T].zeros/from_tensor without runtime dtype erasure."""
+        class_type = ast.get("class_type") or ast.get("class_name", "")
+        if not class_type.startswith("Tensor"):
+            return None
+
+        dtype = self.device_tensor_dtype(class_type)
+        args = ast.get("arguments", []) or []
+        method = ast.get("method", "")
+
+        if method == "zeros":
+            if len(args) < 2:
+                raise RuntimeError("Tensor[T].zeros expects dimensions and device")
+            device_ast = args[-1]
+            dimensions = args[:-1]
+            shape_name = f"ocean_device_tensor_shape_{self.temp_var_counter}"
+            self.temp_var_counter += 1
+            values = ", ".join(
+                f"(size_t)({self.generate_expression(argument)})"
+                for argument in dimensions
+            )
+            self.add_line(
+                f"size_t {shape_name}[{len(dimensions)}] = {{ {values} }};"
+            )
+            device = self.generate_expression(device_ast)
+            return (
+                f"create_Tensor(ocean_tensor_zeros_nd({shape_name}, "
+                f"{len(dimensions)}, \"{dtype}\", {device}))"
+            )
+
+        if method == "from_tensor":
+            if len(args) != 2:
+                raise RuntimeError("Tensor[T].from_tensor expects tensor and device")
+            source_ast, device_ast = args
+            source = self.generate_expression(source_ast)
+            source_info = None
+            if source_ast.get("type") == "variable":
+                source_info = self.get_variable_info(source_ast.get("value", ""))
+            source_type = source_info.get("py_type", "") if source_info else ""
+            if not self.is_tensor_type(source_type):
+                raise RuntimeError(
+                    "Tensor[T].from_tensor expects a compiler-native tensor[T]"
+                )
+            source_dtype = self.tensor_element_type(source_type)
+            if self.canonical_tensor_dtype(source_dtype) != self.canonical_tensor_dtype(dtype):
+                raise RuntimeError(
+                    "Tensor[T].from_tensor requires matching native and device dtypes"
+                )
+            device = self.generate_expression(device_ast)
+            return (
+                f"create_Tensor(ocean_tensor_from_cpu_strided("
+                f"(const void*){source}->data, {source}->shape, {source}->strides, "
+                f"{source}->ndim, \"{dtype}\", {device}))"
+            )
+
+        return None
+
     def _tensor_fast_index_expression(self, tensor_expr: str, indices: Iterable[str]):
         values = list(indices)
         aliases = getattr(self, "tensor_fast_access", {})
