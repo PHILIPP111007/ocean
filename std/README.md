@@ -17,6 +17,10 @@ upper-case `Tensor` is the public facade that owns metadata and one backend
 storage variant. User code should not access `cl_mem`, OpenCL contexts, queues,
 or backend-specific pointers directly.
 
+The two types interoperate explicitly through Tensor.from_tensor(...) and
+Tensor.to_tensor(). This avoids making the compiler-native CPU layout part of
+the public GPU ABI.
+
 See:
 
 - [Tensor API](tensor/README.md)

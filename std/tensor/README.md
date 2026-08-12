@@ -22,8 +22,11 @@ The initial API contract is:
 class Tensor:
     @staticmethod
     def zeros(rows: int, cols: int, device: str) -> Tensor
+    @staticmethod
+    def from_tensor(source: &tensor[float32], device: str) -> Tensor
 
     def to(self, device: str) -> Tensor
+    def to_tensor(self) -> tensor[float32]
     def matmul(self, other: &Tensor) -> Tensor
     def copy(self) -> Tensor
     def shape(self, axis: int) -> int
@@ -59,6 +62,22 @@ model:
 
 The original tensor remains valid after a transfer. A future `to_inplace()` may
 be added, but it must be explicit because it changes the owned backend storage.
+
+## Interoperability with tensor[T]
+
+The compiler-native tensor[T] remains the CPU storage type. The standard
+facade provides explicit conversions for the first backend version:
+
+    var cpu: tensor[float32] = [[1.0, 2.0], [3.0, 4.0]]
+    var device_tensor: Tensor = Tensor.from_tensor(cpu, "cpu")
+    var gpu_tensor: Tensor = device_tensor.to("gpu")
+    var restored: tensor[float32] = gpu_tensor.to_tensor()
+
+from_tensor() copies source data into backend-owned storage. It accepts 2D
+tensor[float32] values and preserves tensor views by using their shape and
+strides. to_tensor() always returns a new CPU tensor; a GPU source is
+downloaded first. This copy boundary keeps native tensor ownership separate
+from the opaque device handle.
 
 ## Internal representation
 

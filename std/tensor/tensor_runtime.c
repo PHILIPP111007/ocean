@@ -1,8 +1,10 @@
 #include "std/tensor/tensor_runtime.h"
 
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
 #include <CL/cl.h>
@@ -16,6 +18,17 @@ struct ocean_tensor_handle {
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     cl_mem gpu_data;
 #endif
+};
+
+struct ocean_tensor_float32 {
+    float *data;
+    size_t *shape;
+    size_t *strides;
+    size_t ndim;
+    size_t size;
+    size_t refcount;
+    bool is_view;
+    struct ocean_tensor_float32 *owner;
 };
 
 enum {
@@ -207,6 +220,46 @@ ocean_tensor_handle_t ocean_tensor_zeros(int rows, int cols, const char *device)
     return tensor;
 }
 
+ocean_tensor_handle_t ocean_tensor_from_cpu_strided(
+    const float *data,
+    const size_t *shape,
+    const size_t *strides,
+    size_t ndim,
+    const char *device
+) {
+    if (!shape || !strides || ndim != 2) {
+        ocean_tensor_fail("Tensor.from_tensor currently requires a 2D tensor");
+    }
+    if (shape[0] > (size_t)INT_MAX || shape[1] > (size_t)INT_MAX) {
+        ocean_tensor_fail("Tensor shape does not fit the standard backend");
+    }
+
+    ocean_tensor_handle_t tensor = ocean_tensor_zeros(
+        (int)shape[0], (int)shape[1], device
+    );
+    size_t elements = ocean_tensor_elements(tensor);
+    float *contiguous = elements ? (float *)malloc(elements * sizeof(float)) : NULL;
+    if (elements && !contiguous) ocean_tensor_fail("out of memory importing tensor");
+
+    for (size_t row = 0; row < shape[0]; ++row) {
+        for (size_t col = 0; col < shape[1]; ++col) {
+            size_t source_offset = row * strides[0] + col * strides[1];
+            contiguous[row * shape[1] + col] = data ? data[source_offset] : 0.0f;
+        }
+    }
+
+    if (tensor->device == OCEAN_TENSOR_CPU) {
+        if (elements) memcpy(tensor->cpu_data, contiguous, elements * sizeof(float));
+    }
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    else {
+        ocean_tensor_gpu_write(tensor, contiguous);
+    }
+#endif
+    free(contiguous);
+    return tensor;
+}
+
 ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor) {
     if (!tensor) ocean_tensor_fail("cannot copy a null tensor");
     ocean_tensor_handle_t result = ocean_tensor_alloc(tensor->rows, tensor->cols, tensor->device);
@@ -348,6 +401,37 @@ char *ocean_tensor_device(ocean_tensor_handle_t tensor) {
     char *result = (char *)malloc(strlen(name) + 1);
     if (!result) ocean_tensor_fail("out of memory copying device name");
     strcpy(result, name);
+    return result;
+}
+
+ocean_tensor_float32 *ocean_tensor_to_cpu_tensor(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("cannot export a null Tensor");
+    ocean_tensor_float32 *result = (ocean_tensor_float32 *)calloc(1, sizeof(*result));
+    if (!result) ocean_tensor_fail("out of memory exporting tensor");
+
+    result->ndim = 2;
+    result->shape = (size_t *)malloc(2 * sizeof(size_t));
+    result->strides = (size_t *)malloc(2 * sizeof(size_t));
+    result->size = ocean_tensor_elements(tensor);
+    result->refcount = 1;
+    result->is_view = false;
+    result->owner = NULL;
+    if (!result->shape || !result->strides) ocean_tensor_fail("out of memory exporting tensor metadata");
+    result->shape[0] = (size_t)tensor->rows;
+    result->shape[1] = (size_t)tensor->cols;
+    result->strides[1] = 1;
+    result->strides[0] = result->strides[1] * result->shape[1];
+    result->data = result->size ? (float *)malloc(result->size * sizeof(float)) : NULL;
+    if (result->size && !result->data) ocean_tensor_fail("out of memory exporting tensor data");
+
+    if (tensor->device == OCEAN_TENSOR_CPU) {
+        if (result->size) memcpy(result->data, tensor->cpu_data, result->size * sizeof(float));
+    }
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    else {
+        ocean_tensor_gpu_read(tensor, result->data);
+    }
+#endif
     return result;
 }
 

@@ -13,13 +13,16 @@ def test_standard_tensor_cpu_facade_runs(tmp_path):
 import <std/tensor/tensor.oc>
 
 def main() -> int:
-    var left: Tensor = Tensor.zeros(2, 3, "cpu")
+    var native: tensor[float32] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    var left: Tensor = Tensor.from_tensor(native, "cpu")
     var right: Tensor = Tensor.zeros(3, 2, "cpu")
     var result: Tensor = left.matmul(right)
     var copy: Tensor = result.to("cpu")
+    var restored: tensor[float32] = copy.to_tensor()
     print(copy.shape(0))
     print(copy.shape(1))
     print(copy.device())
+    print(restored[0, 0])
     return 0
 """,
         encoding="utf-8",
@@ -43,4 +46,4 @@ def main() -> int:
         text=True,
     )
 
-    assert result.stdout.splitlines() == ["2", "2", "cpu"]
+    assert result.stdout.splitlines() == ["2", "2", "cpu", "0.000000"]
