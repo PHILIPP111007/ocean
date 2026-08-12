@@ -898,7 +898,15 @@ class Parser:
             class_type, method_name, args_str = static_method_match.groups()
             class_name = class_type.split("[", 1)[0]
             # Упрощенная проверка - начинается с заглавной буквы
-            if class_name and class_name[0].isupper():
+            # A variable may legally start with an uppercase letter (for
+            # example matrix variables A/B).  Prefer the object call when
+            # the receiver is already present in the current symbol scope.
+            receiver_symbol, _ = self.find_symbol_recursive(current_scope, class_name)
+            receiver_is_variable = bool(
+                receiver_symbol
+                and receiver_symbol.get("key") not in {"class", "function"}
+            )
+            if class_name and class_name[0].isupper() and not receiver_is_variable:
                 parsed = self.parse_static_method_call_node(
                     line,
                     current_scope,
