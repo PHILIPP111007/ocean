@@ -2,3 +2,4 @@ pytest
 tomli>=2.0; python_version < "3.11"
 build
 twine
+graphifyy
