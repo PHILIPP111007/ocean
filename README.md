@@ -188,7 +188,7 @@ gcc -std=c11 -Wall -Wextra -Wpedantic \
 
 ## Performance snapshot
 
-On the development machine, the current `examples/main.oc` benchmark runs in roughly **3 seconds
+On the development machine, the current `examples/matmul.oc` benchmark runs in roughly **3 seconds
 without compiler optimization** and **under 1 second with `-O3`**. These numbers are hardware- and
 compiler-dependent; the benchmark is the source of truth for comparisons.
 
