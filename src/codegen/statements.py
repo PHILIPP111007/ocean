@@ -188,8 +188,11 @@ class StatementsMixin:
                 raise RuntimeError("unsupported OpenMP loop directive")
             self.add_line(self._format_openmp_pragma(openmp))
 
+        collapse_count = self._openmp_collapse_count(openmp) if openmp else 1
+        canonical_openmp_loop = bool(openmp) or self.openmp_collapse_remaining > 0
+
         # loop variable belongs to the loop's C declaration, not an owning object.
-        if openmp:
+        if canonical_openmp_loop:
             try:
                 numeric_step = int(str(step).strip())
             except ValueError as error:
@@ -211,6 +214,11 @@ class StatementsMixin:
         self.indent_level += 1
         self.enter_scope("loop")
         self.declare_variable(loop_var, "int")
+        previous_collapse_remaining = self.openmp_collapse_remaining
+        if openmp:
+            self.openmp_collapse_remaining = collapse_count - 1
+        elif self.openmp_collapse_remaining > 0:
+            self.openmp_collapse_remaining -= 1
         previous_bounds = self.tensor_fast_loop_bounds
         self.tensor_fast_loop_bounds = dict(previous_bounds)
         self.tensor_fast_loop_bounds[loop_var] = {
@@ -223,6 +231,7 @@ class StatementsMixin:
                 self.generate_graph_node(body_node)
         finally:
             self.tensor_fast_loop_bounds = previous_bounds
+            self.openmp_collapse_remaining = previous_collapse_remaining
         self.exit_scope()
         self.indent_level -= 1
         self.add_line("}")
@@ -231,6 +240,7 @@ class StatementsMixin:
         """Render validated structured OpenMP metadata as one C pragma."""
         allowed = {
             "schedule",
+            "collapse",
             "reduction",
             "private",
             "firstprivate",
@@ -256,6 +266,21 @@ class StatementsMixin:
             rendered.append(f"{name}({arguments})")
         suffix = " " + " ".join(rendered) if rendered else ""
         return f"#pragma omp parallel for{suffix}"
+
+    def _openmp_collapse_count(self, metadata: Dict | None) -> int:
+        """Return the validated collapse count for an OpenMP directive."""
+        if not metadata:
+            return 1
+        values = [
+            str(clause.get("arguments", "")).strip()
+            for clause in metadata.get("clauses", []) or []
+            if clause.get("name") == "collapse"
+        ]
+        if not values:
+            return 1
+        if len(values) != 1 or not re.match(r"^[1-9][0-9]*$", values[0]):
+            raise RuntimeError("OpenMP collapse requires one positive integer")
+        return int(values[0])
 
     def generate_attribute_assignment(self, node: Dict):
         """Ownership-safe class field assignment."""

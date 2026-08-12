@@ -13,12 +13,25 @@ def main() -> int:
     return 0
 ```
 
+Вложенные циклы можно объединить через `collapse(n)`:
+
+```text
+#pragma omp parallel for collapse(2) reduction(+:total)
+for i in range(0, rows):
+    for j in range(0, columns):
+        total += values[i, j]
+```
+
+Для `collapse(n)` циклы должны быть идеально вложены: между ними не должно
+быть операторов, каждый цикл должен использовать `range(...)`, а шаг должен быть
+постоянным ненулевым целым числом. Все переменные collapsed-цикла должны входить
+в индекс изменяемого `array`/`tensor`.
+
 Генерируется стандартная C-директива `#pragma omp parallel for`. Допустимо также
 написание `#pragma opm ...` для совместимости, но в C всегда выводится `omp`.
 
-Поддерживаемые clauses: `schedule`, `reduction`, `private`, `firstprivate`,
-`lastprivate`, `shared`, `default`, `nowait` и `ordered`. `collapse` будет
-добавлен вместе с безопасной поддержкой вложенных циклов.
+Поддерживаемые clauses: `schedule`, `collapse`, `reduction`, `private`,
+`firstprivate`, `lastprivate`, `shared`, `default`, `nowait` и `ordered`.
 
 Для `parallel for` сейчас разрешены только циклы `range(...)` с постоянным
 ненулевым целочисленным шагом. Тело может работать со scalar-переменными и

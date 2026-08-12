@@ -1,27 +1,15 @@
-def transpose_matrix(source: &tensor[float32], target: &mut tensor[float32]) -> None:
-    var rows: int = source.shape[0]
-    var cols: int = source.shape[1]
-
-    for i in range(rows):
-        for j in range(cols):
-            target[j, i] = source[i, j]
-
-    return None
-
-
-def matmul(A: &tensor[float32], B_transposed: &tensor[float32], C: &mut tensor[float32]) -> None:
+def matmul(A: &tensor[float32], B: &tensor[float32], C: &mut tensor[float32]) -> None:
     var rows_A: int = A.shape[0]
     var cols_A: int = A.shape[1]
-    var cols_B: int = B_transposed.shape[0]
+    var cols_B: int = B.shape[1]
 
-    # B_transposed хранит строки исходной B как строки, поэтому оба
-    # произведения читаются последовательно по памяти.
+    #pragma omp parallel for collapse(2)
     for i in range(rows_A):
         for j in range(cols_B):
             var sum_value: float32 = 0.0
 
             for k in range(cols_A):
-                sum_value = sum_value + A[i, k] * B_transposed[j, k]
+                sum_value = sum_value + A[i, k] * B[k, j]
 
             C[i, j] = sum_value
 
@@ -33,19 +21,14 @@ def main() -> int:
 
     var A: tensor[float32] = tensor.zeros(size, size)
     var B: tensor[float32] = tensor.zeros(size, size)
-    var B_transposed: tensor[float32] = tensor.zeros(size, size)
     var C: tensor[float32] = tensor.zeros(size, size)
 
-    # Заполняем диагонали тестовыми значениями.
     for i in range(size):
         A[i, i] = 1.0
         B[i, i] = 2.0
 
-    transpose_matrix(B, B_transposed)
-
-    # Перемножение матриц 100 x 100 тысячу раз.
     for _ in range(1000):
-        matmul(A, B_transposed, C)
+        matmul(A, B, C)
 
     print("C[0, 0] =", C[0, 0])
     print("C.shape[0] =", C.shape[0])

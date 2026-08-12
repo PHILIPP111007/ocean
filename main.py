@@ -128,6 +128,10 @@ def compile_c(c_path: Path, binary_path: Path, compiler: str = "gcc", cflags: li
         flag in {"-fopenmp", "-fopenmp-simd"} for flag in flags
     ):
         flags.append("-fopenmp")
+        
+        if "-O2" not in flags or "-O3" not in flags:
+            flags.append("-O3")
+
     # ``math.h`` declares functions supplied by libm on GCC and Clang.  Keep
     # the FFI source syntax simple: a ``cimport <math.h>`` automatically makes
     # the corresponding linker dependency available to the generated program.

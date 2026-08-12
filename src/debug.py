@@ -2599,7 +2599,7 @@ class JSONValidator:
             return None
         return match.group(1), variables
 
-    def _openmp_indices_contain_loop_var(self, indices, loop_var: str) -> bool:
+    def _openmp_indices_contain_loop_vars(self, indices, loop_vars: set[str]) -> bool:
         names = set()
         if isinstance(indices, list):
             for index in indices:
@@ -2609,7 +2609,7 @@ class JSONValidator:
             self._collect_vars_from_ast(indices, names)
         elif isinstance(indices, str):
             names.add(indices)
-        return loop_var in names
+        return loop_vars.issubset(names)
 
     def _openmp_scalar_type(self, type_name: str) -> bool:
         """Whether a type is safe to create/use as a private scalar."""
@@ -2644,8 +2644,10 @@ class JSONValidator:
         private_vars: set[str],
         scope_idx: int,
         node_idx: int,
+        loop_vars: set[str] | None = None,
     ) -> None:
         """Validate the deliberately conservative, race-aware OpenMP subset."""
+        active_loop_vars = set(loop_vars or {loop_var})
         declared_private = set()
         for body_node in body:
             if body_node.get("node") in {"declaration", "redeclaration"}:
@@ -2724,10 +2726,11 @@ class JSONValidator:
                         scope_idx,
                         node_idx,
                     )
-                elif not self._openmp_indices_contain_loop_var(indices, loop_var):
+                elif not self._openmp_indices_contain_loop_vars(indices, active_loop_vars):
                     self.add_error(
-                        f"индекс записи в '{variable}' не содержит переменную цикла "
-                        f"'{loop_var}', возможна гонка данных",
+                        f"индекс записи в '{variable}' не содержит все переменные "
+                        f"вложенного цикла ({', '.join(sorted(active_loop_vars))}), "
+                        "возможна гонка данных",
                         scope_idx,
                         node_idx,
                     )
@@ -2748,16 +2751,93 @@ class JSONValidator:
                     private_vars,
                     scope_idx,
                     node_idx,
+                    active_loop_vars,
                 )
                 continue
 
             if body_type == "for_loop":
+                # A non-OpenMP loop after the collapsed nest is sequential
+                # inside each OpenMP iteration.  It must still be validated,
+                # but it is not another parallel dimension.
+                if body_node.get("openmp"):
+                    self.add_error(
+                        "отдельный OpenMP pragma внутри уже параллельного цикла "
+                        "пока не поддерживается",
+                        scope_idx,
+                        node_idx,
+                    )
+                    continue
+                if body_node.get("iterable", {}).get("type") != "RANGE_CALL":
+                    self.add_error(
+                        "последовательный вложенный цикл внутри OpenMP loop "
+                        "должен использовать range(...)",
+                        scope_idx,
+                        node_idx,
+                    )
+                    continue
+                nested_loop_var = body_node.get("loop_variable", "")
+                self._validate_openmp_body(
+                    body_node.get("body", []) or [],
+                    nested_loop_var,
+                    level,
+                    reduction_vars,
+                    private_vars | declared_private,
+                    scope_idx,
+                    node_idx,
+                    active_loop_vars,
+                )
+
+    def _openmp_constant_step(self, node: Dict) -> bool:
+        step = str(
+            (node.get("iterable", {}).get("arguments", {}) or {}).get("step", "1")
+        ).strip()
+        return bool(re.match(r"^[+-]?[0-9]+$", step)) and int(step) != 0
+
+    def _openmp_collapse_chain(
+        self,
+        node: Dict,
+        count: int,
+        scope_idx: int,
+        node_idx: int,
+    ) -> list[Dict] | None:
+        """Validate and return the perfectly nested loop chain."""
+        chain = [node]
+        current = node
+        for depth in range(1, count):
+            body = current.get("body", []) or []
+            if len(body) != 1 or body[0].get("node") != "for_loop":
                 self.add_error(
-                    "вложенный цикл внутри OpenMP parallel for пока не поддерживается; "
-                    "добавьте collapse в следующей версии",
+                    f"collapse({count}) требует идеально вложенные for-циклы "
+                    f"без промежуточных операторов (уровень {depth + 1})",
                     scope_idx,
                     node_idx,
                 )
+                return None
+            current = body[0]
+            if current.get("openmp"):
+                self.add_error(
+                    "внутренний цикл collapse не должен иметь отдельный OpenMP pragma",
+                    scope_idx,
+                    node_idx,
+                )
+                return None
+            if current.get("iterable", {}).get("type") != "RANGE_CALL":
+                self.add_error(
+                    "каждый цикл в collapse должен использовать range(...)",
+                    scope_idx,
+                    node_idx,
+                )
+                return None
+            if not self._openmp_constant_step(current):
+                self.add_error(
+                    "каждый цикл в collapse должен иметь постоянный ненулевой "
+                    "целочисленный шаг",
+                    scope_idx,
+                    node_idx,
+                )
+                return None
+            chain.append(current)
+        return chain
 
     def validate_openmp_loop(self, node: Dict, node_idx: int, scope_idx: int, level: int):
         """Validate structured OpenMP metadata before C code generation."""
@@ -2775,8 +2855,7 @@ class JSONValidator:
             )
             return
 
-        step = str((node.get("iterable", {}).get("arguments", {}) or {}).get("step", "1")).strip()
-        if not re.match(r"^[+-]?[0-9]+$", step) or int(step) == 0:
+        if not self._openmp_constant_step(node):
             self.add_error(
                 "OpenMP parallel for пока требует постоянный ненулевой целочисленный шаг range",
                 scope_idx,
@@ -2786,6 +2865,7 @@ class JSONValidator:
         grouped = self._openmp_clause_arguments(metadata)
         allowed = {
             "schedule",
+            "collapse",
             "reduction",
             "private",
             "firstprivate",
@@ -2802,6 +2882,20 @@ class JSONValidator:
         for argument in grouped.get("schedule", []):
             if not re.match(r"^(static|dynamic|guided|runtime|auto)(?:\s*,\s*[^,]+)?$", argument):
                 self.add_error(f"некорректная OpenMP clause schedule({argument})", scope_idx, node_idx)
+
+        collapse_count = 1
+        collapse_values = grouped.get("collapse", [])
+        if len(collapse_values) > 1 or (
+            collapse_values
+            and not re.match(r"^[1-9][0-9]*$", collapse_values[0])
+        ):
+            self.add_error(
+                "collapse требует ровно одного положительного целого",
+                scope_idx,
+                node_idx,
+            )
+        elif collapse_values:
+            collapse_count = int(collapse_values[0])
 
         reduction_vars = set()
         for argument in grouped.get("reduction", []):
@@ -2838,15 +2932,33 @@ class JSONValidator:
                 if argument:
                     self.add_error(f"OpenMP clause '{clause_name}' не принимает аргументы", scope_idx, node_idx)
 
-        self._validate_openmp_body(
-            node.get("body", []) or [],
-            node.get("loop_variable", ""),
-            level,
-            reduction_vars,
-            private_vars,
-            scope_idx,
-            node_idx,
-        )
+        if collapse_count > 1:
+            chain = self._openmp_collapse_chain(
+                node, collapse_count, scope_idx, node_idx
+            )
+            if chain is not None:
+                loop_vars = {item.get("loop_variable", "") for item in chain}
+                final_loop = chain[-1]
+                self._validate_openmp_body(
+                    final_loop.get("body", []) or [],
+                    final_loop.get("loop_variable", ""),
+                    level,
+                    reduction_vars,
+                    private_vars,
+                    scope_idx,
+                    node_idx,
+                    loop_vars,
+                )
+        else:
+            self._validate_openmp_body(
+                node.get("body", []) or [],
+                node.get("loop_variable", ""),
+                level,
+                reduction_vars,
+                private_vars,
+                scope_idx,
+                node_idx,
+            )
 
     def validate_function_return(self, scope: Dict, scope_idx: int):
         """Проверяет, что функция имеет return если нужно"""

@@ -100,6 +100,7 @@ class CoreMixin:
         self.tensor_fast_access = {}
         self.tensor_fast_loop_bounds = {}
         self.tensor_fast_patterns = set()
+        self.openmp_collapse_remaining = 0
 
     def reset(self):
         """Reset all per-compilation mutable state."""
@@ -132,6 +133,7 @@ class CoreMixin:
         self.tensor_fast_access = {}
         self.tensor_fast_loop_bounds = {}
         self.tensor_fast_patterns = set()
+        self.openmp_collapse_remaining = 0
         self.known_c_types = set(KNOWN_C_TYPES)
         logger.debug("CCodeGenerator state reset")
 
