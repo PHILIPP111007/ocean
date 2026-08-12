@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from main import build_argument_parser, cli, compile_c, parse_cli_paths
+from main import (
+    _standard_runtime_dependencies,
+    build_argument_parser,
+    cli,
+    compile_c,
+    parse_cli_paths,
+)
 
 
 def test_empty_cli_prints_help_without_running_pipeline(capsys):
@@ -107,3 +113,20 @@ def test_compile_c_adds_libm_for_generated_math_import(tmp_path, monkeypatch):
 
     assert command == captured["command"]
     assert command[-1] == "-lm"
+
+
+def test_standard_runtime_is_discovered_from_paired_header(tmp_path):
+    header = tmp_path / "std" / "demo" / "demo.h"
+    source = header.with_suffix(".c")
+    header.parent.mkdir(parents=True)
+    header.write_text("int demo(void);\n", encoding="utf-8")
+    source.write_text("int demo(void) { return 0; }\n", encoding="utf-8")
+    generated_c = '#include <std/demo/demo.h>\n'
+
+    runtime_sources, include_flags, requires_opencl = (
+        _standard_runtime_dependencies(tmp_path / "generated.c", generated_c)
+    )
+
+    assert runtime_sources == [str(source)]
+    assert include_flags == [f"-I{tmp_path}"]
+    assert requires_opencl is False

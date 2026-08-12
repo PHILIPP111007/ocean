@@ -10,7 +10,7 @@ def test_standard_tensor_cpu_facade_runs(tmp_path):
     source = tmp_path / "tensor_example.oc"
     source.write_text(
         """
-import "std/tensor/tensor.oc"
+import <std/tensor/tensor.oc>
 
 def main() -> int:
     var left: Tensor = Tensor.zeros(2, 3, "cpu")

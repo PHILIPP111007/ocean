@@ -1,4 +1,4 @@
-import "../std/tensor/tensor.oc"
+import <std/tensor/tensor.oc>
 
 def main() -> int:
     var left: Tensor = Tensor.zeros(2, 3, "cpu")

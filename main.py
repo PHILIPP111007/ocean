@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shlex
 import shutil
 import subprocess
@@ -116,31 +117,70 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+_STANDARD_INCLUDE_PATTERN = re.compile(r'#include\s*[<"](?P<header>std/[^>"]+)[>"]')
+
+
+def _standard_runtime_dependencies(
+    c_path: Path, generated_c: str
+) -> tuple[list[str], list[str], bool]:
+    """Discover standard-library C runtimes from generated std/ headers."""
+    headers = sorted(
+        {
+            match.group("header")
+            for match in _STANDARD_INCLUDE_PATTERN.finditer(generated_c)
+        }
+    )
+    if not headers:
+        return [], [], False
+
+    candidates = [c_path.parent, *c_path.parents, Path.cwd()]
+    runtime_sources: list[str] = []
+    include_flags: list[str] = []
+    requires_opencl = False
+    roots_seen: set[Path] = set()
+    sources_seen: set[Path] = set()
+
+    for header in headers:
+        header_path = Path(header)
+        for candidate in candidates:
+            root = candidate.resolve()
+            resolved_header = root / header_path
+            if not resolved_header.is_file():
+                continue
+
+            if root not in roots_seen:
+                roots_seen.add(root)
+                include_flags.append(f"-I{root}")
+
+            runtime_source = resolved_header.with_suffix(".c")
+            if runtime_source.is_file() and runtime_source not in sources_seen:
+                sources_seen.add(runtime_source)
+                runtime_sources.append(str(runtime_source))
+                requires_opencl = requires_opencl or (
+                    "#include <CL/cl.h>" in runtime_source.read_text(encoding="utf-8")
+                )
+            break
+        else:
+            raise RuntimeError(
+                f"standard-library header '{header}' could not be resolved"
+            )
+
+    return runtime_sources, include_flags, requires_opencl
+
+
 def compile_c(c_path: Path, binary_path: Path, compiler: str = "gcc", cflags: list[str] | None = None) -> list[str]:
     """Compile generated C and return the exact command that was executed."""
     flags = list(cflags or DEFAULT_CFLAGS)
     generated_c = c_path.read_text(encoding="utf-8")
-    runtime_sources: list[str] = []
-    runtime_root: Path | None = None
-    if '"std/tensor/tensor_runtime.h"' in generated_c:
-        candidates = [c_path.parent, *c_path.parents, Path.cwd()]
-        for candidate in candidates:
-            runtime_source = candidate / "std" / "tensor" / "tensor_runtime.c"
-            if runtime_source.exists():
-                runtime_root = candidate
-                runtime_sources.append(str(runtime_source))
-                break
-        if runtime_root is None:
-            raise RuntimeError(
-                "Tensor standard runtime was requested, but std/tensor/tensor_runtime.c "
-                "could not be found"
-            )
-        include_flag = f"-I{runtime_root}"
+    runtime_sources, include_flags, runtime_requires_opencl = (
+        _standard_runtime_dependencies(c_path, generated_c)
+    )
+    for include_flag in include_flags:
         if include_flag not in flags:
             flags.append(include_flag)
 
     runtime_link_flags: list[str] = []
-    if runtime_sources and shutil.which("pkg-config"):
+    if runtime_requires_opencl and shutil.which("pkg-config"):
         opencl_probe = subprocess.run(
             ["pkg-config", "--exists", "OpenCL"],
             check=False,

@@ -21,3 +21,14 @@ See:
 
 - [Tensor API](tensor/README.md)
 - [OpenCL backend](gpu/opencl.md)
+
+## Imports
+
+Quoted imports are resolved relative to the importing source file.
+
+    import "./examples/matmul.oc"
+
+Angle-bracket imports beginning with std/ are resolved from the standard
+library.
+
+    import <std/tensor/tensor.oc>
