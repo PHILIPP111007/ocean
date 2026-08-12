@@ -1008,8 +1008,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_codegen_class_model_resolvedmethod",
-      "community": 63,
-      "community_name": "class_model.py",
+      "community": 70,
+      "community_name": ".resolved_methods",
       "norm_label": "resolvedmethod"
     },
     {
@@ -1190,8 +1190,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_class_model_classregistry_resolved_methods",
-      "community": 64,
-      "community_name": "ClassRegistry",
+      "community": 70,
+      "community_name": ".resolved_methods",
       "norm_label": ".resolved_methods()"
     },
     {
@@ -1282,8 +1282,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "src_codegen_class_model_rationale_49",
-      "community": 63,
-      "community_name": "class_model.py",
+      "community": 70,
+      "community_name": ".resolved_methods",
       "norm_label": "a method together with the class that provides its implementation."
     },
     {
@@ -1337,8 +1337,8 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "src_codegen_class_model_rationale_138",
-      "community": 64,
-      "community_name": "ClassRegistry",
+      "community": 70,
+      "community_name": ".resolved_methods",
       "norm_label": "resolve methods without rebuilding parser-shaped dictionaries."
     },
     {
@@ -12485,7 +12485,7 @@
       "label": "Performance snapshot",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L190",
+      "source_location": "L189",
       "_origin": "ast",
       "id": "readme_performance_snapshot",
       "community": 45,
@@ -12496,7 +12496,7 @@
       "label": "Compiler pipeline",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L196",
+      "source_location": "L195",
       "_origin": "ast",
       "id": "readme_compiler_pipeline",
       "community": 45,
@@ -12507,7 +12507,7 @@
       "label": "Honest project status",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L210",
+      "source_location": "L209",
       "_origin": "ast",
       "id": "readme_honest_project_status",
       "community": 45,
@@ -12518,7 +12518,7 @@
       "label": "Contributing",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L218",
+      "source_location": "L217",
       "_origin": "ast",
       "id": "readme_contributing",
       "community": 45,
@@ -38235,7 +38235,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L196",
+      "source_location": "L195",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
@@ -38246,7 +38246,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L218",
+      "source_location": "L217",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
@@ -38257,7 +38257,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L210",
+      "source_location": "L209",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
@@ -38301,7 +38301,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L190",
+      "source_location": "L189",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
@@ -39124,5 +39124,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "c8875447b18fc18d63cd7dcbb585df9cd22d6669"
+  "built_at_commit": "2e52994e2dda36933b7467adc129614e5b31e1c5"
 }

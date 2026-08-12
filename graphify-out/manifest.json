@@ -1,7 +1,7 @@
 {
   "main.py": {
-    "mtime": 1786481782.4779344,
-    "ast_hash": "588637728b4ae05e0464b38b0974de7b",
+    "mtime": 1786530548.8378742,
+    "ast_hash": "2e4d0d51aaf845bc27661c1143fef395",
     "semantic_hash": ""
   },
   "src/__init__.py": {
@@ -255,8 +255,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786478861.0828629,
-    "ast_hash": "85016d044a42575911f6731c88eea609",
+    "mtime": 1786530827.8490536,
+    "ast_hash": "ae4b04fe30e34aacb44888b71a9da505",
     "semantic_hash": ""
   },
   "docs/Handoff.md": {

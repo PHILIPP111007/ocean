@@ -31,7 +31,7 @@
   "29": ".parse_complex_expression",
   "30": "ExpressionsMixin",
   "31": "test_array_tensor.py",
-  "32": "CCodeGenerator",
+  "32": "ImportsMixin",
   "33": "OrchestratorMixin",
   "34": "ColoredFormatter",
   "35": "TensorCodegenMixin",
@@ -41,7 +41,7 @@
   "39": "compiler.py",
   "40": "What changed",
   "41": "split_top_level",
-  "42": "TypeParser",
+  "42": "TypeSpec",
   "43": "test_memory_safety.py",
   "44": "Repository Guidelines",
   "45": "Ocean 🌊",
@@ -61,5 +61,12 @@
   "59": "modules/__init__.py",
   "60": ".validate_graph",
   "61": "benchmark_main.py",
-  "62": ".validate_type_compatibility"
+  "62": ".validate_type_compatibility",
+  "63": "class_model.py",
+  "64": "ClassRegistry",
+  "65": "TypeParser",
+  "66": "ClassModel",
+  "67": "CCodeGenerator",
+  "68": ".generate_all_methods",
+  "69": "DictCodegenMixin"
 }

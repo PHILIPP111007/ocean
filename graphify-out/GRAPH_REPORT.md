@@ -1,16 +1,16 @@
 # Graph Report - phils_language  (2026-08-12)
 
 ## Corpus Check
-- 70 files · ~84,788 words
+- 70 files · ~84,786 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1152 nodes · 2240 edges · 70 communities (63 shown, 7 thin omitted)
+- 1152 nodes · 2240 edges · 71 communities (64 shown, 7 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 86 edges (avg confidence: 0.67)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c8875447`
+- Built from commit: `2e52994e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -83,6 +83,7 @@
 - CCodeGenerator
 - .generate_all_methods
 - DictCodegenMixin
+- .resolved_methods
 
 ## God Nodes (most connected - your core abstractions)
 1. `Parser` - 129 edges
@@ -111,7 +112,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (70 total, 7 thin omitted)
+## Communities (71 total, 7 thin omitted)
 
 ### Community 0 - "run"
 Cohesion: 0.07
@@ -330,12 +331,12 @@ Cohesion: 0.33
 Nodes (3): Валидирует объявление переменной, Проверяет совместимость типов при присваивании, Пытается определить тип по значению
 
 ### Community 63 - "class_model.py"
-Cohesion: 0.23
-Nodes (11): build_class_registry(), _infer_field_type(), MethodModel, Any, Semantic class metadata shared by the OOP lowering passes. The parser graph is…, Infer only the structural type information needed for class layout., Build all class metadata directly from the parser graph and scopes., A class method declaration and its corresponding body scope. (+3 more)
+Cohesion: 0.29
+Nodes (9): build_class_registry(), _infer_field_type(), MethodModel, Any, Semantic class metadata shared by the OOP lowering passes. The parser graph is…, Infer only the structural type information needed for class layout., Build all class metadata directly from the parser graph and scopes., A class method declaration and its corresponding body scope. (+1 more)
 
 ### Community 64 - "ClassRegistry"
-Cohesion: 0.21
-Nodes (4): ClassRegistry, Canonical class metadata and lookup service for the C backend., Resolve methods without rebuilding parser-shaped dictionaries., Build the canonical OOP metadata directly from parser output.
+Cohesion: 0.26
+Nodes (3): ClassRegistry, Canonical class metadata and lookup service for the C backend., Build the canonical OOP metadata directly from parser output.
 
 ### Community 65 - "TypeParser"
 Cohesion: 0.27
@@ -356,6 +357,10 @@ Nodes (4): Генерирует все методы всех классов, в�
 ### Community 69 - "DictCodegenMixin"
 Cohesion: 0.50
 Nodes (3): DictCodegenMixin, Generate an ARC-owned chained hash table., Генерирует объявление словаря
+
+### Community 70 - ".resolved_methods"
+Cohesion: 0.50
+Nodes (3): Resolve methods without rebuilding parser-shaped dictionaries., A method together with the class that provides its implementation., ResolvedMethod
 
 ## Knowledge Gaps
 - **78 isolated node(s):** `ocean-lang`, `Project Structure & Module Organization`, `Build, Test, and Development Commands`, `Coding Style & Naming Conventions`, `Testing Guidelines` (+73 more)

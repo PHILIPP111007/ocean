@@ -68,5 +68,6 @@
   "66": "ClassModel",
   "67": "CCodeGenerator",
   "68": ".generate_all_methods",
-  "69": "DictCodegenMixin"
+  "69": "DictCodegenMixin",
+  "70": ".resolved_methods"
 }
