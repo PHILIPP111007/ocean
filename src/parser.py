@@ -46,6 +46,7 @@ class Parser:
         self.indent_char = None
         self.unsafe_depth = 0
         self.current_source_line = None
+        self.current_source_file = ""
         self._pending_openmp_pragma = None
 
     def _mark_unsafe_nodes(self, value) -> None:
@@ -424,6 +425,7 @@ class Parser:
                     lines,
                     i,
                     indent_level,
+                    source_column=len(raw_line) - len(raw_line.lstrip()) + 1,
                 )
 
             # A directive that reaches EOF without a following ``for`` must
@@ -450,6 +452,7 @@ class Parser:
             return self.scopes
 
         self.reset_state()
+        self.current_source_file = file_path
 
         if file_path:
             base_dir = os.path.dirname(file_path)
@@ -460,9 +463,18 @@ class Parser:
         return _parse_processed_code(processed_code)
 
     def parse_line(
-        self, line: str, scope: dict, all_lines: list, current_index: int, indent: int
+        self,
+        line: str,
+        scope: dict,
+        all_lines: list,
+        current_index: int,
+        indent: int,
+        source_column: int = 1,
     ):
         """Parse one line and attach its source location to emitted nodes."""
+        if source_column == 1 and 0 <= current_index < len(all_lines):
+            raw_source_line = all_lines[current_index]
+            source_column = len(raw_source_line) - len(raw_source_line.lstrip()) + 1
         previous_source_line = self.current_source_line
         self.current_source_line = current_index + 1
         graph_start = len(scope.get("graph", []))
@@ -472,6 +484,8 @@ class Parser:
             for node in scope.get("graph", [])[graph_start:]:
                 if isinstance(node, dict):
                     node.setdefault("source_line", current_index + 1)
+                    node.setdefault("source_file", self.current_source_file or None)
+                    node.setdefault("source_column", source_column)
             self.current_source_line = previous_source_line
 
     def _parse_line_impl(
@@ -5221,6 +5235,7 @@ class Parser:
                 "mul_scalar", "div_scalar", "fill", "sum", "copy",
                 "transpose", "row", "column", "slice", "reshape", "matmul", "to",
                 "shape", "ndim", "size", "device", "get", "set", "release",
+                "mean", "max", "min", "dtype", "is_contiguous", "contiguous", "item",
             }:
                 method_found = True
 

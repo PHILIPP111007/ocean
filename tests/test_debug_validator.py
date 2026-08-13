@@ -61,6 +61,22 @@ def main() -> int:
     assert "return \"not an integer\"" in error["message"]
 
 
+def test_validator_reports_file_line_and_column(tmp_path):
+    source = tmp_path / "diagnostic.oc"
+    source.write_text(
+        "def main() -> int:\n    return \"wrong\"\n",
+        encoding="utf-8",
+    )
+    parsed = Parser().parse_code(source.read_text(), file_path=str(source))
+    report = JSONValidator().validate(parsed)
+    error = next(error for error in report["errors"] if error["line_number"])
+
+    assert error["source_file"] == str(source)
+    assert error["line_number"] == 2
+    assert error["column_number"] == 5
+    assert f"{source}:2:5" in report["formatted_errors"][0]
+
+
 def test_validator_checks_container_and_index_types_from_ast():
     report = validate("""
 def main() -> None:

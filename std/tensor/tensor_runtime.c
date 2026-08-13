@@ -45,6 +45,11 @@ enum {
     OCEAN_TENSOR_GPU = 1,
 };
 
+static ocean_tensor_handle_t ocean_tensor_restore_device(
+    const ocean_tensor_handle_t source,
+    ocean_tensor_handle_t cpu_result
+);
+
 _Noreturn void ocean_tensor_fail(const char *message) {
     fprintf(stderr, "Ocean Tensor error: %s\n", message);
     exit(EXIT_FAILURE);
@@ -165,14 +170,27 @@ static ocean_tensor_handle_t ocean_tensor_alloc(
     tensor->dtype = dtype;
     tensor->item_size = ocean_tensor_dtype_size(dtype);
     tensor->size = ocean_tensor_elements_from_shape(shape, ndim);
+    if (ndim > SIZE_MAX / sizeof(size_t)) {
+        ocean_tensor_fail("Tensor metadata is too large");
+    }
     tensor->shape = (size_t *)malloc(ndim * sizeof(size_t));
     tensor->strides = (size_t *)malloc(ndim * sizeof(size_t));
     if (!tensor->shape || !tensor->strides) {
+        free(tensor->shape);
+        free(tensor->strides);
+        free(tensor);
         ocean_tensor_fail("out of memory allocating Tensor metadata");
     }
     memcpy(tensor->shape, shape, ndim * sizeof(size_t));
     tensor->strides[ndim - 1] = 1;
     for (size_t axis = ndim - 1; axis > 0; --axis) {
+        if (tensor->strides[axis] != 0 &&
+            tensor->shape[axis] > SIZE_MAX / tensor->strides[axis]) {
+            free(tensor->shape);
+            free(tensor->strides);
+            free(tensor);
+            ocean_tensor_fail("Tensor strides are too large");
+        }
         tensor->strides[axis - 1] =
             tensor->strides[axis] * tensor->shape[axis];
     }
@@ -1254,6 +1272,87 @@ double ocean_tensor_sum(ocean_tensor_handle_t tensor) {
     }
     if (cpu != tensor) ocean_tensor_release(cpu);
     return (double)result;
+}
+
+double ocean_tensor_mean(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor mean on null handle");
+    if (tensor->size == 0) return 0.0;
+    return ocean_tensor_sum(tensor) / (double)tensor->size;
+}
+
+double ocean_tensor_max(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor max on null handle");
+    if (tensor->size == 0) ocean_tensor_fail("Tensor max on an empty Tensor");
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor : ocean_tensor_to(tensor, "cpu");
+    long double result = ocean_tensor_read_scalar(cpu, 0);
+    for (size_t index = 1; index < cpu->size; ++index) {
+        long double value = ocean_tensor_read_scalar(cpu, index);
+        if (value > result) result = value;
+    }
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return (double)result;
+}
+
+double ocean_tensor_min(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor min on null handle");
+    if (tensor->size == 0) ocean_tensor_fail("Tensor min on an empty Tensor");
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor : ocean_tensor_to(tensor, "cpu");
+    long double result = ocean_tensor_read_scalar(cpu, 0);
+    for (size_t index = 1; index < cpu->size; ++index) {
+        long double value = ocean_tensor_read_scalar(cpu, index);
+        if (value < result) result = value;
+    }
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return (double)result;
+}
+
+double ocean_tensor_item(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor item on null handle");
+    if (tensor->size != 1) ocean_tensor_fail("Tensor item requires exactly one element");
+    return ocean_tensor_get_nd(tensor, (size_t[]){0}, 1);
+}
+
+char *ocean_tensor_dtype_name(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor dtype on null handle");
+    static const char *names[] = {
+        "bool", "int8", "int16", "int32", "int64", "uint8",
+        "uint16", "uint32", "uint64", "float16", "float32", "float64"
+    };
+    const char *name = names[tensor->dtype];
+    char *result = (char *)malloc(strlen(name) + 1);
+    if (!result) ocean_tensor_fail("out of memory copying Tensor dtype");
+    strcpy(result, name);
+    return result;
+}
+
+bool ocean_tensor_is_contiguous(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor is_contiguous on null handle");
+    size_t expected = 1;
+    for (size_t axis = tensor->ndim; axis-- > 0;) {
+        if (tensor->strides[axis] != expected) return false;
+        if (tensor->shape[axis] != 0 && expected > SIZE_MAX / tensor->shape[axis]) {
+            return false;
+        }
+        expected *= tensor->shape[axis];
+    }
+    return true;
+}
+
+ocean_tensor_handle_t ocean_tensor_contiguous(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor contiguous on null handle");
+    if (ocean_tensor_is_contiguous(tensor)) return ocean_tensor_copy(tensor);
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor : ocean_tensor_to(tensor, "cpu");
+    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+        cpu->shape, cpu->ndim, cpu->dtype, OCEAN_TENSOR_CPU
+    );
+    for (size_t index = 0; index < cpu->size; ++index) {
+        ocean_tensor_write_scalar(result, index, ocean_tensor_read_scalar(cpu, index));
+    }
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return ocean_tensor_restore_device(tensor, result);
 }
 
 void ocean_tensor_fill(ocean_tensor_handle_t tensor, double value) {

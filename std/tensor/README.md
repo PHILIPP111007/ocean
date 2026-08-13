@@ -53,6 +53,13 @@ class Tensor:
     def column(self, column: int) -> Tensor[T]
     def slice(self, axis: int, start: int, stop: int, step: int) -> Tensor[T]
     def sum(self) -> float64
+    def mean(self) -> float64
+    def max(self) -> float64
+    def min(self) -> float64
+    def item(self) -> float64
+    def dtype(self) -> str
+    def is_contiguous(self) -> bool
+    def contiguous(self) -> Tensor[T]
     def fill(self, value: float64) -> None
     def copy(self) -> Tensor[T]
     def shape(self, axis: int) -> int

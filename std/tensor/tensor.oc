@@ -103,6 +103,29 @@ class Tensor:
     def sum(self) -> float64:
         return ocean_tensor_sum(self.handle)
 
+    def mean(self) -> float64:
+        return ocean_tensor_mean(self.handle)
+
+    def max(self) -> float64:
+        return ocean_tensor_max(self.handle)
+
+    def min(self) -> float64:
+        return ocean_tensor_min(self.handle)
+
+    def item(self) -> float64:
+        return ocean_tensor_item(self.handle)
+
+    def dtype(self) -> str:
+        return ocean_tensor_dtype_name(self.handle)
+
+    def is_contiguous(self) -> bool:
+        return ocean_tensor_is_contiguous(self.handle)
+
+    def contiguous(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_contiguous(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
     def fill(self, value: float64) -> None:
         ocean_tensor_fill(self.handle, value)
         return None

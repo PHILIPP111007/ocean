@@ -416,7 +416,7 @@ class CallsMixin:
                     elif arg.get("type") == "method_call":
                         expr = self.generate_expression(arg)
                         method_name = arg.get("method", "")
-                        if method_name == "device":
+                        if method_name in {"device", "dtype"}:
                             temporary = f"ocean_print_tmp_{self.temp_var_counter}"
                             self.temp_var_counter += 1
                             self.add_line(f"char* {temporary} = {expr};")
@@ -425,8 +425,10 @@ class CallsMixin:
                             format_parts.append("%s")
                         elif method_name == "size":
                             format_parts.append("%zu")
-                        elif method_name == "sum":
+                        elif method_name in {"sum", "mean", "max", "min", "item"}:
                             format_parts.append("%f")
+                        elif method_name == "is_contiguous":
+                            format_parts.append("%d")
                         elif method_name == "get":
                             format_parts.append("%f")
                         else:

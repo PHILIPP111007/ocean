@@ -34,6 +34,21 @@ def main() -> int:
     module = build_typed_ir(parsed)
 
     assert module.to_legacy_json() == parsed
+    assert module.backend_scopes() == parsed
+
+
+def test_typed_ir_exposes_source_location_metadata(tmp_path):
+    source = tmp_path / "location.oc"
+    source.write_text(
+        "def main() -> int:\n    var value: int = 1\n    return 0\n",
+        encoding="utf-8",
+    )
+    module = build_typed_ir(Parser().parse_code(source.read_text(), file_path=str(source)))
+    node = next(node for node in module.iter_nodes() if node.node_type == "declaration")
+
+    assert node.source_file == str(source)
+    assert node.source_line == 2
+    assert node.source_column == 5
 
 
 def test_typed_ir_is_the_canonical_validator_and_codegen_api():

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -343,3 +344,89 @@ def main() -> int:
         "16.000000",
         "18.000000",
     ]
+
+
+def test_standard_tensor_statistics_and_metadata(tmp_path):
+    source = tmp_path / "tensor_statistics.oc"
+    source.write_text(
+        """
+import <std/tensor/tensor.oc>
+
+def main() -> int:
+    var value: Tensor[float32] = Tensor.from_list([[1.0, 4.0], [2.0, 3.0]], "cpu")
+    var one: Tensor[float32] = Tensor.from_list([7.0], "cpu")
+    print(value.mean())
+    print(value.max())
+    print(value.min())
+    print(value.dtype())
+    print(value.is_contiguous())
+    print(one.item())
+    return 0
+""",
+        encoding="utf-8",
+    )
+    json_path = tmp_path / "tensor_statistics.json"
+    c_path = tmp_path / "tensor_statistics.generated.c"
+    binary_path = tmp_path / "tensor_statistics"
+
+    compile_pipeline(
+        str(Path(__file__).resolve().parents[1]),
+        source,
+        json_path,
+        c_path,
+        quiet=True,
+    )
+    compile_c(c_path, binary_path)
+    result = subprocess.run(
+        [str(binary_path)], check=True, capture_output=True, text=True
+    )
+
+    assert result.stdout.splitlines() == [
+        "2.500000",
+        "4.000000",
+        "1.000000",
+        "float32",
+        "1",
+        "7.000000",
+    ]
+
+
+def test_standard_tensor_release_is_idempotent_under_sanitizers(tmp_path):
+    source = tmp_path / "tensor_release.oc"
+    source.write_text(
+        """
+import <std/tensor/tensor.oc>
+
+def main() -> int:
+    var value: Tensor[float32] = Tensor.zeros(4, 4, "cpu")
+    value.release()
+    value.release()
+    return 0
+""",
+        encoding="utf-8",
+    )
+    json_path = tmp_path / "tensor_release.json"
+    c_path = tmp_path / "tensor_release.generated.c"
+    binary_path = tmp_path / "tensor_release"
+
+    compile_pipeline(
+        str(Path(__file__).resolve().parents[1]),
+        source,
+        json_path,
+        c_path,
+        quiet=True,
+    )
+    compile_c(
+        c_path,
+        binary_path,
+        cflags=["-std=c11", "-fsanitize=address,undefined"],
+    )
+    sanitizer_env = os.environ.copy()
+    sanitizer_env["ASAN_OPTIONS"] = "detect_leaks=0"
+    subprocess.run(
+        [str(binary_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=sanitizer_env,
+    )

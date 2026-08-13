@@ -68,6 +68,14 @@ class TypedNode:
         return self.raw.get("source_line")
 
     @property
+    def source_file(self) -> str | None:
+        return self.raw.get("source_file")
+
+    @property
+    def source_column(self) -> int | None:
+        return self.raw.get("source_column")
+
+    @property
     def openmp(self) -> dict[str, Any] | None:
         """Structured OpenMP metadata attached to a loop, if present."""
         value = self.raw.get("openmp")
@@ -102,6 +110,10 @@ class TypedModule:
         the semantic module accidentally while emitting C.
         """
         return tuple(deepcopy(scope.raw) for scope in self.scopes)
+
+    def backend_scopes(self) -> list[dict[str, Any]]:
+        """Return the explicit lowering view consumed by the C backend."""
+        return list(self.raw_scopes)
 
     def scope(self, level: int) -> TypedScope | None:
         """Find a typed scope by its parser level."""
@@ -274,8 +286,11 @@ class TypedIRBuilder:
                 "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
                 "mul_scalar", "div_scalar", "reshape", "sum", "fill", "to",
                 "shape", "ndim", "size", "device", "get", "set",
+                "mean", "max", "min", "dtype", "is_contiguous", "contiguous", "item",
                 }:
                 if ast.get("method") == "sum":
+                    return IRType.parse("float64")
+                if ast.get("method") in {"mean", "max", "min", "item"}:
                     return IRType.parse("float64")
                 if ast.get("method") in {"shape", "ndim"}:
                     return IRType.parse("int")
@@ -283,6 +298,10 @@ class TypedIRBuilder:
                     return IRType.parse("size_t")
                 if ast.get("method") == "device":
                     return IRType.parse("str")
+                if ast.get("method") == "dtype":
+                    return IRType.parse("str")
+                if ast.get("method") == "is_contiguous":
+                    return IRType.parse("bool")
                 if ast.get("method") == "get":
                     return IRType.parse("float64")
                 if ast.get("method") == "set":

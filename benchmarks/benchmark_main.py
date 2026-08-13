@@ -27,6 +27,7 @@ if str(ROOT) not in sys.path:
 from src.compiler import CCodeGenerator
 from src.debug import JSONValidator
 from src.parser import Parser
+from src.typed_ir import build_typed_ir
 from main import compile_c
 
 
@@ -66,7 +67,8 @@ def run_benchmark(source_path: Path, runs: int, timeout: float, keep: bool) -> d
     parse_seconds = time.perf_counter() - started
 
     validation_started = time.perf_counter()
-    report = JSONValidator().validate(parsed)
+    typed_ir = build_typed_ir(parsed)
+    report = JSONValidator().validate_typed_ir(typed_ir)
     validation_seconds = time.perf_counter() - validation_started
     if not report["is_valid"]:
         messages = "\n".join(report["formatted_errors"])
@@ -77,7 +79,7 @@ def run_benchmark(source_path: Path, runs: int, timeout: float, keep: bool) -> d
     # stdout reserved for benchmark output/JSON and route those diagnostics to
     # stderr instead.
     with contextlib.redirect_stdout(sys.stderr):
-        generated = CCodeGenerator().generate_from_json(parsed)
+        generated = CCodeGenerator().generate_from_typed_ir(typed_ir)
     generation_seconds = time.perf_counter() - generation_started
 
     temporary_directory = tempfile.TemporaryDirectory(

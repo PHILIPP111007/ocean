@@ -31,6 +31,18 @@ DEFAULT_CFLAGS = ["-std=c11"]
 COMMANDS = {"init", "check", "build", "run", "test", "clean"}
 
 
+def _diagnostic_location(diagnostic: dict) -> str:
+    """Format a stable source location for compiler diagnostics."""
+    source_file = diagnostic.get("source_file")
+    line = diagnostic.get("line_number")
+    column = diagnostic.get("column_number")
+    if source_file and line:
+        return f"{source_file}:{line}:{column or 1}"
+    if line:
+        return f"строка {line}"
+    return "неизвестное место"
+
+
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ocean",
@@ -279,11 +291,15 @@ def compile_pipeline(base_path: str | Path, p_path: str | Path, json_path: str |
         print(f"Ошибок: {result_validation['error_count']}")
         print(f"Предупреждений: {result_validation['warning_count']}")
     for warning in result_validation["warnings"]:
-        logger.warning(f"Строка {warning['line_number']}: {warning['message']}")
+        logger.warning(f"{_diagnostic_location(warning)}: {warning['message']}")
     for error in result_validation["errors"]:
-        logger.error(f"Строка {error['line_number']}: {error['message']}")
+        logger.error(f"{_diagnostic_location(error)}: {error['message']}")
     if result_validation["errors"]:
-        raise RuntimeError("Compilation stopped: validation failed; generated C was not emitted")
+        details = "\n".join(result_validation["formatted_errors"])
+        raise RuntimeError(
+            "Compilation stopped: validation failed; generated C was not emitted\n"
+            + details
+        )
 
     if not quiet:
         print("\n=========== CCodeGenerator ===========")

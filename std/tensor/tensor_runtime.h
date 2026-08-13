@@ -59,6 +59,13 @@ ocean_tensor_handle_t ocean_tensor_slice(
     int step
 );
 double ocean_tensor_sum(ocean_tensor_handle_t tensor);
+double ocean_tensor_mean(ocean_tensor_handle_t tensor);
+double ocean_tensor_max(ocean_tensor_handle_t tensor);
+double ocean_tensor_min(ocean_tensor_handle_t tensor);
+double ocean_tensor_item(ocean_tensor_handle_t tensor);
+char *ocean_tensor_dtype_name(ocean_tensor_handle_t tensor);
+bool ocean_tensor_is_contiguous(ocean_tensor_handle_t tensor);
+ocean_tensor_handle_t ocean_tensor_contiguous(ocean_tensor_handle_t tensor);
 void ocean_tensor_fill(ocean_tensor_handle_t tensor, double value);
 double ocean_tensor_get_nd(
     ocean_tensor_handle_t tensor,

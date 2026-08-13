@@ -101,7 +101,8 @@ var labels: Tensor[int32] = Tensor.from_list([[1, 2, 3]], "cpu")
 The supported devices are exactly `"cpu"` and `"gpu"`. `.to(device)` is non-mutating: it returns
 an owned tensor on the requested device and leaves the source tensor valid. `Tensor` also provides
 `zeros`, `from_list`, `copy`, `matmul`, `add`, `sub`, `mul`, `div`, scalar arithmetic,
-`reshape`, `transpose`, `sum`, `fill`, `shape`, `ndim`, `size`, `device`, and `release`.
+`reshape`, `transpose`, `sum`, `mean`, `min`, `max`, `item`, `dtype`, `is_contiguous`,
+`contiguous`, `fill`, `shape`, `ndim`, `size`, `device`, and `release`.
 
 `Tensor.matmul` requires compatible 2D shapes and matching devices. CPU matmul is dtype-generic.
 The GPU path currently has OpenCL kernels for `float32` and `int32`; other numeric dtypes use a

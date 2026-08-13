@@ -129,6 +129,13 @@ class JSONValidator:
                             "ocean_tensor_column",
                             "ocean_tensor_slice",
                             "ocean_tensor_sum",
+                            "ocean_tensor_mean",
+                            "ocean_tensor_max",
+                            "ocean_tensor_min",
+                            "ocean_tensor_item",
+                            "ocean_tensor_dtype_name",
+                            "ocean_tensor_is_contiguous",
+                            "ocean_tensor_contiguous",
                             "ocean_tensor_fill",
                             "ocean_tensor_get_nd",
                             "ocean_tensor_set_nd",
@@ -207,6 +214,8 @@ class JSONValidator:
                     "scope_type": scope.get("type", "unknown"),
                     "node_idx": node_idx,
                     "global_line_number": node.get("source_line") or global_line_counter,
+                    "source_file": node.get("source_file"),
+                    "source_column": node.get("source_column"),
                 }
 
                 # Увеличиваем счетчик только если строка не пустая
@@ -373,6 +382,10 @@ class JSONValidator:
     ):
         """Добавляет ошибку с информацией о строке"""
         full_message = message
+        location = self.source_map.get(f"{scope_idx}.{node_idx}") if scope_idx is not None and node_idx is not None else None
+        if location:
+            source_line = source_line or location.get("global_line_number")
+            source_content = source_content or location.get("content")
 
         if source_line is not None:
             if source_content:
@@ -392,10 +405,11 @@ class JSONValidator:
                 "scope_idx": scope_idx,
                 "node_idx": node_idx,
                 "line_number": source_line or self.get_line_number(scope_idx, node_idx),
+                "source_file": location.get("source_file") if location else None,
+                "column_number": location.get("source_column") if location else None,
             }
         )
 
-    # TODO
     def add_warning(self, message: str, scope_idx: int = None, node_idx: int = None):
         """Добавляет предупреждение с информацией о строке"""
         full_message = message
@@ -413,6 +427,8 @@ class JSONValidator:
                 "scope_idx": scope_idx,
                 "node_idx": node_idx,
                 "line_number": self.get_line_number(scope_idx, node_idx),
+                "source_file": self.source_map.get(f"{scope_idx}.{node_idx}", {}).get("source_file"),
+                "column_number": self.source_map.get(f"{scope_idx}.{node_idx}", {}).get("source_column"),
             }
         )
 
@@ -4084,22 +4100,24 @@ class JSONValidator:
 
         for error in self.errors:
             if isinstance(error, dict):
-                line_info = (
-                    f" (строка {error['line_number']})"
-                    if error.get("line_number")
-                    else ""
-                )
+                if error.get("source_file") and error.get("line_number"):
+                    line_info = f" ({error['source_file']}:{error['line_number']}:{error.get('column_number') or 1})"
+                elif error.get("line_number"):
+                    line_info = f" (строка {error['line_number']})"
+                else:
+                    line_info = ""
                 formatted_errors.append(f"{error['message']}{line_info}")
             else:
                 formatted_errors.append(str(error))
 
         for warning in self.warnings:
             if isinstance(warning, dict):
-                line_info = (
-                    f" (строка {warning['line_number']})"
-                    if warning.get("line_number")
-                    else ""
-                )
+                if warning.get("source_file") and warning.get("line_number"):
+                    line_info = f" ({warning['source_file']}:{warning['line_number']}:{warning.get('column_number') or 1})"
+                elif warning.get("line_number"):
+                    line_info = f" (строка {warning['line_number']})"
+                else:
+                    line_info = ""
                 formatted_warnings.append(f"{warning['message']}{line_info}")
             else:
                 formatted_warnings.append(str(warning))

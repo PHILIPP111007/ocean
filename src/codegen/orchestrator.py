@@ -12,7 +12,7 @@ class OrchestratorMixin:
         """Generate C from the canonical semantic IR."""
         if not isinstance(typed_ir, TypedModule):
             raise TypeError("generate_from_typed_ir expects a TypedModule")
-        return self._generate_from_scopes(typed_ir.raw_scopes)
+        return self._generate_from_scopes(typed_ir.backend_scopes())
 
     def generate_from_json(self, json_data: List[Dict]) -> str:
         """Compatibility entry point for callers with parser JSON."""
