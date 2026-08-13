@@ -1,5 +1,5 @@
 from src.parser import Parser
-from src.typed_ir import build_typed_ir
+from src.typed_ir import TypedNode, TypedScope, build_typed_ir
 from src.codegen import CCodeGenerator
 from src.debug import JSONValidator
 
@@ -34,7 +34,13 @@ def main() -> int:
     module = build_typed_ir(parsed)
 
     assert module.to_legacy_json() == parsed
-    assert module.backend_scopes() == parsed
+    backend_scopes = module.backend_scopes()
+    assert all(isinstance(scope, TypedScope) for scope in backend_scopes)
+    assert all(
+        isinstance(node, TypedNode)
+        for scope in backend_scopes
+        for node in scope.get("graph", ())
+    )
 
 
 def test_typed_ir_exposes_source_location_metadata(tmp_path):

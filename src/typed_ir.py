@@ -8,6 +8,7 @@ types and ownership effects without repeatedly guessing them from strings.
 from __future__ import annotations
 
 from copy import deepcopy
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -53,8 +54,8 @@ class IRType:
 
 
 @dataclass(frozen=True)
-class TypedNode:
-    """Semantic metadata for one legacy graph node."""
+class TypedNode(Mapping[str, Any]):
+    """Semantic metadata and read-only mapping view for one graph node."""
 
     raw: dict[str, Any]
     node_type: str
@@ -81,14 +82,41 @@ class TypedNode:
         value = self.raw.get("openmp")
         return value if isinstance(value, dict) else None
 
+    # Keep the backend's existing read interface while preventing mutation of
+    # the parser graph through the typed pipeline.
+    def __getitem__(self, key: str) -> Any:
+        return self.raw[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.raw)
+
+    def __len__(self) -> int:
+        return len(self.raw)
+
 
 @dataclass(frozen=True)
-class TypedScope:
+class TypedScope(Mapping[str, Any]):
     """Typed view of one parser scope."""
 
     raw: dict[str, Any]
     symbols: dict[str, IRType]
     nodes: tuple[TypedNode, ...]
+
+    def __getitem__(self, key: str) -> Any:
+        if key == "graph":
+            return self.nodes
+        return self.raw[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.raw)
+
+    def __len__(self) -> int:
+        return len(self.raw)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if key == "graph":
+            return self.nodes
+        return self.raw.get(key, default)
 
 
 @dataclass(frozen=True)
@@ -96,24 +124,24 @@ class TypedModule:
     """Typed compilation unit with an explicit compatibility projection.
 
     Compiler passes should exchange ``TypedModule`` instances.  The raw parser
-    scopes are retained only as a lossless lowering view for the current C
-    emitter and for compatibility with the pre-Typed-IR public API.
+    scopes are retained only for diagnostics/compatibility projections; the C
+    emitter consumes the typed scope/node views returned by ``backend_scopes``.
     """
 
     scopes: tuple[TypedScope, ...]
 
     @property
     def raw_scopes(self) -> tuple[dict[str, Any], ...]:
-        """Return immutable-pass input for legacy lowering code.
+        """Return a lossless compatibility projection of parser scopes.
 
-        The returned dictionaries are deep copies so a backend cannot mutate
-        the semantic module accidentally while emitting C.
+        The returned dictionaries are deep copies so compatibility callers
+        cannot mutate the semantic module accidentally.
         """
         return tuple(deepcopy(scope.raw) for scope in self.scopes)
 
-    def backend_scopes(self) -> list[dict[str, Any]]:
-        """Return the explicit lowering view consumed by the C backend."""
-        return list(self.raw_scopes)
+    def backend_scopes(self) -> list[TypedScope]:
+        """Return the typed, read-only lowering view consumed by the C backend."""
+        return list(self.scopes)
 
     def scope(self, level: int) -> TypedScope | None:
         """Find a typed scope by its parser level."""

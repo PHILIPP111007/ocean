@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
@@ -12,14 +13,14 @@ class OrchestratorMixin:
         """Generate C from the canonical semantic IR."""
         if not isinstance(typed_ir, TypedModule):
             raise TypeError("generate_from_typed_ir expects a TypedModule")
-        return self._generate_from_scopes(typed_ir.backend_scopes())
+        return self._generate_from_typed_scopes(typed_ir.backend_scopes())
 
     def generate_from_json(self, json_data: List[Dict]) -> str:
         """Compatibility entry point for callers with parser JSON."""
         return self.generate_from_typed_ir(build_typed_ir(json_data))
 
-    def _generate_from_scopes(self, json_data: List[Dict]) -> str:
-        """Lower the compatibility scope view after typed IR is established."""
+    def _generate_from_typed_scopes(self, json_data: List[Mapping]) -> str:
+        """Lower typed scope views after semantic IR construction."""
         self.reset()
         logger.debug(f"Starting Ocean C generation with {len(json_data)} scopes")
         self.scan_runtime_requirements(json_data)
@@ -207,7 +208,7 @@ class OrchestratorMixin:
         """Return whether an AST value contains a direct ``@c_function(...)``."""
         if isinstance(value, str):
             return bool(re.search(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(", value))
-        if isinstance(value, dict):
+        if isinstance(value, Mapping):
             return any(self._contains_unsafe_ffi(child) for child in value.values())
         if isinstance(value, list):
             return any(self._contains_unsafe_ffi(child) for child in value)

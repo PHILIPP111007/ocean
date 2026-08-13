@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
@@ -56,7 +57,7 @@ class IoMixin:
         value_parts = []
 
         for arg in args:
-            if isinstance(arg, dict):
+            if isinstance(arg, Mapping):
                 if arg.get("type") == "literal" and arg.get("data_type") == "str":
                     # Строковый литерал
                     value = arg.get("value", "")
@@ -210,7 +211,7 @@ class IoMixin:
             # Создаем форматную строку для prompt
             format_parts = []
             for arg in args:
-                if isinstance(arg, dict):
+                if isinstance(arg, Mapping):
                     if arg.get("type") == "literal" and arg.get("data_type") == "str":
                         # Строковый литерал
                         value = arg.get("value", "")

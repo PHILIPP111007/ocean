@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
@@ -396,7 +397,7 @@ class TypesMixin:
 
         def process_value(value):
             """Рекурсивно обрабатывает значение для извлечения типов"""
-            if isinstance(value, dict):
+            if isinstance(value, Mapping):
                 # Обрабатываем литералы списков
                 if value.get("type") == "list_literal":
                     items = value.get("items", [])
@@ -437,7 +438,7 @@ class TypesMixin:
 
         def process_node(node):
             """Рекурсивно обрабатывает узел AST"""
-            if not isinstance(node, dict):
+            if not isinstance(node, Mapping):
                 return
 
             node_type = node.get("node", "")
@@ -464,13 +465,13 @@ class TypesMixin:
             # Обрабатываем вызовы функций
             elif node_type == "function_call":
                 for arg in node.get("arguments", []):
-                    if isinstance(arg, dict):
+                    if isinstance(arg, Mapping):
                         process_value(arg)
 
             # Обрабатываем вызовы методов
             elif node_type == "method_call":
                 for arg in node.get("arguments", []):
-                    if isinstance(arg, dict):
+                    if isinstance(arg, Mapping):
                         process_value(arg)
 
             # Обрабатываем циклы
@@ -522,7 +523,7 @@ class TypesMixin:
         all_types = set()
 
         def process_node(node):
-            if not isinstance(node, dict):
+            if not isinstance(node, Mapping):
                 return
 
             # Обрабатываем declaration узлы
@@ -651,7 +652,7 @@ class TypesMixin:
         """Определяет тип Python из значения (AST узла или примитива)"""
 
         # Если значение - словарь (AST узел)
-        if isinstance(value, dict):
+        if isinstance(value, Mapping):
             node_type = value.get("type", "")
 
             # Литералы

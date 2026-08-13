@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
@@ -19,7 +20,7 @@ class CallsMixin:
         # Генерируем аргументы
         arg_strings = []
         for arg in args:
-            if isinstance(arg, dict):
+            if isinstance(arg, Mapping):
                 arg_strings.append(self.generate_expression(arg))
             else:
                 if str(arg) == "None":
@@ -49,7 +50,7 @@ class CallsMixin:
                 raise RuntimeError(f"use of dead value '{object_name}'")
 
         arg_strings = [
-            self.generate_expression(arg) if isinstance(arg, dict) else str(arg)
+            self.generate_expression(arg) if isinstance(arg, Mapping) else str(arg)
             for arg in args
         ]
 
@@ -313,7 +314,7 @@ class CallsMixin:
         # Генерируем аргументы
         arg_strings = []
         for arg in args:
-            if isinstance(arg, dict):
+            if isinstance(arg, Mapping):
                 # Если аргумент - AST, генерируем выражение
                 arg_strings.append(self.generate_expression(arg))
             else:
@@ -343,7 +344,7 @@ class CallsMixin:
             temporary_cleanup = []
 
             for arg in args:
-                if isinstance(arg, dict):
+                if isinstance(arg, Mapping):
                     if arg.get("type") == "attribute_access":
                         expr = self.generate_attribute_access(arg)
                         object_name = arg.get("object", "")
@@ -479,7 +480,7 @@ class CallsMixin:
             # Генерируем аргументы
             arg_strings = []
             for arg in args:
-                if isinstance(arg, dict):
+                if isinstance(arg, Mapping):
                     arg_strings.append(self.generate_expression(arg))
                 else:
                     arg_strings.append(str(arg))
@@ -579,7 +580,7 @@ class CallsMixin:
                 arg_expr = self.generate_expression(args[0])
 
                 # Определяем тип аргумента для выбора правильной функции
-                if isinstance(args[0], dict):
+                if isinstance(args[0], Mapping):
                     arg_type = args[0].get("type", "")
                     if arg_type == "variable":
                         var_name = args[0].get("value", "")
@@ -652,7 +653,7 @@ class CallsMixin:
         # Генерируем аргументы
         arg_strings = []
         for arg in args:
-            if isinstance(arg, dict):
+            if isinstance(arg, Mapping):
                 arg_strings.append(self.generate_expression(arg))
             else:
                 arg_strings.append(str(arg))
@@ -663,7 +664,7 @@ class CallsMixin:
         if func_name == "len" and args:
             # Определяем тип аргумента
             arg_expr = args[0]
-            if isinstance(arg_expr, dict):
+        if isinstance(arg_expr, Mapping):
                 # Если это переменная, получаем ее тип
                 if arg_expr.get("type") == "variable":
                     var_name = arg_expr.get("value", "")
@@ -688,7 +689,7 @@ class CallsMixin:
         # Генерируем аргументы
         arg_strings = []
         for arg in args:
-            if isinstance(arg, dict):
+            if isinstance(arg, Mapping):
                 arg_strings.append(self.generate_expression(arg))
             else:
                 arg_strings.append(str(arg))
@@ -714,7 +715,7 @@ class CallsMixin:
 
         # Определяем тип аргумента для выбора правильной функции
         arg_type = "unknown"
-        if args and isinstance(args[0], dict):
+        if args and isinstance(args[0], Mapping):
             if args[0].get("type") == "variable":
                 var_name_arg = args[0].get("value", "")
                 arg_var_info = self.get_variable_info(var_name_arg)

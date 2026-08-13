@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Dict, Optional
 
 from src.modules.logger import logger
@@ -24,7 +25,7 @@ class ScopeMixin:
             self.emit_scope_cleanup(scope)
         # Borrow state is compile-time state and ends lexically here.
         for name, info in list(scope.items()):
-            if name.startswith("__") or not isinstance(info, dict):
+            if name.startswith("__") or not isinstance(info, Mapping):
                 continue
             if info.get("memory_kind") in {self.MEMORY_BORROW, self.MEMORY_MUT_BORROW}:
                 self._unregister_borrow_info(info)
@@ -139,7 +140,7 @@ class ScopeMixin:
         for level in range(self.current_scope_level, -1, -1):
             if level < len(self.variable_scopes) and name in self.variable_scopes[level]:
                 info = self.variable_scopes[level][name]
-                if isinstance(info, dict) and not info.get("is_deleted", False) and not info.get("is_moved", False):
+                if isinstance(info, Mapping) and not info.get("is_deleted", False) and not info.get("is_moved", False):
                     return True
         return False
 
@@ -147,5 +148,5 @@ class ScopeMixin:
         for level in range(self.current_scope_level, -1, -1):
             if level < len(self.variable_scopes) and name in self.variable_scopes[level]:
                 info = self.variable_scopes[level][name]
-                return info if isinstance(info, dict) else None
+                return info if isinstance(info, Mapping) else None
         return None

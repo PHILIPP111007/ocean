@@ -15,6 +15,11 @@ c_code = CCodeGenerator().generate_from_typed_ir(typed_module)
 as a compatibility adapter for older callers and converts the parser graph into
 the typed module before lowering.
 
+The C backend receives `TypedScope` and `TypedNode` mapping views from
+`TypedModule.backend_scopes()`. Their legacy `.get(...)` read interface is kept
+inside the lowering mixins while the parser's mutable scope list is no longer
+passed through the main backend pipeline.
+
 ## What changed
 
 ### 1. `ocean_` C namespace

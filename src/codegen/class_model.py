@@ -8,6 +8,7 @@ resolution throughout the C backend.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -177,7 +178,7 @@ class ClassRegistry:
                 yield owner, field_model
 
 
-def _infer_field_type(ast: Dict[str, Any], context: Dict[str, str]) -> str:
+def _infer_field_type(ast: Mapping[str, Any], context: Dict[str, str]) -> str:
     """Infer only the structural type information needed for class layout."""
     if not ast:
         return "int"
@@ -208,7 +209,7 @@ def _infer_field_type(ast: Dict[str, Any], context: Dict[str, str]) -> str:
     return "int"
 
 
-def build_class_registry(json_data: List[Dict[str, Any]]) -> ClassRegistry:
+def build_class_registry(json_data: Iterable[Mapping[str, Any]]) -> ClassRegistry:
     """Build all class metadata directly from the parser graph and scopes."""
     declarations: Dict[str, Dict[str, Any]] = {}
     method_scopes: Dict[tuple[str, str], Dict[str, Any]] = {}
@@ -299,8 +300,8 @@ def build_class_registry(json_data: List[Dict[str, Any]]) -> ClassRegistry:
     return ClassRegistry(models)
 
 
-def _walk_dicts(value: Any) -> Iterable[Dict[str, Any]]:
-    if isinstance(value, dict):
+def _walk_dicts(value: Any) -> Iterable[Mapping[str, Any]]:
+    if isinstance(value, Mapping):
         yield value
         for child in value.values():
             yield from _walk_dicts(child)

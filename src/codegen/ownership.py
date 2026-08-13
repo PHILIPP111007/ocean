@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Dict, Iterable, Optional
 
 from src.modules.logger import logger
@@ -314,7 +315,7 @@ static char* ocean_strdup(const char* src) {
     # ------------------------------------------------------------------
 
     def emit_variable_cleanup(self, name: str, info: Dict, *, mark_state: bool = True) -> None:
-        if not isinstance(info, dict) or "py_type" not in info:
+        if not isinstance(info, Mapping) or "py_type" not in info:
             return
         if info.get("is_deleted") or info.get("is_moved"):
             return
@@ -360,7 +361,7 @@ static char* ocean_strdup(const char* src) {
         """Transfer unique buffers passed to by-value function parameters."""
         parameters = getattr(self, "function_parameters", {}).get(function_name, [])
         for index, argument in enumerate(arguments):
-            if index >= len(parameters) or not isinstance(argument, dict):
+            if index >= len(parameters) or not isinstance(argument, Mapping):
                 continue
             expected = parameters[index].get("type", "")
             if self.is_borrow_type(expected) or not self.is_owned_type(expected):

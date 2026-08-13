@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
@@ -33,7 +34,7 @@ class TupleCodegenMixin:
         items = tuple_ast.get("items", [])
         if not tuple_type:
             element_type = "int"
-            if items and isinstance(items[0], dict):
+            if items and isinstance(items[0], Mapping):
                 element_type = items[0].get("data_type", "int")
             tuple_type = f"tuple[{element_type}]"
         if tuple_type.startswith("tuple_"):
@@ -69,7 +70,7 @@ class TupleCodegenMixin:
         if not items:
             return "NULL"
         first = items[0]
-        element_type = first.get("data_type", "int") if isinstance(first, dict) else "int"
+        element_type = first.get("data_type", "int") if isinstance(first, Mapping) else "int"
         tuple_type = f"tuple[{element_type}]"
         struct_name = self.generate_tuple_struct_name(tuple_type)
         self.generate_tuple_struct(tuple_type)

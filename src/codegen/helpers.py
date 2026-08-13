@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
@@ -29,7 +30,7 @@ class HelpersMixin:
         self.runtime_needs_int_helpers = False
 
         def walk(value):
-            if isinstance(value, dict):
+            if isinstance(value, Mapping):
                 method = value.get("method")
                 function = value.get("function")
                 var_type = value.get("var_type") or value.get("type_annotation")

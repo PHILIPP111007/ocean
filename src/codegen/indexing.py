@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
@@ -25,7 +26,7 @@ class IndexingMixin:
             return
 
         # Проверяем, не является ли переменная словарем с индексами
-        if isinstance(variable, dict):
+        if isinstance(variable, Mapping):
             var_type = variable.get("type", "")
             logger.debug(f"variable is dict with type: {var_type}")
             if var_type in [
@@ -430,7 +431,7 @@ class IndexingMixin:
         index_expr = self.generate_expression(index_ast)
 
         # Если variable - это attribute_access (например, self.a)
-        if isinstance(variable, dict) and variable.get("type") == "attribute_access":
+        if isinstance(variable, Mapping) and variable.get("type") == "attribute_access":
             # Генерируем выражение для доступа к атрибуту
             obj_name = variable.get("object", "")
             attr_name = variable.get("attribute", "")
@@ -510,7 +511,7 @@ class IndexingMixin:
                 var_node = current.get("variable", {})
 
                 # Извлекаем имя переменной из вложенной структуры
-                if isinstance(var_node, dict):
+                if isinstance(var_node, Mapping):
                     if var_node.get("type") == "index_access":
                         # Это вложенный index_access, продолжаем
                         current = var_node

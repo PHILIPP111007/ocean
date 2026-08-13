@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
@@ -308,7 +309,7 @@ class ExpressionsMixin:
                 # Определяем тип элементов
                 if items:
                     first_item = items[0]
-                    if isinstance(first_item, dict):
+                    if isinstance(first_item, Mapping):
                         if first_item.get("type") == "tuple_literal":
                             element_type = "tuple"
                         elif first_item.get("type") == "list_literal":
