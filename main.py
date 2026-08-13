@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from src.compiler import CCodeGenerator
+from src.diagnostics import Diagnostic, DiagnosticSeverity
 from src.debug import Validator
 from src.modules.logger import logger
 from src.package_model import (
@@ -29,11 +30,16 @@ DEFAULT_CFLAGS = ["-std=c11"]
 COMMANDS = {"init", "check", "build", "run", "test", "clean"}
 
 
-def _diagnostic_location(diagnostic: dict) -> str:
+def _diagnostic_location(diagnostic: Diagnostic | dict) -> str:
     """Format a stable source location for compiler diagnostics."""
-    source_file = diagnostic.get("source_file")
-    line = diagnostic.get("line_number")
-    column = diagnostic.get("column_number")
+    if isinstance(diagnostic, Diagnostic):
+        source_file = diagnostic.source_file
+        line = diagnostic.line_number
+        column = diagnostic.column_number
+    else:
+        source_file = diagnostic.get("source_file")
+        line = diagnostic.get("line_number")
+        column = diagnostic.get("column_number")
     if source_file and line:
         return f"{source_file}:{line}:{column or 1}"
     if line:
@@ -282,10 +288,12 @@ def compile_pipeline(base_path: str | Path, p_path: str | Path, c_path: str | Pa
         print(f"Валидный: {result_validation['is_valid']}")
         print(f"Ошибок: {result_validation['error_count']}")
         print(f"Предупреждений: {result_validation['warning_count']}")
-    for warning in result_validation["warnings"]:
-        logger.warning(f"{_diagnostic_location(warning)}: {warning['message']}")
-    for error in result_validation["errors"]:
-        logger.error(f"{_diagnostic_location(error)}: {error['message']}")
+    for diagnostic in result_validation["diagnostics"]:
+        log = logger.error if diagnostic.severity is DiagnosticSeverity.ERROR else logger.warning
+        log(
+            f"{diagnostic.code} {_diagnostic_location(diagnostic)}: "
+            f"{diagnostic.message}"
+        )
     if result_validation["errors"]:
         details = "\n".join(result_validation["formatted_errors"])
         raise RuntimeError(

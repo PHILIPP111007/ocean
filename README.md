@@ -304,13 +304,26 @@ Ocean source → Parser → TypedModule → Validator → CCodeGenerator → C11
 - `src/parser.py` — syntax, types, expressions, indexing, arrays, and tensors.
 - `src/typed_ir.py` — canonical typed scopes, expression result types, data dependencies, and
   ownership effects. The compiler pipeline does not serialize an intermediate representation.
-- `src/debug.py` — diagnostics, source locations, ownership, and borrow validation.
+- `src/diagnostics.py` — typed `Diagnostic`, `SourceLocation`, and immutable
+  `DiagnosticReport` values with stable error codes.
+- `src/debug.py` — validation, source locations, ownership, and borrow checks. Validator reports
+  expose typed diagnostics and retain the legacy dictionary projection for existing tooling.
 - `src/codegen/` — C lowering for scopes, types, ownership, containers, tensors, and OOP.
 - `src/compiler.py` — public `CCodeGenerator` compatibility API.
 - `tests/` — pytest regression and generated-C tests.
 - `docs/` — memory model and backend design notes.
 - `graphify-out/` — generated code-navigation graph, reports, and analysis cache. Refresh it with
   `graphify update .` after source changes.
+
+Diagnostics use the following fields:
+
+```text
+Diagnostic(severity, code, message, location, scope_idx, node_idx)
+SourceLocation(source_file, line, column, source_content)
+```
+
+The CLI prints the code and source position, for example `E400 path/to/file.oc:3:5`. The
+compatibility report still contains `errors`, `warnings`, and `formatted_errors` dictionaries.
 
 ## Honest project status
 

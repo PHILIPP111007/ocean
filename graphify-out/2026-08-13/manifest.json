@@ -1,7 +1,7 @@
 {
   "main.py": {
-    "mtime": 1786641403.61805,
-    "ast_hash": "f2298ac31462a5f893d16c75b884453b",
+    "mtime": 1786642267.7691867,
+    "ast_hash": "0dc48516e65b5619ddd83d1b09296b32",
     "semantic_hash": ""
   },
   "src/__init__.py": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "src/debug.py": {
-    "mtime": 1786641393.133915,
-    "ast_hash": "22e44ffbd44938a2f102b0bea18e2786",
+    "mtime": 1786642252.2449865,
+    "ast_hash": "1372733eb91519b4772616f825ff86ae",
     "semantic_hash": ""
   },
   "src/modules/constants.py": {
@@ -255,8 +255,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786641353.0253987,
-    "ast_hash": "c157fd0c17567db6c5f8c0623614fddb",
+    "mtime": 1786642301.7936256,
+    "ast_hash": "57eda33b31399c7a163b27b400944329",
     "semantic_hash": ""
   },
   "docs/Handoff.md": {
@@ -285,8 +285,8 @@
     "semantic_hash": ""
   },
   "docs/Ocean_backend.md": {
-    "mtime": 1786641352.7653954,
-    "ast_hash": "7bfb1c205c8426923086323ab378a37a",
+    "mtime": 1786642302.0056283,
+    "ast_hash": "57c60b8ed06c81764b53d9bea1e60582",
     "semantic_hash": ""
   },
   "images/ocean.jpg": {
@@ -315,13 +315,13 @@
     "semantic_hash": ""
   },
   "src/typed_ir.py": {
-    "mtime": 1786641868.488039,
-    "ast_hash": "3c2abbe810c54b2a3d720e05a554a8bf",
+    "mtime": 1786642008.745847,
+    "ast_hash": "afbb56339e0b296b55cd559dca337b6d",
     "semantic_hash": ""
   },
   "tests/test_debug_validator.py": {
-    "mtime": 1786641230.3038194,
-    "ast_hash": "f3fc1efffc68614f05d1af94d7eb375e",
+    "mtime": 1786642310.8417423,
+    "ast_hash": "323fdc5b1a4e726043f6b2e37f1ee623",
     "semantic_hash": ""
   },
   "tests/test_main_cli.py": {
@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "tests/test_typed_ir.py": {
-    "mtime": 1786641846.699758,
-    "ast_hash": "3d8d02f0fccd2a4625ed219517740598",
+    "mtime": 1786642058.0464826,
+    "ast_hash": "54a0807fd69105604160af76fba54d5c",
     "semantic_hash": ""
   },
   "requirements.txt": {
@@ -402,6 +402,11 @@
   "std/tensor/OpenCL.md": {
     "mtime": 1786631412.2120907,
     "ast_hash": "96d211cf9b512fd02723640b99b46670",
+    "semantic_hash": ""
+  },
+  "src/diagnostics.py": {
+    "mtime": 1786642310.6297395,
+    "ast_hash": "7c408b30e406f450936019be09ccb81c",
     "semantic_hash": ""
   }
 }

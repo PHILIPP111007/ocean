@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from src.modules.constants import DATA_TYPES, KNOWN_C_TYPES
 from src.parsing.type_system import TENSOR_DTYPES
 from src.modules.logger import logger
+from src.diagnostics import Diagnostic, DiagnosticReport, DiagnosticSeverity, SourceLocation
 from src.typed_ir import TypedModule
 
 
@@ -21,6 +22,7 @@ class Validator:
     def __init__(self):
         self.errors = []
         self.warnings = []
+        self.diagnostics = []
         self.scope_symbols = {}  # {scope_level: {var_name: var_info}}
         self.all_scopes = []  # Сохраняем все scopes для поиска родительских
         self.scopes_info = []  # Compatibility alias used by older helpers
@@ -54,10 +56,12 @@ class Validator:
         if not isinstance(scopes, list):
             self.errors = []
             self.warnings = []
+            self.diagnostics = []
             self.add_error("TypedModule scopes должны быть списком")
             return self.get_report()
         self.errors = []
         self.warnings = []
+        self.diagnostics = []
         self.scope_symbols = {}
         self.functions = {}
         self.external_c_functions = set()
@@ -369,6 +373,7 @@ class Validator:
         node_idx: int = None,
         source_line: int = None,
         source_content: str = None,
+        code: str | None = None,
     ):
         """Добавляет ошибку с информацией о строке"""
         full_message = message
@@ -389,20 +394,34 @@ class Validator:
                 if content:
                     full_message = f"Строка '{content}': {message}"
 
-        self.errors.append(
-            {
-                "message": full_message,
-                "scope_idx": scope_idx,
-                "node_idx": node_idx,
-                "line_number": source_line or self.get_line_number(scope_idx, node_idx),
-                "source_file": location.get("source_file") if location else None,
-                "column_number": location.get("source_column") if location else None,
-            }
+        diagnostic = Diagnostic(
+            severity=DiagnosticSeverity.ERROR,
+            message=full_message,
+            code=code or self._diagnostic_code(message, DiagnosticSeverity.ERROR),
+            location=SourceLocation(
+                source_file=location.get("source_file") if location else None,
+                line=source_line or self.get_line_number(scope_idx, node_idx),
+                column=location.get("source_column") if location else None,
+                source_content=source_content or (location.get("content") if location else None),
+            ),
+            scope_idx=scope_idx,
+            node_idx=node_idx,
         )
+        self.errors.append(diagnostic)
+        self.diagnostics.append(diagnostic)
 
-    def add_warning(self, message: str, scope_idx: int = None, node_idx: int = None):
+    def add_warning(
+        self,
+        message: str,
+        scope_idx: int = None,
+        node_idx: int = None,
+        source_line: int = None,
+        source_content: str = None,
+        code: str | None = None,
+    ):
         """Добавляет предупреждение с информацией о строке"""
         full_message = message
+        location = self.source_map.get(f"{scope_idx}.{node_idx}") if scope_idx is not None and node_idx is not None else None
 
         if scope_idx is not None and node_idx is not None:
             node_id = f"{scope_idx}.{node_idx}"
@@ -411,16 +430,46 @@ class Validator:
                 if content:
                     full_message = f"Строка '{content}': {message}"
 
-        self.warnings.append(
-            {
-                "message": full_message,
-                "scope_idx": scope_idx,
-                "node_idx": node_idx,
-                "line_number": self.get_line_number(scope_idx, node_idx),
-                "source_file": self.source_map.get(f"{scope_idx}.{node_idx}", {}).get("source_file"),
-                "column_number": self.source_map.get(f"{scope_idx}.{node_idx}", {}).get("source_column"),
-            }
+        diagnostic = Diagnostic(
+            severity=DiagnosticSeverity.WARNING,
+            message=full_message,
+            code=code or self._diagnostic_code(message, DiagnosticSeverity.WARNING),
+            location=SourceLocation(
+                source_file=location.get("source_file") if location else None,
+                line=source_line or self.get_line_number(scope_idx, node_idx),
+                column=location.get("source_column") if location else None,
+                source_content=source_content or (location.get("content") if location else None),
+            ),
+            scope_idx=scope_idx,
+            node_idx=node_idx,
         )
+        self.warnings.append(diagnostic)
+        self.diagnostics.append(diagnostic)
+
+    @staticmethod
+    def _diagnostic_code(message: str, severity: DiagnosticSeverity) -> str:
+        """Assign a stable category to legacy validation call sites."""
+        text = message.lower()
+        prefix = "E" if severity is DiagnosticSeverity.ERROR else "W"
+        categories = (
+            ("unsafe", "100"),
+            ("borrow", "200"),
+            ("ссыл", "200"),
+            ("moved", "201"),
+            ("перемещ", "201"),
+            ("deleted", "202"),
+            ("удален", "202"),
+            ("openmp", "300"),
+            ("parallel", "300"),
+            ("тип", "400"),
+            ("type", "400"),
+            ("не объяв", "500"),
+            ("undeclared", "500"),
+        )
+        for marker, suffix in categories:
+            if marker in text:
+                return f"{prefix}{suffix}"
+        return f"{prefix}000"
 
     def get_line_number(self, scope_idx: int, node_idx: int) -> Optional[int]:
         """Получает номер строки исходного кода для узла"""
@@ -4132,43 +4181,11 @@ class Validator:
 
     def get_report(self) -> Dict:
         """Возвращает отчет о проверке"""
-        # Форматируем ошибки и предупреждения для вывода
-        formatted_errors = []
-        formatted_warnings = []
+        return self.get_diagnostic_report().as_dict()
 
-        for error in self.errors:
-            if isinstance(error, Mapping):
-                if error.get("source_file") and error.get("line_number"):
-                    line_info = f" ({error['source_file']}:{error['line_number']}:{error.get('column_number') or 1})"
-                elif error.get("line_number"):
-                    line_info = f" (строка {error['line_number']})"
-                else:
-                    line_info = ""
-                formatted_errors.append(f"{error['message']}{line_info}")
-            else:
-                formatted_errors.append(str(error))
-
-        for warning in self.warnings:
-            if isinstance(warning, Mapping):
-                if warning.get("source_file") and warning.get("line_number"):
-                    line_info = f" ({warning['source_file']}:{warning['line_number']}:{warning.get('column_number') or 1})"
-                elif warning.get("line_number"):
-                    line_info = f" (строка {warning['line_number']})"
-                else:
-                    line_info = ""
-                formatted_warnings.append(f"{warning['message']}{line_info}")
-            else:
-                formatted_warnings.append(str(warning))
-
-        return {
-            "is_valid": len(self.errors) == 0,
-            "error_count": len(self.errors),
-            "warning_count": len(self.warnings),
-            "errors": self.errors,  # Сохраняем полную информацию
-            "warnings": self.warnings,  # Сохраняем полную информацию
-            "formatted_errors": formatted_errors,  # Для обратной совместимости
-            "formatted_warnings": formatted_warnings,  # Для обратной совместимости
-        }
+    def get_diagnostic_report(self) -> DiagnosticReport:
+        """Return the canonical typed report without compatibility projections."""
+        return DiagnosticReport(tuple(self.diagnostics))
 
     def validate_inheritance_hierarchy(self, scope: Dict, scope_idx: int):
         """Проверяет корректность иерархии наследования классов"""

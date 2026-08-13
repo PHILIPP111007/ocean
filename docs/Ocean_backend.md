@@ -90,7 +90,16 @@ The parser graph is lowered into `src/typed_ir.py` before validation and code ge
 nodes retain the legacy graph for compatibility while exposing result types, reads/writes, and
 effects to semantic passes.
 
-### 4. Deterministic scope cleanup
+### 4. Structured diagnostics
+
+Validation produces immutable `Diagnostic` values from `src/diagnostics.py` rather than assembling
+untyped error dictionaries in each pass. Every diagnostic has a severity, stable category code,
+message, source file, line, and column when available. `DiagnosticReport` groups the values and
+provides filtered errors/warnings. The validator's dictionary report remains as a compatibility
+projection for existing callers, but new compiler code should consume `report["diagnostics"]` or
+`DiagnosticReport` directly.
+
+### 5. Deterministic scope cleanup
 
 Owned managed objects and owned strings are automatically released at scope exit. `del` is now an
 early-release/unbind operation, not a requirement for correct cleanup.
@@ -99,7 +108,7 @@ Return paths, `break`, and `continue` emit the cleanup required for scopes they 
 Owned values returned from a function transfer ownership to the caller; borrowed managed values
 are retained before return.
 
-### 5. Ownership-aware containers
+### 6. Ownership-aware containers
 
 Container helpers now implement reference ownership consistently:
 
@@ -114,7 +123,7 @@ Container helpers now implement reference ownership consistently:
 
 Bounds checks in generated list/tuple access are not removed by `NDEBUG`.
 
-### 6. Safer class lowering
+### 7. Safer class lowering
 
 Root class objects contain the Ocean object header. Derived objects use single inheritance with the
 base at offset zero, so the ownership header remains at offset zero. Class destructors release

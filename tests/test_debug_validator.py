@@ -1,5 +1,6 @@
 import pytest
 
+from src.diagnostics import Diagnostic, DiagnosticSeverity
 from src.debug import Validator
 from src.parser import Parser
 
@@ -70,6 +71,25 @@ def test_validator_reports_file_line_and_column(tmp_path):
     assert error["line_number"] == 2
     assert error["column_number"] == 5
     assert f"{source}:2:5" in report["formatted_errors"][0]
+
+
+def test_validator_emits_typed_diagnostics_with_codes():
+    validator = Validator()
+    report = validator.validate(Parser().parse_typed('''
+def main() -> int:
+    return "wrong"
+'''))
+
+    diagnostic = next(
+        item for item in report["diagnostics"] if item.severity is DiagnosticSeverity.ERROR
+    )
+    assert isinstance(diagnostic, Diagnostic)
+    assert diagnostic.code.startswith("E")
+    assert diagnostic.location.line == 3
+    assert diagnostic.location.column == 5
+    assert report["diagnostic_report"].errors == (diagnostic,)
+    assert validator.get_diagnostic_report().errors == (diagnostic,)
+    assert report["errors"][0]["code"] == diagnostic.code
 
 
 def test_validator_checks_container_and_index_types_from_ast():
