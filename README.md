@@ -204,55 +204,7 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 
 pytest -v
-python main.py build
 ```
-
-`python main.py build` parses `examples/main.oc`, validates it, generates package artifacts under
-`build/debug/`, and builds the executable with GCC. Running `python main.py` or the installed
-`ocean` command without arguments only displays help. For a reproducible baseline without
-optimization flags:
-
-```bash
-python benchmarks/benchmark_main.py --runs 3
-```
-
-The benchmark reports parsing, validation, generation, compilation, and runtime separately. Use
-`--json` for machine-readable output and `--keep` to preserve generated artifacts.
-
-The compiler pipeline also accepts a custom source file and build paths:
-
-```bash
-python main.py examples/threads.oc \
-    --json-output /tmp/threads.json \
-    --c-output /tmp/threads.c \
-    --output /tmp/threads \
-    --cflag=-pthread --cflag=-Wall
-```
-
-Use `--compiler clang` to select another C compiler, `--cflags "-O2 -g"` for a shell-style flag
-group, `--no-compile` to stop after C generation, or `--run --run-arg VALUE` to execute the result.
-Run `python main.py --help` for the complete option list.
-
-This repository also contains an `ocean.toml` package manifest. Use `python main.py build` to use
-the package layout and write artifacts to `build/debug/`. The legacy single-file workflow remains
-available when a source path is passed explicitly, for example `python main.py examples/main.oc`.
-
-## Packages and CLI
-
-For repeatable builds, create a package instead of passing every path by hand:
-
-```bash
-python main.py init my_app
-cd my_app
-python ../main.py check
-python ../main.py build --profile release
-python ../main.py run --run-arg hello
-python ../main.py test
-```
-
-`init` creates `ocean.toml` and `src/main.oc`. The CLI searches for the manifest in the current
-directory and its parents, so commands also work from subdirectories. A manifest can be selected
-explicitly with `--manifest`.
 
 The minimal package model is:
 
