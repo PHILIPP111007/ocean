@@ -40,7 +40,7 @@ def test_tensor_npy_reads_external_file_and_writes_compatible_file(tmp_path):
     write_npy(
         tmp_path / "external_big_endian.npy",
         ">i2",
-        (1, 2),
+        (2,),
         struct.pack(">2h", -12, 300),
         version=(3, 0),
     )
@@ -60,10 +60,13 @@ def main() -> int:
     print(restored.ndim())
     print(restored.shape(0))
     print(restored.shape(1))
+    print(len(restored))
+    print(restored[2])
     print(restored[1, 0])
     print(restored_integers[1, 1])
-    print(big_endian[0, 0])
-    print(big_endian[0, 1])
+    print(len(big_endian))
+    print(big_endian[0])
+    print(big_endian[1])
     return 0
 """,
         encoding="utf-8",
@@ -83,7 +86,7 @@ def main() -> int:
     )
 
     assert result.stdout.splitlines() == [
-        "2", "2", "2", "3.500000", "4.000000", "-12.000000", "300.000000"
+        "2", "2", "2", "4", "3.500000", "3.500000", "4.000000", "2", "-12.000000", "300.000000"
     ]
     roundtrip = (tmp_path / "roundtrip.npy").read_bytes()
     assert roundtrip[:8] == b"\x93NUMPY\x01\x00"

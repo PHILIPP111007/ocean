@@ -212,3 +212,8 @@ Kernel objects are created lazily on first use and cached by operation and dtype
 only CPU tensors does not initialize OpenCL, and a GPU program does not create unused kernels.
 Device operations use an in-order queue with command events; host reads wait for their own read
 event, while device-to-device copies and kernels are flushed without a global queue barrier.
+
+For scalar iteration, `len(tensor)` returns the total number of elements and
+`tensor[i]` reads the row-major flattened element. Explicit multidimensional
+access such as `tensor[i, j]` remains rank-checked. This makes weight-loading
+loops concise while keeping shape-aware access available.

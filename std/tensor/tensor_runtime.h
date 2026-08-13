@@ -80,6 +80,7 @@ double ocean_tensor_get_nd(
     const size_t *indices,
     size_t ndim
 );
+double ocean_tensor_get_flat(ocean_tensor_handle_t tensor, size_t index);
 void ocean_tensor_set_nd(
     ocean_tensor_handle_t tensor,
     const size_t *indices,
@@ -90,6 +91,7 @@ double ocean_tensor_get_2d(ocean_tensor_handle_t tensor, int row, int col);
 void ocean_tensor_set_2d(ocean_tensor_handle_t tensor, int row, int col, double value);
 
 int ocean_tensor_shape(ocean_tensor_handle_t tensor, int axis);
+int ocean_tensor_len(ocean_tensor_handle_t tensor);
 int ocean_tensor_ndim(ocean_tensor_handle_t tensor);
 size_t ocean_tensor_size(ocean_tensor_handle_t tensor);
 char *ocean_tensor_device(ocean_tensor_handle_t tensor);

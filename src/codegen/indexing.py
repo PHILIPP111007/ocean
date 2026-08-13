@@ -463,14 +463,7 @@ class IndexingMixin:
                 py_type = var_info.get("py_type", "")
 
                 if self.is_device_tensor_type(py_type):
-                    indices = [index_expr]
-                    literal = ", ".join(
-                        f"(size_t)({index})" for index in indices
-                    )
-                    return (
-                        f"ocean_tensor_get_nd({variable}->handle, "
-                        f"(const size_t[]){{{literal}}}, {len(indices)})"
-                    )
+                    return f"ocean_tensor_get_flat({variable}->handle, (size_t)({index_expr}))"
                 if py_type.startswith("list["):
                     struct_name = self.generate_list_struct_name(py_type)
                     return f"get_{struct_name}({variable}, {index_expr})"

@@ -265,12 +265,10 @@ class ExpressionsMixin:
                                 self.generate_array_struct(py_type)
                                 c_func_name = f"{self.array_struct_name(py_type)}_len"
                             elif self.is_device_tensor_type(py_type):
-                                # Match Python/NumPy semantics: len(tensor)
-                                # is the size of its first axis, not the
-                                # number of scalar elements in storage.
-                                return (
-                                    f"ocean_tensor_shape({var_name}->handle, 0)"
-                                )
+                                # A scalar iteration over Tensor uses its
+                                # contiguous row-major storage. Multi-axis
+                                # indexing remains available as tensor[i, j].
+                                return f"ocean_tensor_len({var_name}->handle)"
                             else:
                                 c_func_name = "builtin_len"
                         else:

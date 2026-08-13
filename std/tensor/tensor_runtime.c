@@ -1638,6 +1638,16 @@ double ocean_tensor_get_nd(
     return result;
 }
 
+double ocean_tensor_get_flat(ocean_tensor_handle_t tensor, size_t index) {
+    if (!tensor) ocean_tensor_fail("Tensor get received a null Tensor");
+    if (index >= tensor->size) ocean_tensor_fail("Tensor flat index is out of bounds");
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor : ocean_tensor_to(tensor, "cpu");
+    double result = (double)ocean_tensor_read_scalar(cpu, index);
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return result;
+}
+
 void ocean_tensor_set_nd(
     ocean_tensor_handle_t tensor,
     const size_t *indices,
@@ -2325,6 +2335,12 @@ int ocean_tensor_shape(ocean_tensor_handle_t tensor, int axis) {
     }
     return tensor->shape[axis] > (size_t)INT32_MAX
         ? INT32_MAX : (int)tensor->shape[axis];
+}
+
+int ocean_tensor_len(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("len() does not accept a null Tensor");
+    return tensor->size > (size_t)INT32_MAX
+        ? INT32_MAX : (int)tensor->size;
 }
 
 int ocean_tensor_ndim(ocean_tensor_handle_t tensor) {

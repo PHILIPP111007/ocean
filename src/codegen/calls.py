@@ -821,6 +821,8 @@ class CallsMixin:
                 func_call = f"len_{struct_name}({arg_expr})"
             elif arg_type == "str":
                 func_call = f"strlen({arg_expr})"
+            elif self.is_device_tensor_type(arg_type):
+                func_call = f"ocean_tensor_len({arg_expr}->handle)"
             else:
                 func_call = f"builtin_len({arg_expr})"
 

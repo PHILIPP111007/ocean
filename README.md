@@ -146,7 +146,10 @@ weights.save_npy("weights_copy.npy")
 ```
 
 GPU tensors are downloaded to CPU while saving, and non-contiguous views are
-materialized into a compatible row-major `.npy` payload.
+materialized into a compatible row-major `.npy` payload. For linear weight
+iteration, `len(tensor)` returns the scalar element count and `tensor[i]`
+accesses the flattened row-major storage; multidimensional `tensor[i, j]`
+access remains rank-checked.
 
 The public facade owns an opaque runtime handle. Ocean code does not access `cl_mem`, OpenCL
 contexts, queues, or backend-specific pointers directly. `Tensor.from_list(...)` is the public

@@ -113,6 +113,8 @@ class Validator:
                             "ocean_tensor_from_cpu_strided",
                             "ocean_tensor_load_npy",
                             "ocean_tensor_save_npy",
+                            "ocean_tensor_get_flat",
+                            "ocean_tensor_len",
                             "ocean_tensor_copy",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",
