@@ -22,7 +22,7 @@ class OwnershipMixin:
     * ``&mut T``: exclusive lexical mutable borrow, no retain/release;
     * raw C pointers: outside automatic ownership and therefore unsafe.
 
-    The backend's runtime lowering remains lexical in v1.  The JSON validator
+    The backend's runtime lowering remains lexical in v1.  The validator
     performs the conservative intra-function data-flow checks before lowering;
     both layers share the same ownership metadata and generated ABI.
     """

@@ -75,10 +75,9 @@ class Package:
     def profile_path(self, profile: str) -> Path:
         return self.build_path / profile
 
-    def artifact_paths(self, profile: str) -> tuple[Path, Path, Path]:
+    def artifact_paths(self, profile: str) -> tuple[Path, Path]:
         output_dir = self.profile_path(profile)
         return (
-            output_dir / f"{self.name}.parsed.json",
             output_dir / f"{self.name}.c",
             output_dir / self.name,
         )

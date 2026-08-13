@@ -1,21 +1,16 @@
-from src.debug import JSONValidator
+import pytest
+
+from src.debug import Validator
 from src.parser import Parser
 
 
 def validate(source: str) -> dict:
-    return JSONValidator().validate(Parser().parse_code(source))
+    return Validator().validate(Parser().parse_typed(source))
 
 
 def test_validator_returns_report_for_malformed_input():
-    report = JSONValidator().validate({"not": "a scope list"})
-
-    assert not report["is_valid"]
-    assert report["error_count"] == 1
-    assert "списком scope" in report["errors"][0]["message"]
-
-    report = JSONValidator().validate([None])
-    assert not report["is_valid"]
-    assert "Scope 0" in report["errors"][0]["message"]
+    with pytest.raises(TypeError, match="TypedModule"):
+        Validator().validate({"not": "a scope list"})
 
 
 def test_validator_does_not_leak_symbols_between_functions():
@@ -67,8 +62,8 @@ def test_validator_reports_file_line_and_column(tmp_path):
         "def main() -> int:\n    return \"wrong\"\n",
         encoding="utf-8",
     )
-    parsed = Parser().parse_code(source.read_text(), file_path=str(source))
-    report = JSONValidator().validate(parsed)
+    typed_ir = Parser().parse_typed(source.read_text(), file_path=str(source))
+    report = Validator().validate(typed_ir)
     error = next(error for error in report["errors"] if error["line_number"])
 
     assert error["source_file"] == str(source)

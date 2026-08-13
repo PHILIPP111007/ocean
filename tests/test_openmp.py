@@ -2,13 +2,16 @@ import subprocess
 
 from main import compile_c, compile_pipeline
 from src.compiler import CCodeGenerator
-from src.debug import JSONValidator
+from src.debug import Validator
 from src.parser import Parser
-from src.typed_ir import build_typed_ir
 
 
 def _parse(source: str):
     return Parser().parse_code(source)
+
+
+def _typed(source: str):
+    return Parser().parse_typed(source)
 
 
 def test_openmp_pragma_is_attached_to_for_and_emitted_as_omp():
@@ -27,10 +30,10 @@ def main() -> int:
     assert loop["openmp"]["directive"] == "parallel for"
     assert loop["openmp"]["clauses"] == [{"name": "schedule", "arguments": "static"}]
 
-    report = JSONValidator().validate(build_typed_ir(data))
+    report = Validator().validate(_typed(source))
     assert report["errors"] == []
 
-    generated = CCodeGenerator().generate_from_typed_ir(build_typed_ir(data))
+    generated = CCodeGenerator().generate_from_typed_ir(_typed(source))
     assert "#pragma omp parallel for schedule(static)" in generated
 
 
@@ -45,7 +48,7 @@ def main() -> int:
 
     return 0
 """
-    report = JSONValidator().validate(build_typed_ir(_parse(source)))
+    report = Validator().validate(_typed(source))
     assert report["errors"] == []
 
 
@@ -61,8 +64,8 @@ def main() -> int:
     print(total)
     return 0
 """
-    typed_ir = build_typed_ir(_parse(source))
-    report = JSONValidator().validate(typed_ir)
+    typed_ir = _typed(source)
+    report = Validator().validate(typed_ir)
     assert report["errors"] == []
 
     generated = CCodeGenerator().generate_from_typed_ir(typed_ir)
@@ -83,7 +86,7 @@ def main() -> int:
 
     return 0
 """
-    report = JSONValidator().validate(build_typed_ir(_parse(source)))
+    report = Validator().validate(_typed(source))
     assert report["error_count"] == 1
     assert "идеально вложенные" in report["errors"][0]["message"]
 
@@ -98,7 +101,7 @@ def main() -> int:
 
     return 0
 """
-    report = JSONValidator().validate(build_typed_ir(_parse(source)))
+    report = Validator().validate(_typed(source))
     assert report["error_count"] == 1
     assert "идеально вложенные" in report["errors"][0]["message"]
 
@@ -117,7 +120,7 @@ def main() -> int:
 
     return 0
 """
-    report = JSONValidator().validate(build_typed_ir(_parse(source)))
+    report = Validator().validate(_typed(source))
     assert report["errors"] == []
 
 
@@ -131,7 +134,7 @@ def main() -> int:
 
     return 0
 """
-    report = JSONValidator().validate(build_typed_ir(_parse(source)))
+    report = Validator().validate(_typed(source))
     assert report["error_count"] == 1
     assert "reduction/private" in report["errors"][0]["message"]
 
@@ -143,7 +146,7 @@ def main() -> int:
     var value: int = 1
     return value
 """
-    report = JSONValidator().validate(build_typed_ir(_parse(source)))
+    report = Validator().validate(_typed(source))
     assert report["error_count"] == 1
     assert "immediately followed" in report["errors"][0]["message"]
 
@@ -174,7 +177,6 @@ def test_compile_c_adds_openmp_flag_for_generated_pragma(tmp_path, monkeypatch):
 
 def test_openmp_source_compiles_with_gcc(tmp_path):
     source = tmp_path / "openmp.oc"
-    json_path = tmp_path / "openmp.json"
     c_path = tmp_path / "openmp.c"
     binary = tmp_path / "openmp"
     source.write_text(
@@ -187,7 +189,7 @@ def test_openmp_source_compiles_with_gcc(tmp_path):
         encoding="utf-8",
     )
 
-    compile_pipeline(tmp_path, source, json_path, c_path, quiet=True)
+    compile_pipeline(tmp_path, source, c_path, quiet=True)
     command = compile_c(c_path, binary)
     subprocess.run([str(binary)], check=True)
     assert "-fopenmp" in command
@@ -195,7 +197,6 @@ def test_openmp_source_compiles_with_gcc(tmp_path):
 
 def test_openmp_collapse_source_compiles_with_gcc(tmp_path):
     source = tmp_path / "openmp_collapse.oc"
-    json_path = tmp_path / "openmp_collapse.json"
     c_path = tmp_path / "openmp_collapse.c"
     binary = tmp_path / "openmp_collapse"
     source.write_text(
@@ -210,7 +211,7 @@ def test_openmp_collapse_source_compiles_with_gcc(tmp_path):
         encoding="utf-8",
     )
 
-    compile_pipeline(tmp_path, source, json_path, c_path, quiet=True)
+    compile_pipeline(tmp_path, source, c_path, quiet=True)
     command = compile_c(c_path, binary)
     result = subprocess.run([str(binary)], check=True, capture_output=True, text=True)
     assert result.stdout.strip() == "70"

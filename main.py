@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import shlex
 import shutil
@@ -13,7 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from src.compiler import CCodeGenerator
-from src.debug import JSONValidator
+from src.debug import Validator
 from src.modules.logger import logger
 from src.package_model import (
     Package,
@@ -69,7 +68,6 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force", action="store_true", help="allow init to create files in an existing package")
     parser.add_argument("--profile", choices=("debug", "release"), default="debug", help="build profile (default: debug)")
     parser.add_argument("--base-path", type=Path, help="base directory used to resolve imports")
-    parser.add_argument("--json-output", type=Path, help="path for parsed JSON")
     parser.add_argument("--c-output", type=Path, help="path for generated C")
     parser.add_argument("-o", "--output", dest="binary_output", type=Path, help="path for the compiled executable")
     parser.add_argument("--compiler", help="C compiler executable (overrides ocean.toml)")
@@ -82,7 +80,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="additional compiler flag; repeat for multiple flags",
     )
     parser.add_argument("--cflags", default="", metavar="FLAGS", help="compiler flags as one shell-style string")
-    parser.add_argument("--no-compile", action="store_true", help="stop after generating JSON and C")
+    parser.add_argument("--no-compile", action="store_true", help="stop after generating C")
     parser.add_argument("--run", action="store_true", help="run the executable after building")
     parser.add_argument("--run-arg", action="append", default=[], metavar="ARG", help="argument passed to the executable")
     parser.add_argument("--test-path", type=Path, help="test directory or file for the test command")
@@ -117,9 +115,9 @@ def _load_package_for_args(args: argparse.Namespace, source: Path | None = None)
     return load_package(manifest) if manifest else None
 
 
-def default_output_paths(source_path: Path) -> tuple[Path, Path, Path]:
-    """Return JSON, C, and executable locations for one source file."""
-    return source_path.with_suffix(".parsed.json"), source_path.with_suffix(".generated.c"), source_path.with_suffix("")
+def default_output_paths(source_path: Path) -> tuple[Path, Path]:
+    """Return generated C and executable locations for one source file."""
+    return source_path.with_suffix(".generated.c"), source_path.with_suffix("")
 
 
 def _ensure_parent(path: Path) -> None:
@@ -266,9 +264,9 @@ def compile_c(
     return command
 
 
-def compile_pipeline(base_path: str | Path, p_path: str | Path, json_path: str | Path, c_path: str | Path, quiet: bool = False) -> dict:
-    """Parse, validate, and generate C while preserving the public old API."""
-    source_path, json_output_path, c_output_path = Path(p_path), Path(json_path), Path(c_path)
+def compile_pipeline(base_path: str | Path, p_path: str | Path, c_path: str | Path, quiet: bool = False) -> dict:
+    """Parse, validate, and generate C without an intermediate serialization artifact."""
+    source_path, c_output_path = Path(p_path), Path(c_path)
     code = source_path.read_text(encoding="utf-8")
 
     if not quiet:
@@ -276,15 +274,9 @@ def compile_pipeline(base_path: str | Path, p_path: str | Path, json_path: str |
     typed_ir = Parser(base_path=str(base_path)).parse_typed(
         code, file_path=str(source_path)
     )
-    _ensure_parent(json_output_path)
-    json_output_path.write_text(
-        json.dumps(typed_ir.to_legacy_json(), indent=2, ensure_ascii=False, default=str),
-        encoding="utf-8",
-    )
-
     if not quiet:
         print("\n=========== DEBUGGER ===========")
-    result_validation = JSONValidator().validate_typed_ir(typed_ir)
+    result_validation = Validator().validate(typed_ir)
     if not quiet:
         print("\nРезультат валидации:")
         print(f"Валидный: {result_validation['is_valid']}")
@@ -311,7 +303,7 @@ def compile_pipeline(base_path: str | Path, p_path: str | Path, json_path: str |
     return result_validation
 
 
-def parse_cli_paths(args: argparse.Namespace) -> tuple[Path, Path, Path, Path, Path]:
+def parse_cli_paths(args: argparse.Namespace) -> tuple[Path, Path, Path, Path]:
     """Resolve paths for both package commands and the old single-file CLI."""
     source_hint = _explicit_source(args)
     package = _load_package_for_args(args, source_hint)
@@ -323,16 +315,15 @@ def parse_cli_paths(args: argparse.Namespace) -> tuple[Path, Path, Path, Path, P
         source_path = Path("examples/tensor_std.oc").resolve()
 
     if package:
-        default_json, default_c, default_binary = package.artifact_paths(args.profile)
+        default_c, default_binary = package.artifact_paths(args.profile)
         default_base = source_path.parent
     else:
-        default_json, default_c, default_binary = default_output_paths(source_path)
+        default_c, default_binary = default_output_paths(source_path)
         default_base = source_path.parent
     base_path = args.base_path.expanduser().resolve() if args.base_path else default_base
-    json_path = args.json_output.expanduser().resolve() if args.json_output else default_json.resolve()
     c_path = args.c_output.expanduser().resolve() if args.c_output else default_c.resolve()
     binary_path = args.binary_output.expanduser().resolve() if args.binary_output else default_binary.resolve()
-    return base_path, source_path, json_path, c_path, binary_path
+    return base_path, source_path, c_path, binary_path
 
 
 def _compiler_settings(args: argparse.Namespace, package: Package | None) -> tuple[str, list[str]]:
@@ -386,11 +377,11 @@ def run_cli(args: argparse.Namespace) -> int:
     if command == "test":
         return _run_tests(args, package)
 
-    base_path, source_path, json_path, c_path, binary_path = parse_cli_paths(args)
+    base_path, source_path, c_path, binary_path = parse_cli_paths(args)
     previous_logging_disabled = logger.disabled
     logger.disabled = args.quiet
     try:
-        compile_pipeline(base_path, source_path, json_path, c_path, quiet=args.quiet)
+        compile_pipeline(base_path, source_path, c_path, quiet=args.quiet)
     finally:
         logger.disabled = previous_logging_disabled
     if command == "check" or args.no_compile:
@@ -405,9 +396,9 @@ def run_cli(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(base_path: str, p_path: str, json_path: str, c_path: str):
-    """Backward-compatible entry point used by existing callers."""
-    return compile_pipeline(base_path, p_path, json_path, c_path)
+def main(base_path: str, p_path: str, c_path: str):
+    """Library entry point for parsing, validation, and C generation."""
+    return compile_pipeline(base_path, p_path, c_path)
 
 
 def cli(argv: Sequence[str] | None = None) -> int:

@@ -33,14 +33,12 @@ def main() -> int:
 """,
         encoding="utf-8",
     )
-    json_path = tmp_path / "tensor.json"
     c_path = tmp_path / "tensor.generated.c"
     binary_path = tmp_path / "tensor"
 
     compile_pipeline(
         str(Path(__file__).resolve().parents[1]),
         source,
-        json_path,
         c_path,
         quiet=True,
     )
@@ -81,14 +79,12 @@ def main() -> int:
 """,
         encoding="utf-8",
     )
-    json_path = tmp_path / "tensor_dynamic_list.json"
     c_path = tmp_path / "tensor_dynamic_list.generated.c"
     binary_path = tmp_path / "tensor_dynamic_list"
 
     compile_pipeline(
         str(Path(__file__).resolve().parents[1]),
         source,
-        json_path,
         c_path,
         quiet=True,
     )
@@ -134,14 +130,12 @@ def main() -> int:
 """,
         encoding="utf-8",
     )
-    json_path = tmp_path / "tensor_operations.json"
     c_path = tmp_path / "tensor_operations.generated.c"
     binary_path = tmp_path / "tensor_operations"
 
     compile_pipeline(
         str(Path(__file__).resolve().parents[1]),
         source,
-        json_path,
         c_path,
         quiet=True,
     )
@@ -184,14 +178,12 @@ def main() -> int:
 """,
         encoding="utf-8",
     )
-    json_path = tmp_path / "tensor_matmul_float32.json"
     c_path = tmp_path / "tensor_matmul_float32.generated.c"
     binary_path = tmp_path / "tensor_matmul_float32"
 
     compile_pipeline(
         str(Path(__file__).resolve().parents[1]),
         source,
-        json_path,
         c_path,
         quiet=True,
     )
@@ -227,14 +219,12 @@ def main() -> int:
 """,
         encoding="utf-8",
     )
-    json_path = tmp_path / "tensor_return.json"
     c_path = tmp_path / "tensor_return.generated.c"
     binary_path = tmp_path / "tensor_return"
 
     compile_pipeline(
         str(Path(__file__).resolve().parents[1]),
         source,
-        json_path,
         c_path,
         quiet=True,
     )
@@ -263,14 +253,12 @@ def main() -> int:
 """,
         encoding="utf-8",
     )
-    json_path = tmp_path / "tensor_augmented_index.json"
     c_path = tmp_path / "tensor_augmented_index.generated.c"
     binary_path = tmp_path / "tensor_augmented_index"
 
     compile_pipeline(
         str(Path(__file__).resolve().parents[1]),
         source,
-        json_path,
         c_path,
         quiet=True,
     )
@@ -314,14 +302,12 @@ def main() -> int:
 """,
         encoding="utf-8",
     )
-    json_path = tmp_path / "tensor_views.json"
     c_path = tmp_path / "tensor_views.generated.c"
     binary_path = tmp_path / "tensor_views"
 
     compile_pipeline(
         str(Path(__file__).resolve().parents[1]),
         source,
-        json_path,
         c_path,
         quiet=True,
     )
@@ -365,14 +351,12 @@ def main() -> int:
 """,
         encoding="utf-8",
     )
-    json_path = tmp_path / "tensor_statistics.json"
     c_path = tmp_path / "tensor_statistics.generated.c"
     binary_path = tmp_path / "tensor_statistics"
 
     compile_pipeline(
         str(Path(__file__).resolve().parents[1]),
         source,
-        json_path,
         c_path,
         quiet=True,
     )
@@ -405,14 +389,12 @@ def main() -> int:
 """,
         encoding="utf-8",
     )
-    json_path = tmp_path / "tensor_release.json"
     c_path = tmp_path / "tensor_release.generated.c"
     binary_path = tmp_path / "tensor_release"
 
     compile_pipeline(
         str(Path(__file__).resolve().parents[1]),
         source,
-        json_path,
         c_path,
         quiet=True,
     )

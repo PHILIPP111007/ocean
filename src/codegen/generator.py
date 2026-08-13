@@ -44,9 +44,8 @@ class CCodeGenerator(
 ):
     """Public C backend façade.
 
-    The implementation is split by responsibility into mixins. New compiler
-    passes should call ``generate_from_typed_ir``; existing callers can keep
-    using ``generate_from_json`` through its compatibility adapter.
+    The implementation is split by responsibility into mixins. Callers pass
+    a ``TypedModule`` through ``generate_from_typed_ir``.
     """
 
     pass

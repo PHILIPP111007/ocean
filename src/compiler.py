@@ -8,6 +8,6 @@ The implementation lives in ``src.codegen``.
 """
 
 from src.codegen import CCodeGenerator, OwnershipError
-from src.typed_ir import IRType, TypedModule, build_typed_ir
+from src.typed_ir import IRType, TypedModule
 
-__all__ = ["CCodeGenerator", "OwnershipError", "IRType", "TypedModule", "build_typed_ir"]
+__all__ = ["CCodeGenerator", "OwnershipError", "IRType", "TypedModule"]

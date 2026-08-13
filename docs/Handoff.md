@@ -57,7 +57,7 @@ src/codegen/
 from src.compiler import CCodeGenerator
 
 generator = CCodeGenerator()
-output = generator.generate_from_json(data)
+output = generator.generate_from_typed_ir(typed_module)
 ```
 
 Добавлен compatibility-wrapper `src/compiler.py`.
@@ -501,13 +501,13 @@ str?
 
 При этом старое поле сохраняется:
 
-```json
+```text
 "var_type": "&mut list[int]"
 ```
 
 но добавляется structured metadata:
 
-```json
+```text
 "type_info": {
     "kind": "mut_borrow",
     "memory_kind": "mut_borrow",

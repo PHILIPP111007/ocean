@@ -84,8 +84,8 @@ class NamingMixin:
             i += 1
         return "".join(out)
 
-    def apply_ocean_namespace(self, code: str, json_data: List[Dict]) -> str:
-        del json_data  # discovery is based on emitted symbols, not spelling heuristics.
+    def apply_ocean_namespace(self, code: str, scopes: List[Dict]) -> str:
+        del scopes  # discovery is based on emitted symbols, not spelling heuristics.
         identifiers = self._discover_generated_identifiers(code)
         mapping = {name: f"ocean_{name}" for name in identifiers}
         return self._rewrite_identifiers_outside_literals(code, mapping)

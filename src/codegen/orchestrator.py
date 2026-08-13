@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
 from src.modules.logger import logger
-from src.typed_ir import TypedModule, build_typed_ir
+from src.typed_ir import TypedModule
 
 class OrchestratorMixin:
     def generate_from_typed_ir(self, typed_ir) -> str:
@@ -15,33 +15,25 @@ class OrchestratorMixin:
             raise TypeError("generate_from_typed_ir expects a TypedModule")
         return self._generate_from_typed_scopes(typed_ir.backend_scopes())
 
-    def generate_from_json(self, json_data: List[Dict]) -> str:
-        """Deprecated compatibility entry point for parser-graph callers.
-
-        Internal compiler paths must call :meth:`generate_from_typed_ir`.
-        This adapter remains temporarily so downstream users can migrate.
-        """
-        return self.generate_from_typed_ir(build_typed_ir(json_data))
-
-    def _generate_from_typed_scopes(self, json_data: List[Mapping]) -> str:
+    def _generate_from_typed_scopes(self, scopes: List[Mapping]) -> str:
         """Lower typed scope views after semantic IR construction."""
         self.reset()
-        logger.debug(f"Starting Ocean C generation with {len(json_data)} scopes")
-        self.scan_runtime_requirements(json_data)
+        logger.debug(f"Starting Ocean C generation with {len(scopes)} scopes")
+        self.scan_runtime_requirements(scopes)
         self.phils_function_names = {
             scope.get("function_name")
-            for scope in json_data
+            for scope in scopes
             if scope.get("type") == "function" and scope.get("function_name")
         }
         self.function_parameters = {
             scope.get("function_name"): scope.get("parameters", [])
-            for scope in json_data
+            for scope in scopes
             if scope.get("type") == "function" and scope.get("function_name")
         }
 
         # Register class names before mapping fields/generic containers that may
         # contain class references.
-        for scope in json_data:
+        for scope in scopes:
             if scope.get("type") == "module":
                 for node in scope.get("graph", []):
                     if node.get("node") == "class_declaration":
@@ -51,9 +43,9 @@ class OrchestratorMixin:
 
         # Semantic class prepasses are non-emitting and must happen before the
         # helper section so every field type is known in time.
-        self.build_class_registry(json_data)
+        self.build_class_registry(scopes)
 
-        all_types = self.extract_all_types_from_ast(json_data)
+        all_types = self.extract_all_types_from_ast(scopes)
         for model in self.class_registry.models.values():
             for field in model.fields.values():
                 py_type = field.py_type
@@ -89,33 +81,33 @@ class OrchestratorMixin:
 
         # Declaration collection may instantiate return/parameter container
         # types, so it also precedes helper emission.
-        self.collect_imports_and_declarations(json_data)
+        self.collect_imports_and_declarations(scopes)
         self.generate_c_imports()
         self.generate_helpers_section()
 
         # Class layouts depend on the generated generic type declarations.
-        for scope in json_data:
+        for scope in scopes:
             if scope.get("type") == "module":
                 for node in scope.get("graph", []):
                     if node.get("node") == "class_declaration":
                         self.generate_class_declaration_with_fields(node)
 
         self.generate_forward_declarations()
-        self.generate_class_constructors(json_data)
-        self.generate_all_methods(json_data)
+        self.generate_class_constructors(scopes)
+        self.generate_all_methods(scopes)
 
-        for scope in json_data:
+        for scope in scopes:
             if scope.get("type") == "module":
                 for node in scope.get("graph", []):
                     if node.get("node") == "declaration":
                         self.generate_global_declaration(node)
 
-        for scope in json_data:
+        for scope in scopes:
             if scope.get("type") == "function" and not scope.get("is_stub", False):
                 self.generate_function_scope(scope)
 
         c_code = "\n".join(self.output)
-        return self.apply_ocean_namespace(c_code, json_data)
+        return self.apply_ocean_namespace(c_code, scopes)
 
     def generate_temporary_var(self, var_type: str = "int") -> str:
         """Генерирует имя временной переменной"""

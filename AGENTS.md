@@ -32,7 +32,7 @@ For generated C, use C11 and
 strict diagnostics; add `-pthread` for pthread examples. Sanitizers are recommended during runtime
 testing (`-fsanitize=address,undefined`).
 
-The CLI accepts a custom source path plus `--base-path`, `--json-output`, `--c-output`, `-o`, and
+The CLI accepts a custom source path plus `--base-path`, `--c-output`, `-o`, and
 `--compiler`. Pass repeatable C options with `--cflag=-O2` or a group with `--cflags "-Wall -g"`;
 use `--no-compile` for generation-only checks and `--run` to execute the compiled binary.
 Package workflows use `python main.py init|check|build|run|test|clean` and configure

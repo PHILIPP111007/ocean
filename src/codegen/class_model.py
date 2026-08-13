@@ -209,12 +209,12 @@ def _infer_field_type(ast: Mapping[str, Any], context: Dict[str, str]) -> str:
     return "int"
 
 
-def build_class_registry(json_data: Iterable[Mapping[str, Any]]) -> ClassRegistry:
+def build_class_registry(scopes: Iterable[Mapping[str, Any]]) -> ClassRegistry:
     """Build all class metadata directly from the parser graph and scopes."""
     declarations: Dict[str, Dict[str, Any]] = {}
     method_scopes: Dict[tuple[str, str], Dict[str, Any]] = {}
 
-    for scope in json_data:
+    for scope in scopes:
         if scope.get("type") in {"constructor", "class_method", "static_method", "classmethod"}:
             class_name = scope.get("class_name", "")
             method_name = scope.get("method_name", "")

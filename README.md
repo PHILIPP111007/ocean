@@ -298,12 +298,12 @@ numbers are hardware- and compiler-dependent; the benchmark is the source of tru
 ## Compiler pipeline
 
 ```text
-Ocean source → Parser → TypedModule → JSONValidator → CCodeGenerator → C11
+Ocean source → Parser → TypedModule → Validator → CCodeGenerator → C11
 ```
 
 - `src/parser.py` — syntax, types, expressions, indexing, arrays, and tensors.
 - `src/typed_ir.py` — canonical typed scopes, expression result types, data dependencies, and
-  ownership effects. Legacy parser JSON is retained only as a compatibility projection.
+  ownership effects. The compiler pipeline does not serialize an intermediate representation.
 - `src/debug.py` — diagnostics, source locations, ownership, and borrow validation.
 - `src/codegen/` — C lowering for scopes, types, ownership, containers, tensors, and OOP.
 - `src/compiler.py` — public `CCodeGenerator` compatibility API.

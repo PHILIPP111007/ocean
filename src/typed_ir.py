@@ -130,15 +130,6 @@ class TypedModule:
 
     scopes: tuple[TypedScope, ...]
 
-    @property
-    def raw_scopes(self) -> tuple[dict[str, Any], ...]:
-        """Return a lossless compatibility projection of parser scopes.
-
-        The returned dictionaries are deep copies so compatibility callers
-        cannot mutate the semantic module accidentally.
-        """
-        return tuple(deepcopy(scope.raw) for scope in self.scopes)
-
     def backend_scopes(self) -> list[TypedScope]:
         """Return the typed, read-only lowering view consumed by the C backend."""
         return list(self.scopes)
@@ -154,10 +145,6 @@ class TypedModule:
         """Iterate semantic nodes in source/scope order."""
         for scope in self.scopes:
             yield from scope.nodes
-
-    def to_legacy_json(self) -> list[dict[str, Any]]:
-        """Return the compatibility graph used by legacy callers."""
-        return list(self.raw_scopes)
 
     def __len__(self) -> int:
         return len(self.scopes)
@@ -402,9 +389,9 @@ class TypedIRBuilder:
         return [value for value in values if isinstance(value, str) and value]
 
 
-def build_typed_ir(scopes: list[dict[str, Any]]) -> TypedModule:
-    """Convenience entry point used by the compiler pipeline and tests."""
+def build_typed_module(scopes: list[dict[str, Any]]) -> TypedModule:
+    """Build the typed module from the parser's internal graph."""
     return TypedIRBuilder().build(scopes)
 
 
-__all__ = ["IRType", "TypedNode", "TypedScope", "TypedModule", "TypedIRBuilder", "build_typed_ir"]
+__all__ = ["IRType", "TypedNode", "TypedScope", "TypedModule", "TypedIRBuilder", "build_typed_module"]

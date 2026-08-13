@@ -6,9 +6,9 @@ from src.modules.logger import logger
 from src.codegen.class_model import ClassRegistry, MethodModel, build_class_registry
 
 class OopMixin:
-    def build_class_registry(self, json_data: List[Dict]) -> ClassRegistry:
+    def build_class_registry(self, scopes: List[Dict]) -> ClassRegistry:
         """Build the canonical OOP metadata directly from parser output."""
-        self.class_registry = build_class_registry(json_data)
+        self.class_registry = build_class_registry(scopes)
         return self.class_registry
 
     def generate_constructor(
@@ -45,7 +45,7 @@ class OopMixin:
         self.add_line("}")
         self.add_empty_line()
 
-    def generate_class_constructors(self, json_data: List[Dict]):
+    def generate_class_constructors(self, scopes: List[Dict]):
         """Generate constructors from the canonical class models."""
         for class_name, model in self.class_registry.models.items():
             init_model = model.direct_method("__init__")
@@ -247,12 +247,12 @@ class OopMixin:
         finally:
             self._constructing_class = None
 
-    def generate_all_methods(self, json_data: List[Dict]):
+    def generate_all_methods(self, scopes: List[Dict]):
         """Генерирует все методы всех классов, включая унаследованные"""
         logger.debug("DEBUG generate_all_methods: Начало")
 
         # Сначала анализируем наследование
-        self.analyze_class_inheritance(json_data)
+        self.analyze_class_inheritance(scopes)
 
         # Собираем реализации из canonical MethodModel scopes.
         class_method_scopes = {}
@@ -270,7 +270,7 @@ class OopMixin:
                 if method_name == "__init__":
                     continue
 
-                # Проверяем, есть ли реализация в JSON
+                # Проверяем, есть ли реализация в typed AST
                 has_implementation = (
                     class_name in class_method_scopes
                     and method_name in class_method_scopes[class_name]
@@ -283,7 +283,7 @@ class OopMixin:
                     )
                     self._generate_inherited_method_stub(class_name, method_info)
 
-        # Генерируем методы с реализациями из JSON
+        # Генерируем методы с реализациями из typed AST
         for class_name, methods in class_method_scopes.items():
             for method_name, scope in methods.items():
                 if method_name != "__init__":
@@ -339,7 +339,7 @@ class OopMixin:
         self.add_line("}")
         self.add_empty_line()
 
-    def analyze_class_inheritance(self, json_data: List[Dict]):
+    def analyze_class_inheritance(self, scopes: List[Dict]):
         """Build method resolution metadata from canonical class models."""
         logger.debug("Class inheritance is resolved by ClassRegistry")
         self.class_registry.resolved_methods()

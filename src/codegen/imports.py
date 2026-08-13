@@ -49,20 +49,20 @@ class ImportsMixin:
 
             self.add_empty_line()
 
-    def collect_imports_and_declarations(self, json_data: List[Dict]):
-        """Собирает импорты и объявления функций из JSON"""
+    def collect_imports_and_declarations(self, scopes: List[Dict]):
+        """Собирает импорты и объявления функций из typed AST."""
         self.c_imports = []
         self.function_declarations = []
 
         # Собираем импорты из module scope
-        for scope in json_data:
+        for scope in scopes:
             if scope.get("type") == "module":
                 for node in scope.get("graph", []):
                     if node.get("node") == "c_import":
                         self.c_imports.append(node)
 
         # Собираем информацию о классах и их методах
-        for scope in json_data:
+        for scope in scopes:
             if scope.get("type") == "module":
                 for node in scope.get("graph", []):
                     if node.get("node") == "class_declaration":

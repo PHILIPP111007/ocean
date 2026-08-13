@@ -11,9 +11,8 @@ typed_module = Parser().parse_typed(source)
 c_code = CCodeGenerator().generate_from_typed_ir(typed_module)
 ```
 
-`TypedModule` is the canonical compiler-pass API. `generate_from_json()` remains
-as a compatibility adapter for older callers and converts the parser graph into
-the typed module before lowering.
+`TypedModule` is the canonical compiler-pass API. The backend no longer accepts
+serialized parser data.
 
 The C backend receives `TypedScope` and `TypedNode` mapping views from
 `TypedModule.backend_scopes()`. Their legacy `.get(...)` read interface is kept
@@ -69,7 +68,7 @@ The backend understands these type spellings in the AST:
 &mut T
 ```
 
-The C backend enforces the rules lexically and with zero runtime overhead. The JSON validator adds a
+The C backend enforces the rules lexically and with zero runtime overhead. The validator adds a
 conservative intra-function data-flow pass, including branch/loop state merging:
 
 - `&T` allows multiple immutable borrows;

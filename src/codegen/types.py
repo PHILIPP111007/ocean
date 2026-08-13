@@ -391,7 +391,7 @@ class TypesMixin:
                 leaf_struct = f"list[{inner_type}]"
                 type_set.add(leaf_struct)
 
-    def extract_all_types_from_ast(self, json_data: List[Dict]) -> set:
+    def extract_all_types_from_ast(self, scopes: List[Dict]) -> set:
         """Извлекает все типы из AST для генерации структур"""
         all_types = set()
 
@@ -498,7 +498,7 @@ class TypesMixin:
                         self._add_nested_types(value, all_types)
 
         # Проходим по всем scope
-        for scope in json_data:
+        for scope in scopes:
             if scope.get("type") in [
                 "module",
                 "function",
@@ -518,7 +518,7 @@ class TypesMixin:
 
         return all_types
 
-    def collect_types_from_ast(self, json_data: List[Dict]):
+    def collect_types_from_ast(self, scopes: List[Dict]):
         """Собирает все типы из AST для генерации структур"""
         all_types = set()
 
@@ -555,7 +555,7 @@ class TypesMixin:
                     self._collect_all_nested_list_types(var_type, all_types)
 
         # Проходим по всем scope и узлам
-        for scope in json_data:
+        for scope in scopes:
             if scope.get("type") in ["module", "function"]:
                 # Обрабатываем graph узлы
                 for node in scope.get("graph", []):

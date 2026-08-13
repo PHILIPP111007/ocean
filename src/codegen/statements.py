@@ -81,8 +81,8 @@ class StatementsMixin:
         self.add_line(f"return {temp};")
 
     def generate_while_loop(self, node: Dict):
-        """Генерирует while loop с правильной обработкой структуры JSON"""
-        # В вашем JSON ключ "condition", а не "condition_ast"
+        """Генерирует while loop с правильной обработкой структуры AST."""
+        # В AST ключ "condition", а не "condition_ast"
         condition_ast = node.get("condition")
         if not condition_ast:
             return

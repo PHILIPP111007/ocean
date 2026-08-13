@@ -1,4 +1,5 @@
 import re
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Dict, List, Optional
 
@@ -8,7 +9,7 @@ from src.modules.logger import logger
 from src.typed_ir import TypedModule
 
 
-class JSONValidator:
+class Validator:
     """Validate the parser's typed graph before C code generation.
 
     The validator is intentionally split into small phases: symbol collection,
@@ -41,74 +42,63 @@ class JSONValidator:
         self.classes = {}  # {class_name: class_info}
         self.typed_ir = None
 
-    def validate(self, json_data: List[Dict] | TypedModule) -> list[Dict]:
-        """Validate a typed module or legacy parser graph.
-
-        ``TypedModule`` is the canonical compiler input.  The list form stays
-        supported for compatibility with older library users and tests.
-        """
-        if isinstance(json_data, TypedModule):
-            return self.validate_typed_ir(json_data)
-        self.typed_ir = None
-        return self._validate_scopes(json_data)
-
-    def validate_typed_ir(self, typed_ir: TypedModule) -> list[Dict]:
+    def validate(self, typed_ir: TypedModule) -> list[Dict]:
         """Validate the canonical semantic module before C lowering."""
         if not isinstance(typed_ir, TypedModule):
-            raise TypeError("validate_typed_ir expects a TypedModule")
+            raise TypeError("validate expects a TypedModule")
         self.typed_ir = typed_ir
-        return self._validate_scopes(list(typed_ir.raw_scopes))
+        return self._validate_scopes(list(typed_ir.backend_scopes()))
 
-    def _validate_scopes(self, json_data: List[Dict]) -> list[Dict]:
+    def _validate_scopes(self, scopes: List[Mapping]) -> list[Dict]:
         """Run the existing validation passes over a typed lowering view."""
-        if not isinstance(json_data, list):
+        if not isinstance(scopes, list):
             self.errors = []
             self.warnings = []
-            self.add_error("JSON должен быть списком scope'ов")
+            self.add_error("TypedModule scopes должны быть списком")
             return self.get_report()
         self.errors = []
         self.warnings = []
         self.scope_symbols = {}
         self.functions = {}
         self.external_c_functions = set()
-        self.all_scopes = json_data if isinstance(json_data, list) else []
+        self.all_scopes = scopes
         self.scopes_info = self.all_scopes
         self._active_scope = None
         self.source_map = {}
         self.variable_history = {}  # Оставляем, но не используем
         self.variable_states = {}  # Оставляем, но не используем
 
-        if not isinstance(json_data, list):
-            self.add_error("JSON должен быть списком scope'ов")
+        if not isinstance(scopes, list):
+            self.add_error("TypedModule scopes должны быть списком")
             return self.get_report()
 
         # Собираем информацию о всех узлах и их строках only after the input
         # shape has been checked.
-        self.build_source_map(json_data)
+        self.build_source_map(scopes)
 
         # Собираем информацию о всех scope'ах и символах
-        self.collect_symbols(json_data)
+        self.collect_symbols(scopes)
 
         # ЗАКОММЕНТИРОВАТЬ: не строим историю переменных
-        # self.build_variable_history(json_data)
+        # self.build_variable_history(scopes)
 
         # Проверяем каждый scope
-        for scope_idx, scope in enumerate(json_data):
-            if not isinstance(scope, dict):
+        for scope_idx, scope in enumerate(scopes):
+            if not isinstance(scope, Mapping):
                 self.add_error(f"Scope {scope_idx} должен быть объектом")
                 continue
-            self.validate_scope(scope, scope_idx, json_data)
+            self.validate_scope(scope, scope_idx, scopes)
 
         return self.get_report()
 
-    def collect_symbols(self, json_data: List[Dict]):
+    def collect_symbols(self, scopes: List[Mapping]):
         """Собирает информацию о всех символах в системе"""
-        for scope_idx, scope in enumerate(json_data):
-            if not isinstance(scope, dict):
+        for scope_idx, scope in enumerate(scopes):
+            if not isinstance(scope, Mapping):
                 continue
             for node in scope.get("graph", []):
                 if (
-                    isinstance(node, dict)
+                    isinstance(node, Mapping)
                     and node.get("node") == "c_import"
                     and node.get("header") == "std/tensor/tensor_runtime.h"
                 ):
@@ -150,12 +140,12 @@ class JSONValidator:
                     )
             level = scope.get("level", 0)
 
-            if isinstance(scope.get("symbol_table"), dict) and scope["symbol_table"]:
+            if isinstance(scope.get("symbol_table"), Mapping) and scope["symbol_table"]:
                 if level not in self.scope_symbols:
                     self.scope_symbols[level] = {}
 
                 for symbol_name, symbol_info in scope["symbol_table"].items():
-                    if not isinstance(symbol_info, dict):
+                    if not isinstance(symbol_info, Mapping):
                         continue
                     key = symbol_info.get("key")
 
@@ -187,21 +177,21 @@ class JSONValidator:
                         self.scope_symbols[level] = {}
                     self.scope_symbols[level][class_name] = self.classes[class_name]
 
-    def build_source_map(self, json_data: List[Dict]):
+    def build_source_map(self, scopes: List[Mapping]):
         """Строит карту соответствия узлов исходным строкам"""
         # Счетчик глобальных строк
         global_line_counter = 1
 
-        for scope_idx, scope in enumerate(json_data):
-            if not isinstance(scope, dict):
+        for scope_idx, scope in enumerate(scopes):
+            if not isinstance(scope, Mapping):
                 continue
             level = scope.get("level", 0)
             graph = scope.get("graph", [])
-            if not isinstance(graph, list):
+            if not isinstance(graph, (list, tuple)):
                 continue
 
             for node_idx, node in enumerate(graph):
-                if not isinstance(node, dict):
+                if not isinstance(node, Mapping):
                     continue
                 node_id = f"{scope_idx}.{node_idx}"
                 content = node.get("content", "")
@@ -222,12 +212,12 @@ class JSONValidator:
                 if content.strip() and not node.get("source_line"):
                     global_line_counter += 1
 
-    def build_variable_history(self, json_data: List[Dict]):
+    def build_variable_history(self, scopes: List[Dict]):
         """Строит историю операций с переменными С УЧЕТОМ ПОРЯДКА СТРОК"""
         # Сначала собираем все узлы в правильном порядке
         all_nodes = []
 
-        for scope_idx, scope in enumerate(json_data):
+        for scope_idx, scope in enumerate(scopes):
             level = scope.get("level", 0)
             graph = scope.get("graph", [])
 
@@ -602,7 +592,7 @@ class JSONValidator:
     def _contains_unsafe_ffi(self, value) -> bool:
         if isinstance(value, str):
             return bool(re.search(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(", value))
-        if isinstance(value, dict):
+        if isinstance(value, Mapping):
             return any(self._contains_unsafe_ffi(child) for child in value.values())
         if isinstance(value, list):
             return any(self._contains_unsafe_ffi(child) for child in value)
@@ -640,7 +630,7 @@ class JSONValidator:
             for item in value:
                 names.update(self._lifetime_variable_names(item))
             return names
-        if not isinstance(value, dict):
+        if not isinstance(value, Mapping):
             return names
 
         ast_type = value.get("type")
@@ -2052,7 +2042,7 @@ class JSONValidator:
                     self.add_error(f"аргумент '{arg}' был удален", scope_idx, node_idx)
 
         # Если аргумент - AST (словарь)
-        elif isinstance(arg, dict):
+        elif isinstance(arg, Mapping):
             arg_type = arg.get("type")
 
             # Пропускаем конструкторы классов
@@ -2085,7 +2075,7 @@ class JSONValidator:
         dependencies = []
 
         def traverse(node):
-            if not isinstance(node, dict):
+            if not isinstance(node, Mapping):
                 return
 
             node_type = node.get("type")
@@ -2555,9 +2545,9 @@ class JSONValidator:
         names = set()
         if isinstance(indices, list):
             for index in indices:
-                if isinstance(index, dict):
+                if isinstance(index, Mapping):
                     self._collect_vars_from_ast(index, names)
-        elif isinstance(indices, dict):
+        elif isinstance(indices, Mapping):
             self._collect_vars_from_ast(indices, names)
         elif isinstance(indices, str):
             names.add(indices)
@@ -3050,7 +3040,7 @@ class JSONValidator:
         self, ast: Dict, scope_idx: int, node_idx: int, level: int
     ) -> str:
         """Определяет тип значения из AST"""
-        if not isinstance(ast, dict):
+        if not isinstance(ast, Mapping):
             return "unknown"
 
         ast_type = ast.get("type")
@@ -3336,7 +3326,7 @@ class JSONValidator:
                     return "unknown"
 
         # Если return_value - AST (словарь)
-        elif isinstance(return_value, dict):
+        elif isinstance(return_value, Mapping):
             return self.get_type_from_ast(return_value, scope_idx, None, level)
 
         return "unknown"
@@ -3439,7 +3429,7 @@ class JSONValidator:
                         f"присвоение числа строковой переменной", scope_idx, node_idx
                     )
 
-    # В JSONValidator добавьте:
+    # Type validation helper:
     def validate_type_operations(
         self, node: Dict, node_idx: int, scope_idx: int, symbol_table: Dict, level: int
     ):
@@ -3450,7 +3440,7 @@ class JSONValidator:
 
     def validate_ast_types(self, ast: Dict, node_idx: int, scope_idx: int, level: int):
         """Рекурсивно валидирует типы в AST"""
-        if not isinstance(ast, dict):
+        if not isinstance(ast, Mapping):
             return
 
         node_type = ast.get("type")
@@ -3568,7 +3558,7 @@ class JSONValidator:
         used_vars = set()
 
         def visit(node: Dict) -> None:
-            if not isinstance(node, dict):
+            if not isinstance(node, Mapping):
                 return
             node_type = node.get("node", "")
 
@@ -3587,7 +3577,7 @@ class JSONValidator:
             for key, value in node.items():
                 if key in {"node", "content", "dependencies", "symbols", "source_line"}:
                     continue
-                if isinstance(value, dict):
+                if isinstance(value, Mapping):
                     if value.get("type"):
                         self._collect_vars_from_ast(value, used_vars)
                     elif key in {"body", "else_block"}:
@@ -3596,7 +3586,7 @@ class JSONValidator:
                                 visit(child)
                 elif isinstance(value, list):
                     for child in value:
-                        if isinstance(child, dict):
+                        if isinstance(child, Mapping):
                             if child.get("node"):
                                 visit(child)
                             elif child.get("type"):
@@ -3879,7 +3869,7 @@ class JSONValidator:
             return "unknown"
 
         # Если value - AST (словарь)
-        elif isinstance(value, dict):
+        elif isinstance(value, Mapping):
             return self.get_type_from_ast(value, None, None, None)
 
         return "unknown"
@@ -4099,7 +4089,7 @@ class JSONValidator:
         formatted_warnings = []
 
         for error in self.errors:
-            if isinstance(error, dict):
+            if isinstance(error, Mapping):
                 if error.get("source_file") and error.get("line_number"):
                     line_info = f" ({error['source_file']}:{error['line_number']}:{error.get('column_number') or 1})"
                 elif error.get("line_number"):
@@ -4111,7 +4101,7 @@ class JSONValidator:
                 formatted_errors.append(str(error))
 
         for warning in self.warnings:
-            if isinstance(warning, dict):
+            if isinstance(warning, Mapping):
                 if warning.get("source_file") and warning.get("line_number"):
                     line_info = f" ({warning['source_file']}:{warning['line_number']}:{warning.get('column_number') or 1})"
                 elif warning.get("line_number"):
@@ -4368,7 +4358,7 @@ class JSONValidator:
         graph = scope.get("graph", [])
 
         def visit(node: Dict) -> None:
-            if not isinstance(node, dict):
+            if not isinstance(node, Mapping):
                 return
             for dep in node.get("dependencies", []) or []:
                 if isinstance(dep, str) and re.match(r"^[A-Za-z_]\w*$", dep):
@@ -4377,14 +4367,14 @@ class JSONValidator:
                 if isinstance(symbol, str) and re.match(r"^[A-Za-z_]\w*$", symbol):
                     used_vars.add(symbol)
             for value in node.values():
-                if isinstance(value, dict):
+                if isinstance(value, Mapping):
                     if value.get("node"):
                         visit(value)
                     elif value.get("type"):
                         self._collect_vars_from_ast(value, used_vars)
                 elif isinstance(value, list):
                     for child in value:
-                        if isinstance(child, dict):
+                        if isinstance(child, Mapping):
                             if child.get("node"):
                                 visit(child)
                             elif child.get("type"):
@@ -4600,7 +4590,7 @@ class JSONValidator:
                             if len(arguments) == 1:
                                 arg = arguments[0]
                                 if (
-                                    isinstance(arg, dict)
+                                    isinstance(arg, Mapping)
                                     and arg.get("type") == "literal"
                                 ):
                                     value = arg.get("value", "")
@@ -4716,7 +4706,7 @@ class JSONValidator:
 
     def _collect_vars_from_ast(self, ast: Dict, used_vars: set):
         """Collect variable references from any expression AST variant."""
-        if not isinstance(ast, dict):
+        if not isinstance(ast, Mapping):
             return
 
         node_type = ast.get("type")
@@ -4729,7 +4719,7 @@ class JSONValidator:
 
         if node_type == "RANGE_CALL":
             arguments = ast.get("arguments", {})
-            if isinstance(arguments, dict):
+            if isinstance(arguments, Mapping):
                 for value in arguments.values():
                     if isinstance(value, str) and re.match(r"^[A-Za-z_]\w*$", value):
                         used_vars.add(value)
@@ -4750,16 +4740,16 @@ class JSONValidator:
         for key, child in ast.items():
             if key in ignored_keys:
                 continue
-            if isinstance(child, dict):
+            if isinstance(child, Mapping):
                 self._collect_vars_from_ast(child, used_vars)
             elif isinstance(child, list):
                 for item in child:
-                    if isinstance(item, dict):
+                    if isinstance(item, Mapping):
                         self._collect_vars_from_ast(item, used_vars)
 
     def _get_static_value_from_ast(self, ast: Dict, level: int):
         """Пытается получить статическое значение из AST"""
-        if not isinstance(ast, dict):
+        if not isinstance(ast, Mapping):
             return None
 
         node_type = ast.get("type")
@@ -4773,7 +4763,7 @@ class JSONValidator:
             var_info = self.get_symbol_info(var_name, level)
             if var_info and var_info.get("key") == "const":
                 value = var_info.get("value")
-                if isinstance(value, dict) and value.get("type") == "literal":
+                if isinstance(value, Mapping) and value.get("type") == "literal":
                     return value.get("value")
 
         return None
@@ -5054,7 +5044,7 @@ class JSONValidator:
         self, ast: Dict, method_calls: list, node_idx: int, content: str = ""
     ):
         """Извлекает вызовы методов из AST"""
-        if not isinstance(ast, dict):
+        if not isinstance(ast, Mapping):
             return
 
         node_type = ast.get("type")

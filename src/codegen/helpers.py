@@ -16,7 +16,7 @@ class HelpersMixin:
         "ljust", "rjust", "format",
     }
 
-    def scan_runtime_requirements(self, json_data):
+    def scan_runtime_requirements(self, scopes):
         """Collect standard-runtime features before any C is emitted.
 
         The scan is intentionally conservative: a false positive only emits an
@@ -72,7 +72,7 @@ class HelpersMixin:
                 if stripped.startswith("int("):
                     self.runtime_needs_int_helpers = True
 
-        walk(json_data)
+        walk(scopes)
 
     def generate_helpers_section(self):
         """Генерирует секцию с вспомогательными функциями и структурами в правильном порядке"""

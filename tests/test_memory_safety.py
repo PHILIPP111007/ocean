@@ -1,7 +1,7 @@
 import pytest
 
 from src.compiler import CCodeGenerator
-from src.debug import JSONValidator
+from src.debug import Validator
 from src.parser import Parser
 
 
@@ -11,7 +11,7 @@ def compile_ocean(source: str) -> str:
 
 
 def validate_ocean(source: str) -> dict:
-    return JSONValidator().validate(Parser().parse_code(source))
+    return Validator().validate(Parser().parse_typed(source))
 
 
 def test_direct_c_call_requires_unsafe_block():
@@ -22,8 +22,8 @@ def main() -> int:
     @puts(\"hello\")
     return 0
 """
-    data = Parser().parse_code(source)
-    report = JSONValidator().validate(data)
+    typed_ir = Parser().parse_typed(source)
+    report = Validator().validate(typed_ir)
 
     assert not report["is_valid"]
     assert any("unsafe" in error["message"] for error in report["errors"])

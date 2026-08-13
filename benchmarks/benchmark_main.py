@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import json
 import os
 import shutil
 import statistics
@@ -25,7 +24,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.compiler import CCodeGenerator
-from src.debug import JSONValidator
+from src.debug import Validator
 from src.parser import Parser
 from main import compile_c
 
@@ -66,7 +65,7 @@ def run_benchmark(source_path: Path, runs: int, timeout: float, keep: bool) -> d
     parse_seconds = time.perf_counter() - started
 
     validation_started = time.perf_counter()
-    report = JSONValidator().validate_typed_ir(typed_ir)
+    report = Validator().validate(typed_ir)
     validation_seconds = time.perf_counter() - validation_started
     if not report["is_valid"]:
         messages = "\n".join(report["formatted_errors"])
@@ -74,7 +73,7 @@ def run_benchmark(source_path: Path, runs: int, timeout: float, keep: bool) -> d
 
     generation_started = time.perf_counter()
     # A few legacy codegen paths still print debug details directly.  Keep
-    # stdout reserved for benchmark output/JSON and route those diagnostics to
+    # stdout reserved for benchmark output and route those diagnostics to
     # stderr instead.
     with contextlib.redirect_stdout(sys.stderr):
         generated = CCodeGenerator().generate_from_typed_ir(typed_ir)
@@ -155,25 +154,19 @@ def main() -> int:
     argument_parser.add_argument(
         "--keep", action="store_true", help="keep generated C and executable"
     )
-    argument_parser.add_argument(
-        "--json", action="store_true", help="print machine-readable JSON"
-    )
     args = argument_parser.parse_args()
 
     source_path = args.source if args.source.is_absolute() else ROOT / args.source
     result = run_benchmark(source_path.resolve(), args.runs, args.timeout, args.keep)
-    if args.json:
-        print(json.dumps(result, indent=2))
-    else:
-        print(f"source: {result['source']}")
-        print("compile flags: " + " ".join(result["compile_flags"]))
-        print(f"parse:      {result['parse_seconds']:.4f}s")
-        print(f"validation: {result['validation_seconds']:.4f}s")
-        print(f"generation: {result['generation_seconds']:.4f}s")
-        print(f"compile:    {result['compile_seconds']:.4f}s")
-        runtime = result["runtime"]
-        print(f"runtime:    {runtime['median_seconds']:.4f}s")
-        print(f"stdout:     {' | '.join(result['stdout'])}")
+    print(f"source: {result['source']}")
+    print("compile flags: " + " ".join(result["compile_flags"]))
+    print(f"parse:      {result['parse_seconds']:.4f}s")
+    print(f"validation: {result['validation_seconds']:.4f}s")
+    print(f"generation: {result['generation_seconds']:.4f}s")
+    print(f"compile:    {result['compile_seconds']:.4f}s")
+    runtime = result["runtime"]
+    print(f"runtime:    {runtime['median_seconds']:.4f}s")
+    print(f"stdout:     {' | '.join(result['stdout'])}")
     return 0
 
 

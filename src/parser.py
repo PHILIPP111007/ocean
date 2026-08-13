@@ -1,6 +1,5 @@
 import re
 import os
-import json
 
 from src.modules.imports import CImportProcessor, ImportProcessor
 from src.modules.constants import KEYS, DATA_TYPES, METHOD_DECORATORS
@@ -469,9 +468,9 @@ class Parser:
         tooling. Compiler callers should use this method so the legacy graph
         does not become their intermediate representation.
         """
-        from src.typed_ir import build_typed_ir
+        from src.typed_ir import build_typed_module
 
-        return build_typed_ir(self.parse_code(code, file_path=file_path))
+        return build_typed_module(self.parse_code(code, file_path=file_path))
 
     def parse_line(
         self,
@@ -4348,7 +4347,7 @@ class Parser:
                     if current_item.strip():
                         item_ast = self.parse_expression_to_ast(current_item.strip())
                         # Проверяем уникальность по строковому представлению
-                        item_str = json.dumps(item_ast, sort_keys=True)
+                        item_str = repr(item_ast)
                         if item_str not in seen_values:
                             items.append(item_ast)
                             seen_values.add(item_str)
@@ -4360,7 +4359,7 @@ class Parser:
 
             if current_item.strip():
                 item_ast = self.parse_expression_to_ast(current_item.strip())
-                item_str = json.dumps(item_ast, sort_keys=True)
+                item_str = repr(item_ast)
                 if item_str not in seen_values:
                     items.append(item_ast)
 

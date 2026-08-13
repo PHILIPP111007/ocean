@@ -23,7 +23,6 @@ def test_parser_does_not_assign_source_or_output_paths_by_default():
     assert args.command_or_source is None
     assert args.source_arg is None
     assert args.source_override is None
-    assert args.json_output is None
     assert args.c_output is None
     assert args.binary_output is None
 
@@ -31,19 +30,17 @@ def test_parser_does_not_assign_source_or_output_paths_by_default():
 def test_cli_uses_package_default_paths():
     args = build_argument_parser().parse_args([])
 
-    base_path, source_path, json_path, c_path, binary_path = parse_cli_paths(args)
+    base_path, source_path, c_path, binary_path = parse_cli_paths(args)
 
     expected_source = Path("examples/tensor_std.oc").resolve()
     assert base_path == expected_source.parent
     assert source_path == expected_source
-    assert json_path == expected_source.with_suffix(".parsed.json")
     assert c_path == expected_source.with_suffix(".generated.c")
     assert binary_path == expected_source.with_suffix("")
 
 
 def test_cli_accepts_custom_paths_flags_and_run_arguments(tmp_path):
     source = tmp_path / "sample.oc"
-    json_output = tmp_path / "artifacts" / "sample.json"
     c_output = tmp_path / "artifacts" / "sample.c"
     binary_output = tmp_path / "bin" / "sample"
 
@@ -52,8 +49,6 @@ def test_cli_accepts_custom_paths_flags_and_run_arguments(tmp_path):
             str(source),
             "--base-path",
             str(tmp_path / "imports"),
-            "--json-output",
-            str(json_output),
             "--c-output",
             str(c_output),
             "--output",
@@ -75,7 +70,6 @@ def test_cli_accepts_custom_paths_flags_and_run_arguments(tmp_path):
     assert paths == (
         (tmp_path / "imports").resolve(),
         source.resolve(),
-        json_output.resolve(),
         c_output.resolve(),
         binary_output.resolve(),
     )
@@ -88,11 +82,10 @@ def test_cli_accepts_custom_paths_flags_and_run_arguments(tmp_path):
 def test_positional_source_does_not_use_package_entry():
     args = build_argument_parser().parse_args(["build", "examples/neural_network.oc"])
 
-    _, source_path, json_path, c_path, binary_path = parse_cli_paths(args)
+    _, source_path, c_path, binary_path = parse_cli_paths(args)
 
     source = (Path("examples") / "neural_network.oc").resolve()
     assert source_path == source
-    assert json_path == source.with_suffix(".parsed.json")
     assert c_path == source.with_suffix(".generated.c")
     assert binary_path == source.with_suffix("")
 
