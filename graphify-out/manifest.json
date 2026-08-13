@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "src/debug.py": {
-    "mtime": 1786641393.133915,
-    "ast_hash": "22e44ffbd44938a2f102b0bea18e2786",
+    "mtime": 1786642029.0541089,
+    "ast_hash": "78f4e5e2c38c24f6332fdee583d936af",
     "semantic_hash": ""
   },
   "src/modules/constants.py": {
@@ -315,8 +315,8 @@
     "semantic_hash": ""
   },
   "src/typed_ir.py": {
-    "mtime": 1786641868.488039,
-    "ast_hash": "3c2abbe810c54b2a3d720e05a554a8bf",
+    "mtime": 1786642008.745847,
+    "ast_hash": "afbb56339e0b296b55cd559dca337b6d",
     "semantic_hash": ""
   },
   "tests/test_debug_validator.py": {
@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "tests/test_typed_ir.py": {
-    "mtime": 1786641846.699758,
-    "ast_hash": "3d8d02f0fccd2a4625ed219517740598",
+    "mtime": 1786642058.0464826,
+    "ast_hash": "54a0807fd69105604160af76fba54d5c",
     "semantic_hash": ""
   },
   "requirements.txt": {

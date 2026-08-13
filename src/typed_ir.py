@@ -72,6 +72,17 @@ class TypedExpression(Mapping[str, Any]):
 
 
 @dataclass(frozen=True)
+class OwnershipEffect:
+    """Explicit ownership transition attached to a typed graph node."""
+
+    kind: str
+    target: str | None = None
+    source: str | None = None
+    mutable: bool = False
+    ownership: str | None = None
+
+
+@dataclass(frozen=True)
 class TypedNode(Mapping[str, Any]):
     """Semantic metadata and read-only mapping view for one graph node."""
 
@@ -82,6 +93,7 @@ class TypedNode(Mapping[str, Any]):
     writes: tuple[str, ...]
     effect: str
     fields: dict[str, Any]
+    ownership_effects: tuple[OwnershipEffect, ...]
 
     @property
     def source_line(self) -> int | None:
@@ -249,7 +261,95 @@ class TypedIRBuilder:
             writes,
             effect,
             self._typed_payload(node, scope),
+            self._ownership_effects(node, scope),
         )
+
+    def _ownership_effects(
+        self, node: dict[str, Any], scope: dict[str, Any]
+    ) -> tuple[OwnershipEffect, ...]:
+        effects: list[OwnershipEffect] = []
+        node_type = node.get("node", "")
+        target = node.get("var_name") or (node.get("symbols") or [None])[0]
+        var_type = node.get("var_type", "")
+
+        def source_from(value: Any) -> str | None:
+            if not isinstance(value, dict) or value.get("type") != "variable":
+                return None
+            source = value.get("name") or value.get("value")
+            return source if isinstance(source, str) else None
+
+        def is_unique(py_type: str) -> bool:
+            return self.type_parser.parse(py_type or "any").memory_kind == "owned"
+
+        for operation in node.get("operations", []) or []:
+            operation_type = operation.get("type", "")
+            if operation_type in {"BORROW_MUT", "BORROW_IMMUT"}:
+                effects.append(
+                    OwnershipEffect(
+                        "borrow",
+                        target=operation.get("target") or target,
+                        source=operation.get("source"),
+                        mutable=operation_type == "BORROW_MUT",
+                        ownership=operation.get("borrow_type"),
+                    )
+                )
+            elif operation_type == "DELETE_FULL":
+                effects.append(OwnershipEffect("drop", target=operation.get("target") or target))
+            elif operation_type in {"CREATE_ARRAY", "CREATE_TENSOR"}:
+                effects.append(
+                    OwnershipEffect(
+                        "create",
+                        target=operation.get("target") or target,
+                        ownership=operation.get("ownership"),
+                    )
+                )
+            elif operation_type == "SHARE_REFERENCE":
+                effects.append(
+                    OwnershipEffect(
+                        "share",
+                        target=operation.get("target") or target,
+                        source=source_from(operation.get("value")),
+                    )
+                )
+
+        expression = node.get("expression_ast")
+        source = source_from(expression)
+        if source and target and source != target:
+            target_type = var_type
+            if not target_type:
+                info = self._scope_symbol(target, scope)
+                target_type = info.get("type", "") if info else ""
+            source_info = self._scope_symbol(source, scope)
+            source_type = source_info.get("type", "") if source_info else ""
+            if is_unique(target_type) and is_unique(source_type):
+                effects.append(OwnershipEffect("move", target=target, source=source))
+
+        if node_type == "return":
+            return_value = (node.get("operations") or [{}])[0].get("value")
+            source = source_from(return_value)
+            source_info = self._scope_symbol(source, scope) if source else None
+            if source and source_info and is_unique(source_info.get("type", "")):
+                effects.append(OwnershipEffect("move", source=source, target="<return>"))
+
+        if node_type in {"function_call", "function_call_assignment", "c_call"}:
+            function_name = node.get("function", "")
+            function_info = self._functions.get(function_name, {})
+            parameters = function_info.get("parameters", [])
+            for index, argument in enumerate(node.get("arguments", []) or []):
+                source = source_from(argument)
+                if not source or index >= len(parameters):
+                    continue
+                expected = parameters[index].get("type", "")
+                source_info = self._scope_symbol(source, scope)
+                if (
+                    not expected.startswith("&")
+                    and source_info
+                    and is_unique(expected)
+                    and is_unique(source_info.get("type", ""))
+                ):
+                    effects.append(OwnershipEffect("move", source=source, target=function_name))
+
+        return tuple(effects)
 
     def _typed_payload(
         self, value: Any, scope: dict[str, Any], *, expression_context: bool = False
@@ -446,4 +546,11 @@ def _build_typed_module(scopes: list[dict[str, Any]]) -> TypedModule:
     return TypedIRBuilder().build(scopes)
 
 
-__all__ = ["IRType", "TypedExpression", "TypedNode", "TypedScope", "TypedModule"]
+__all__ = [
+    "IRType",
+    "TypedExpression",
+    "OwnershipEffect",
+    "TypedNode",
+    "TypedScope",
+    "TypedModule",
+]

@@ -1,5 +1,11 @@
 from src.parser import Parser
-from src.typed_ir import TypedExpression, TypedModule, TypedNode, TypedScope
+from src.typed_ir import (
+    OwnershipEffect,
+    TypedExpression,
+    TypedModule,
+    TypedNode,
+    TypedScope,
+)
 from src.codegen import CCodeGenerator
 from src.debug import Validator
 
@@ -67,6 +73,46 @@ def main() -> int:
     assert expression.result_type.canonical == "int"
     assert isinstance(expression.get("left"), TypedExpression)
     assert isinstance(expression.get("right"), TypedExpression)
+
+
+def test_typed_ir_exposes_ownership_transitions():
+    module = Parser().parse_typed(
+        """
+def consume(value: array[int]) -> None:
+    return None
+
+def main() -> int:
+    var values: array[int] = [1]
+    var view: &array[int] = values
+    consume(values)
+    del view
+    return 0
+"""
+    )
+
+    declarations = {
+        node.get("var_name"): node
+        for node in module.iter_nodes()
+        if node.node_type == "declaration"
+    }
+    consume = next(node for node in module.iter_nodes() if node.node_type == "function_call")
+    delete = next(node for node in module.iter_nodes() if node.node_type == "delete")
+
+    borrow = declarations["view"].ownership_effects[0]
+    create = declarations["values"].ownership_effects[0]
+    move = consume.ownership_effects[0]
+    drop = delete.ownership_effects[0]
+
+    assert isinstance(borrow, OwnershipEffect)
+    assert (borrow.kind, borrow.source, borrow.target, borrow.mutable) == (
+        "borrow",
+        "values",
+        "view",
+        False,
+    )
+    assert (create.kind, create.target, create.ownership) == ("create", "values", "unique")
+    assert (move.kind, move.source, move.target) == ("move", "values", "consume")
+    assert (drop.kind, drop.target) == ("drop", "view")
 
 
 def test_typed_ir_exposes_source_location_metadata(tmp_path):

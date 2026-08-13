@@ -840,17 +840,32 @@ class Validator:
             var_type = node.get("var_type", "")
             self._lifetime_check_reads(reads, env, scope_idx, node_idx)
             env[target] = self._lifetime_state(var_type)
-            borrow_ops = [op for op in node.get("operations", []) if op.get("type", "").startswith("BORROW_")]
-            if borrow_ops:
-                operation = borrow_ops[0]
+            borrow_effects = [
+                effect
+                for effect in getattr(node, "ownership_effects", ())
+                if effect.kind == "borrow"
+            ]
+            move_effects = [
+                effect
+                for effect in getattr(node, "ownership_effects", ())
+                if effect.kind == "move" and effect.source
+            ]
+            if borrow_effects:
+                effect = borrow_effects[0]
                 self._lifetime_register_borrow(
                     target,
-                    operation.get("source", ""),
-                    operation.get("type") == "BORROW_MUT",
+                    effect.source or "",
+                    effect.mutable,
                     env,
                     scope_idx,
                     node_idx,
                 )
+            elif move_effects:
+                for effect in move_effects:
+                    source = effect.source
+                    if source and source in env:
+                        self._lifetime_check_mutation(source, env, scope_idx, node_idx)
+                        env[source]["status"] = "moved"
             elif self._lifetime_is_unique(var_type):
                 source_ast = node.get("expression_ast") or {}
                 source = source_ast.get("name") or source_ast.get("value") if source_ast.get("type") == "variable" else None
@@ -868,7 +883,19 @@ class Validator:
             target = (node.get("symbols") or [""])[0]
             self._lifetime_check_mutation(target, env, scope_idx, node_idx)
             state = env.get(target)
-            if state and self._lifetime_is_unique(state.get("type", "")):
+            move_effects = [
+                effect
+                for effect in getattr(node, "ownership_effects", ())
+                if effect.kind == "move" and effect.source
+            ]
+            if move_effects:
+                for effect in move_effects:
+                    source = effect.source
+                    if source and source in env:
+                        env[source]["status"] = "moved"
+                if state:
+                    state["status"] = "active"
+            elif state and self._lifetime_is_unique(state.get("type", "")):
                 ast = node.get("expression_ast") or {}
                 source = (ast.get("name") or ast.get("value")) if ast.get("type") == "variable" else None
                 if source and source != target and source in env:
@@ -877,7 +904,13 @@ class Validator:
             return
 
         if node_type == "delete":
-            for target in node.get("symbols", []):
+            drop_effects = [
+                effect
+                for effect in getattr(node, "ownership_effects", ())
+                if effect.kind == "drop" and effect.target
+            ]
+            targets = [effect.target for effect in drop_effects] or node.get("symbols", [])
+            for target in targets:
                 state = env.get(target)
                 if not state:
                     continue
@@ -902,7 +935,12 @@ class Validator:
                 self._lifetime_error(
                     "borrow cannot escape through a function return", scope_idx, node_idx
                 )
-            for name in self._lifetime_variable_names(return_ast):
+            move_sources = {
+                effect.source
+                for effect in getattr(node, "ownership_effects", ())
+                if effect.kind == "move" and effect.source
+            }
+            for name in move_sources or self._lifetime_variable_names(return_ast):
                 state = env.get(name)
                 if state and self._lifetime_is_unique(state.get("type", "")) and not state.get("borrow_source"):
                     state["status"] = "moved"
@@ -928,6 +966,16 @@ class Validator:
             self._lifetime_check_reads(reads, env, scope_idx, node_idx)
             if node_type != "builtin_function_call":
                 self._lifetime_call_escape_check(node, env, scope_idx, node_idx)
+                for effect in getattr(node, "ownership_effects", ()):
+                    if effect.kind != "move" or not effect.source:
+                        continue
+                    source_state = env.get(effect.source)
+                    if source_state:
+                        self._lifetime_check_mutation(
+                            effect.source, env, scope_idx, node_idx
+                        )
+                        if not self._lifetime_is_dead(source_state):
+                            source_state["status"] = "moved"
             return
 
         self._lifetime_check_reads(reads, env, scope_idx, node_idx)
