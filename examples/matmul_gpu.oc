@@ -1,0 +1,16 @@
+import <std/tensor/tensor.oc>
+
+
+def main() -> int:
+    var size: int = 500
+
+    var A: Tensor[float32] = Tensor.zeros(size, size, "gpu")
+    var B: Tensor[float32] = Tensor.zeros(size, size, "gpu")
+    var C_gpu: Tensor[float32] = A.matmul(B)
+    var C: Tensor[float32] = C_gpu.to("cpu")
+
+    print("C.shape(0) =", C.shape(0))
+    print("C.shape(1) =", C.shape(1))
+    print("C.size() =", C.size())
+
+    return 0

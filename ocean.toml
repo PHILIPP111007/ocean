@@ -8,7 +8,9 @@ tests = "tests"
 
 [build]
 compiler = "gcc"
-cflags = ["-std=c11"]
+cflags = [
+    "-std=c11",
+]
 
 [build.profiles.release]
 cflags = ["-O2"]

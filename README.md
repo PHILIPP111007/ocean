@@ -191,6 +191,11 @@ cflags = [
 ]
 ```
 
+```bash
+ocean run ./examples/matmul_gpu.oc \
+  --cflags "-I${CONDA_PREFIX}/include -L/usr/local/cuda/targets/x86_64-linux/lib -lOpenCL -DOCEAN_TENSOR_ENABLE_OPENCL"
+```
+
 The GPU backend requires an OpenCL platform and device at runtime. A CPU-only machine can still
 use `Tensor[T]` on `"cpu"`; requesting `"gpu"` fails with a runtime error when no usable OpenCL
 backend is available.
