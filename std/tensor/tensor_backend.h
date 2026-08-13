@@ -26,6 +26,13 @@ typedef struct ocean_tensor_backend_ops {
     void (*release)(ocean_tensor_handle_t tensor);
     ocean_tensor_handle_t (*matmul)(ocean_tensor_handle_t left,
                                     ocean_tensor_handle_t right);
+    ocean_tensor_handle_t (*binary)(ocean_tensor_handle_t left,
+                                    ocean_tensor_handle_t right,
+                                    int operation);
+    ocean_tensor_handle_t (*scalar)(ocean_tensor_handle_t tensor,
+                                    double scalar,
+                                    int operation);
+    void (*fill)(ocean_tensor_handle_t tensor, double value);
 } ocean_tensor_backend_ops;
 
 #endif

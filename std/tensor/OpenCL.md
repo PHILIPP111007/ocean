@@ -65,8 +65,9 @@ raw OpenCL code into every user function. The Ocean compiler only needs to
 recognize the standard `Tensor` methods and link the required backend runtime.
 
 The runtime uses `tensor_backend.h` as the internal dispatch contract. CPU and
-OpenCL provide the same storage lifecycle operations and a `matmul` entry
-point. OpenCL remains optional at compile time: without
+OpenCL provide the same storage lifecycle operations and operation entry points
+for `matmul`, binary arithmetic, scalar arithmetic, and `fill`. OpenCL remains
+optional at compile time: without
 `OCEAN_TENSOR_ENABLE_OPENCL`, selecting `"gpu"` produces the explicit runtime
 error instead of silently falling back to CPU.
 

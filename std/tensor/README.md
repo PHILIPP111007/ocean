@@ -173,6 +173,10 @@ currently return independent contiguous storage, so they do not share an ownersh
 source tensor. `row` and `column` currently require a 2D tensor. `slice` uses a positive step and
 requires `0 <= start <= stop <= shape[axis]`.
 
+`add`, `sub`, `mul`, `div`, scalar operations, and `fill` now also enter through the backend
+operation table. The OpenCL backend keeps its fast equal-shape kernels and performs the existing
+CPU round-trip fallback for broadcasting and unsupported dtypes.
+
 The OpenCL runtime caches its context, queue, program, and kernels for the process and releases
 them through an exit handler. Individual GPU buffers are released with their owning `Tensor`
 object. OpenCL failures are converted to a descriptive process error with the operation and error
