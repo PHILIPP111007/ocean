@@ -30,7 +30,7 @@ class TensorCodegenMixin:
         return self.device_tensor_dtype(class_type)
 
     def _device_tensor_static_call(self, ast: Dict):
-        """Lower Tensor.zeros/from_tensor without runtime dtype erasure."""
+        """Lower Tensor.zeros/from_list without runtime dtype erasure."""
         class_type = ast.get("class_type") or ast.get("class_name", "")
         if not class_type.startswith("Tensor"):
             return None
@@ -60,31 +60,6 @@ class TensorCodegenMixin:
             return (
                 f"create_Tensor(ocean_tensor_zeros_nd({shape_name}, "
                 f"{len(dimensions)}, \"{dtype}\", {device}))"
-            )
-
-        if method == "from_tensor":
-            if len(args) != 2:
-                raise RuntimeError("Tensor[T].from_tensor expects tensor and device")
-            source_ast, device_ast = args
-            source = generate_argument(source_ast)
-            source_info = None
-            if source_ast.get("type") == "variable":
-                source_info = self.get_variable_info(source_ast.get("value", ""))
-            source_type = source_info.get("py_type", "") if source_info else ""
-            if not self.is_tensor_type(source_type):
-                raise RuntimeError(
-                    "Tensor[T].from_tensor expects a compiler-native tensor[T]"
-                )
-            source_dtype = self.tensor_element_type(source_type)
-            if self.canonical_tensor_dtype(source_dtype) != self.canonical_tensor_dtype(dtype):
-                raise RuntimeError(
-                    "Tensor[T].from_tensor requires matching native and device dtypes"
-                )
-            device = generate_argument(device_ast)
-            return (
-                f"create_Tensor(ocean_tensor_from_cpu_strided("
-                f"(const void*){source}->data, {source}->shape, {source}->strides, "
-                f"{source}->ndim, \"{dtype}\", {device}))"
             )
 
         if method == "from_list":

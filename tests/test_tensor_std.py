@@ -13,20 +13,18 @@ def test_standard_tensor_cpu_facade_runs(tmp_path):
 import <std/tensor/tensor.oc>
 
 def main() -> int:
-    var native: tensor[float32] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
-    var left: Tensor[float32] = Tensor.from_tensor(native, "cpu")
+    var left: Tensor[float32] = Tensor.from_list([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], "cpu")
     var right: Tensor[float32] = Tensor.zeros(3, 2, "cpu")
     var result: Tensor[float32] = left.matmul(right)
     var copy: Tensor[float32] = result.to("cpu")
-    var restored: tensor[float32] = copy.to_tensor()
-    var native_int: tensor[int32] = [[[7, 8], [9, 10]], [[11, 12], [13, 14]]]
-    var int_tensor: Tensor[int32] = Tensor.from_tensor(native_int, "cpu")
+    var restored: Tensor[float32] = copy.copy()
+    var int_tensor: Tensor[int32] = Tensor.from_list([[[7, 8], [9, 10]], [[11, 12], [13, 14]]], "cpu")
     var int_cube: Tensor[int32] = Tensor.zeros(2, 2, 2, "cpu")
-    var restored_int: tensor[int32] = int_tensor.to_tensor()
+    var restored_int: Tensor[int32] = int_tensor.copy()
     print(copy.shape(0))
     print(copy.shape(1))
     print(copy.device())
-    print(restored[0, 0])
+    print(restored.get(0, 0))
     print(int_tensor.ndim())
     print(int_cube.shape(2))
     print(restored_int[1, 0, 1])
@@ -60,7 +58,7 @@ def main() -> int:
         "0.000000",
         "3",
         "2",
-        "12",
+        "12.000000",
     ]
 
 
@@ -82,21 +80,14 @@ def main() -> int:
     var scaled: Tensor[int32] = left.mul_scalar(2.0)
     var broadcast: Tensor[int32] = left.add(bias)
     left.fill(9.0)
-    var restored_added: tensor[int32] = added.to_tensor()
-    var restored_subtracted: tensor[int32] = subtracted.to_tensor()
-    var restored_multiplied: tensor[int32] = multiplied.to_tensor()
-    var restored_transposed: tensor[int32] = transposed.to_tensor()
-    var restored_reshaped: tensor[int32] = reshaped.to_tensor()
-    var restored_scaled: tensor[int32] = scaled.to_tensor()
-    var restored_broadcast: tensor[int32] = broadcast.to_tensor()
-    print(restored_added[1, 0])
-    print(restored_subtracted[0, 1])
-    print(restored_multiplied[1, 1])
-    print(restored_transposed[0, 1])
-    print(restored_reshaped.shape[1])
-    print(restored_scaled[1, 1])
-    print(restored_broadcast[0, 1])
-    print(restored_broadcast[1, 0])
+    print(added.get(1, 0))
+    print(subtracted.get(0, 1))
+    print(multiplied.get(1, 1))
+    print(transposed.get(0, 1))
+    print(reshaped.get(0, 3))
+    print(scaled.get(1, 1))
+    print(broadcast.get(0, 1))
+    print(broadcast.get(1, 0))
     print(left.sum())
     return 0
 """,
@@ -122,14 +113,14 @@ def main() -> int:
     )
 
     assert result.stdout.splitlines() == [
-        "10",
-        "4",
-        "32",
-        "3",
-        "4",
-        "8",
-        "22",
-        "13",
+        "10.000000",
+        "4.000000",
+        "32.000000",
+        "3.000000",
+        "4.000000",
+        "8.000000",
+        "22.000000",
+        "13.000000",
         "36.000000",
     ]
 
@@ -145,8 +136,7 @@ def make_labels() -> Tensor[int32]:
 
 def main() -> int:
     var labels: Tensor[int32] = make_labels()
-    var native: tensor[int32] = labels.to_tensor()
-    print(native.shape[1])
+    print(labels.shape(1))
     return 0
 """,
         encoding="utf-8",

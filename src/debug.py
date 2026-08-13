@@ -117,7 +117,6 @@ class JSONValidator:
                             "ocean_tensor_zeros",
                             "ocean_tensor_zeros_nd",
                             "ocean_tensor_from_cpu_strided",
-                            "ocean_tensor_from_cpu_native",
                             "ocean_tensor_copy",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",
@@ -139,8 +138,6 @@ class JSONValidator:
                             "ocean_tensor_ndim",
                             "ocean_tensor_size",
                             "ocean_tensor_device",
-                            "ocean_tensor_to_cpu_tensor",
-                            "ocean_tensor_export_free",
                             "ocean_tensor_release",
                         }
                     )
@@ -5194,7 +5191,7 @@ class JSONValidator:
                 "get", "set", "fill", "sum", "copy", "transpose", "matmul",
                 "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
                 "mul_scalar", "div_scalar", "reshape", "row", "column", "slice",
-                "to", "to_tensor",
+                "to",
                 "shape", "ndim", "size", "device", "release",
             }
 

@@ -18,11 +18,9 @@ legacy compiler layouts and C ABI interoperability; it is deprecated and will
 be removed after the compatibility bridges are retired. User code should not
 access `cl_mem`, OpenCL contexts, queues, or backend-specific pointers directly.
 
-The old types interoperate explicitly through `Tensor.from_tensor(...)` and
-`Tensor.to_tensor()`. These are deprecated low-level bridges retained during
-the migration; new user code must use `Tensor.from_list(...)` and public
-metadata/accessor methods. This keeps the compiler-native CPU layout out of
-the public GPU ABI.
+The compiler-native CPU tensor is isolated from the public API. New user code
+must use `Tensor.from_list(...)` and public metadata/accessor methods; this
+keeps the compiler-native CPU layout out of the public GPU ABI.
 
 See:
 

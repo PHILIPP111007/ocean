@@ -275,7 +275,7 @@ class TypedIRBuilder:
                 "row", "column", "slice", "transpose_view", "copy", "transpose", "matmul",
                 "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
                 "mul_scalar", "div_scalar", "reshape", "sum", "fill", "to",
-                "to_tensor", "shape", "ndim", "size", "device", "get", "set",
+                "shape", "ndim", "size", "device", "get", "set",
                 }:
                 if ast.get("method") == "sum":
                     return IRType.parse("float64")
@@ -289,8 +289,6 @@ class TypedIRBuilder:
                     return IRType.parse("float64")
                 if ast.get("method") == "set":
                     return IRType.parse("None")
-                if ast.get("method") == "to_tensor":
-                    return IRType.parse("pointer")
                 return IRType.parse(object_type or "Tensor[float32]")
             return IRType.parse("any")
 
@@ -298,7 +296,7 @@ class TypedIRBuilder:
             class_name = ast.get("class_name", "")
             class_type = ast.get("class_type") or class_name
             if class_name == "Tensor" and ast.get("method") in {
-                "zeros", "from_tensor", "from_list"
+                "zeros", "from_list"
             }:
                 return IRType.parse(
                     class_type if class_type != "Tensor" else "Tensor[float32]"

@@ -13,19 +13,12 @@ class Tensor:
         return value
 
     @staticmethod
-    def from_tensor(source: pointer, device: str) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_from_cpu_native(source, "float32", device)
-        var value: Tensor = Tensor(handle)
-        return value
-
-    @staticmethod
     def from_list(source: pointer, device: str) -> Tensor:
-        # Tensor.from_list(...) is compiler-lowered so the element dtype from
-        # the surrounding Tensor[T] annotation and rectangular shape are
-        # preserved before entering the runtime.
-        var handle: ocean_tensor_handle_t = ocean_tensor_from_cpu_native(source, "float32", device)
-        var value: Tensor = Tensor(handle)
-        return value
+        # Compiler intrinsic. The backend lowers every valid call directly,
+        # preserving the annotated element dtype and rectangular shape.
+        # This fallback is unreachable for valid calls: the compiler lowers
+        # Tensor.from_list(...) before the class method is emitted.
+        return Tensor.zeros(1, 1, device)
 
     def to(self, device: str) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_to(self.handle, device)
@@ -132,9 +125,6 @@ class Tensor:
 
     def device(self) -> str:
         return ocean_tensor_device(self.handle)
-
-    def to_tensor(self) -> pointer:
-        return ocean_tensor_to_cpu_tensor(self.handle)
 
     def release(self) -> None:
         ocean_tensor_release(self.handle)

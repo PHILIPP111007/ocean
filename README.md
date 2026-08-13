@@ -105,7 +105,6 @@ The supported devices are exactly `"cpu"` and `"gpu"`. `.to(device)` is non-muta
 an owned tensor on the requested device and leaves the source tensor valid. `Tensor` also provides
 `zeros`, `from_list`, `copy`, `matmul`, `add`, `sub`, `mul`, `div`, scalar arithmetic,
 `reshape`, `transpose`, `sum`, `fill`, `shape`, `ndim`, `size`, `device`, and `release`.
-`from_tensor` and `to_tensor` remain only as deprecated migration bridges.
 
 `Tensor.matmul` requires compatible 2D shapes and matching devices. CPU matmul is dtype-generic.
 The GPU path currently has OpenCL kernels for `float32` and `int32`; other numeric dtypes use a
@@ -118,9 +117,9 @@ result back to the original device. `reshape` and `transpose` currently return i
 contiguous tensors, while `fill` mutates the existing tensor.
 
 The public facade owns an opaque runtime handle. Ocean code does not access `cl_mem`, OpenCL
-contexts, queues, or backend-specific pointers directly. `from_tensor()` and `to_tensor()` remain
-low-level compatibility bridges for compiler/native code; new user code should prefer
-`Tensor.from_list(...)`. See [std/tensor/README.md](std/tensor/README.md) and
+contexts, queues, or backend-specific pointers directly. `Tensor.from_list(...)` is the public
+constructor for literal data; native compiler tensors are not part of this API. See
+[std/tensor/README.md](std/tensor/README.md) and
 [std/gpu/opencl.md](std/gpu/opencl.md) for the API and backend design.
 
 ## Imports and the standard library

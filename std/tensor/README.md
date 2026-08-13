@@ -36,13 +36,9 @@ The initial API contract is:
 class Tensor:
     @staticmethod
     def zeros(*shape: int, device: str) -> Tensor[T]
-    @staticmethod
-    def from_tensor(source: &tensor[T], device: str) -> Tensor[T]  # deprecated bridge
-    @staticmethod
     def from_list(source: list, device: str) -> Tensor[T]
 
     def to(self, device: str) -> Tensor[T]
-    def to_tensor(self) -> pointer  # deprecated bridge
     def matmul(self, other: &Tensor[T]) -> Tensor[T]
     def add(self, other: &Tensor[T]) -> Tensor[T]
     def sub(self, other: &Tensor[T]) -> Tensor[T]
@@ -110,24 +106,11 @@ model:
 The original tensor remains valid after a transfer. A future `to_inplace()` may
 be added, but it must be explicit because it changes the owned backend storage.
 
-## Deprecated interoperability with tensor[T]
+## Native tensor compatibility
 
-The compiler-native `tensor[T]` remains only as a migration compatibility type.
-The standard facade provides explicit conversions while this type is being
-removed:
-
-var cpu: tensor[int32] = [[1, 2], [3, 4]]
-var device_tensor: Tensor[int32] = Tensor.from_tensor(cpu, "cpu")
-var gpu_tensor: Tensor[int32] = device_tensor.to("gpu")
-var restored: tensor[int32] = gpu_tensor.to_tensor()
-
-from_list() is the only preferred public constructor and preserves rectangular
-literal shape and numeric `T`. `from_tensor()` copies a native source into
-backend-owned storage for any rank and numeric `T`, preserving tensor views
-through their shape and strides.
-to_tensor() always returns a new CPU tensor; a GPU source is
-downloaded first. This copy boundary keeps native tensor ownership separate
-from the opaque device handle.
+The compiler-native `tensor[T]` is no longer part of the public `Tensor` API.
+It remains only as an internal compatibility type while legacy compiler
+layouts and tests are migrated to the unified opaque `Tensor` backend.
 
 ## Internal representation
 

@@ -19,9 +19,6 @@ ocean_tensor_handle_t ocean_tensor_from_cpu_strided(
     const char *dtype,
     const char *device
 );
-ocean_tensor_handle_t ocean_tensor_from_cpu_native(
-    const void *source, const char *dtype, const char *device
-);
 ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor);
 ocean_tensor_handle_t ocean_tensor_to(ocean_tensor_handle_t tensor, const char *device);
 ocean_tensor_handle_t ocean_tensor_matmul(
@@ -78,8 +75,6 @@ int ocean_tensor_shape(ocean_tensor_handle_t tensor, int axis);
 int ocean_tensor_ndim(ocean_tensor_handle_t tensor);
 size_t ocean_tensor_size(ocean_tensor_handle_t tensor);
 char *ocean_tensor_device(ocean_tensor_handle_t tensor);
-void *ocean_tensor_to_cpu_tensor(ocean_tensor_handle_t tensor);
-void ocean_tensor_export_free(void *value);
 void ocean_tensor_release(ocean_tensor_handle_t tensor);
 
 #endif

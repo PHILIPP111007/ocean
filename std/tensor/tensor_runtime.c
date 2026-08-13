@@ -548,27 +548,6 @@ ocean_tensor_handle_t ocean_tensor_from_cpu_strided(
     return result;
 }
 
-typedef struct ocean_tensor_native_layout {
-    void *data;
-    size_t *shape;
-    size_t *strides;
-    size_t ndim;
-} ocean_tensor_native_layout;
-
-ocean_tensor_handle_t ocean_tensor_from_cpu_native(
-    const void *source,
-    const char *dtype,
-    const char *device
-) {
-    if (!source) ocean_tensor_fail("cannot import a null native tensor");
-    const ocean_tensor_native_layout *native =
-        (const ocean_tensor_native_layout *)source;
-    return ocean_tensor_from_cpu_strided(
-        native->data, native->shape, native->strides, native->ndim,
-        dtype, device
-    );
-}
-
 ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor) {
     if (!tensor) ocean_tensor_fail("cannot copy a null Tensor");
     ocean_tensor_handle_t result = ocean_tensor_alloc(
@@ -1473,55 +1452,6 @@ char *ocean_tensor_device(ocean_tensor_handle_t tensor) {
     if (!result) ocean_tensor_fail("out of memory copying device name");
     strcpy(result, name);
     return result;
-}
-
-typedef struct ocean_tensor_export_layout {
-    void *data;
-    size_t *shape;
-    size_t *strides;
-    size_t ndim;
-    size_t size;
-    size_t refcount;
-    bool is_view;
-    struct ocean_tensor_export_layout *owner;
-} ocean_tensor_export_layout;
-
-void *ocean_tensor_to_cpu_tensor(ocean_tensor_handle_t tensor) {
-    if (!tensor) ocean_tensor_fail("cannot export a null Tensor");
-    ocean_tensor_export_layout *result =
-        (ocean_tensor_export_layout *)calloc(1, sizeof(*result));
-    if (!result) ocean_tensor_fail("out of memory exporting Tensor");
-    result->ndim = tensor->ndim;
-    result->size = tensor->size;
-    result->refcount = 1;
-    result->is_view = false;
-    result->shape = (size_t *)malloc(result->ndim * sizeof(size_t));
-    result->strides = (size_t *)malloc(result->ndim * sizeof(size_t));
-    size_t bytes = ocean_tensor_bytes(tensor);
-    result->data = bytes ? malloc(bytes) : NULL;
-    if (!result->shape || !result->strides || (bytes && !result->data)) {
-        ocean_tensor_fail("out of memory exporting Tensor metadata");
-    }
-    memcpy(result->shape, tensor->shape, result->ndim * sizeof(size_t));
-    memcpy(result->strides, tensor->strides, result->ndim * sizeof(size_t));
-    if (tensor->device == OCEAN_TENSOR_CPU) {
-        if (bytes) memcpy(result->data, tensor->cpu_data, bytes);
-    }
-#ifdef OCEAN_TENSOR_ENABLE_OPENCL
-    else {
-        ocean_tensor_gpu_read(tensor, result->data);
-    }
-#endif
-    return result;
-}
-
-void ocean_tensor_export_free(void *value) {
-    ocean_tensor_export_layout *tensor = (ocean_tensor_export_layout *)value;
-    if (!tensor) return;
-    free(tensor->data);
-    free(tensor->shape);
-    free(tensor->strides);
-    free(tensor);
 }
 
 void ocean_tensor_release(ocean_tensor_handle_t tensor) {
