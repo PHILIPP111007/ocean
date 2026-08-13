@@ -112,12 +112,6 @@ class ExpressionsMixin:
             right_ast = ast.get("right", {})
             operator = ast.get("operator_symbol", "")
 
-            tensor_expression = self.generate_tensor_broadcast_binary(
-                left_ast, right_ast, operator
-            )
-            if tensor_expression is not None:
-                return tensor_expression
-
             left = self.generate_expression(left_ast)
             right = self.generate_expression(right_ast)
 
@@ -269,9 +263,6 @@ class ExpressionsMixin:
                             elif self.is_array_type(py_type):
                                 self.generate_array_struct(py_type)
                                 c_func_name = f"{self.array_struct_name(py_type)}_len"
-                            elif self.is_tensor_type(py_type):
-                                self.generate_tensor_struct(py_type)
-                                c_func_name = f"{self.tensor_struct_name(py_type)}_len"
                             else:
                                 c_func_name = "builtin_len"
                         else:
@@ -385,7 +376,6 @@ class ExpressionsMixin:
             var_info.get("is_pointer", False)
             or self._is_class_type(var_info.get("py_type", ""))
             or self.is_array_type(var_info.get("py_type", ""))
-            or self.is_tensor_type(var_info.get("py_type", ""))
         ):
             if self.is_device_tensor_type(var_info.get("py_type", "")):
                 if attr_name in {"ndim", "size", "device"}:
@@ -439,15 +429,6 @@ class ExpressionsMixin:
             return f"create_{class_name}({', '.join(arguments)})"
 
         elif node_type == "method_call":
-            if self._is_tensor_zeros_expression(ast):
-                return self._generate_tensor_zeros_expr(
-                    target_name,
-                    target_type,
-                    ast,
-                    expression_generator=lambda argument: self._generate_expression_from_ast_for_init(
-                        argument, param_names
-                    ),
-                )
             raise RuntimeError(
                 f"method call '{ast.get('object', '')}.{ast.get('method', '')}' "
                 "is not supported in a constructor initializer"
@@ -471,15 +452,6 @@ class ExpressionsMixin:
             )
 
         elif node_type == "list_literal":
-            if self.is_tensor_type(target_type):
-                return self._generate_tensor_literal_expr(
-                    target_name,
-                    target_type,
-                    ast,
-                    expression_generator=lambda item: self._generate_expression_from_ast_for_init(
-                        item, param_names
-                    ),
-                )
             # Keep the established constructor behavior for an empty list:
             # calloc leaves the field NULL and later method initialization can
             # replace it with a concrete list. Non-empty list fields need a

@@ -11,9 +11,6 @@ class ArrayCodegenMixin:
     def is_array_type(self, py_type: str) -> bool:
         return self.strip_borrow_type(py_type).startswith("array[")
 
-    def is_tensor_type(self, py_type: str) -> bool:
-        return self.strip_borrow_type(py_type).startswith("tensor[")
-
     def is_device_tensor_type(self, py_type: str) -> bool:
         base = self.strip_borrow_type(py_type)
         return base == "Tensor" or (
@@ -31,25 +28,8 @@ class ArrayCodegenMixin:
             )
         return dtype
 
-    def canonical_tensor_dtype(self, dtype: str) -> str:
-        return {
-            "float": "float64",
-            "double": "float64",
-            "float64": "float64",
-            "float32": "float32",
-            "int": "int32",
-            "int32_t": "int32",
-            "uint32_t": "uint32",
-            "int8_t": "int8",
-            "int16_t": "int16",
-            "int64_t": "int64",
-            "uint8_t": "uint8",
-            "uint16_t": "uint16",
-            "uint64_t": "uint64",
-        }.get(dtype, dtype)
-
     def is_owned_buffer_type(self, py_type: str) -> bool:
-        return self.is_array_type(py_type) or self.is_tensor_type(py_type)
+        return self.is_array_type(py_type)
 
     def _generic_element_type(self, py_type: str, generic_name: str) -> str:
         base = self.strip_borrow_type(py_type)
@@ -61,9 +41,6 @@ class ArrayCodegenMixin:
     def array_element_type(self, py_type: str) -> str:
         return self._generic_element_type(py_type, "array")
 
-    def tensor_element_type(self, py_type: str) -> str:
-        return self._generic_element_type(py_type, "tensor")
-
     def array_struct_name(self, py_type: str) -> str:
         return f"ocean_array_{self.clean_type_name_for_c(self.array_element_type(py_type))}"
 
@@ -73,8 +50,6 @@ class ArrayCodegenMixin:
     def _owned_free_call(self, name: str, py_type: str) -> str:
         if self.is_array_type(py_type):
             return f"{self.array_struct_name(py_type)}_free({name});"
-        if self.is_tensor_type(py_type):
-            return f"{self.tensor_struct_name(py_type)}_free({name});"
         raise RuntimeError(f"not an owned buffer type: {py_type}")
 
     def _mark_owned_move(self, source: str) -> None:
@@ -171,7 +146,7 @@ class ArrayCodegenMixin:
 
     def _generate_array_literal_expr(self, var_name: str, py_type: str, ast: Dict) -> str:
         element_type = self.array_element_type(py_type)
-        if self.is_array_type(element_type) or self.is_tensor_type(element_type):
+        if self.is_array_type(element_type):
             raise RuntimeError("array elements must be scalar/value types in backend v1")
         c_element_type = self.map_type_to_c(element_type)
         items = ast.get("items", [])
@@ -188,7 +163,7 @@ class ArrayCodegenMixin:
     def _generate_owned_literal_expr(self, var_name: str, py_type: str, ast: Dict) -> str:
         if self.is_array_type(py_type):
             return self._generate_array_literal_expr(var_name, py_type, ast)
-        return self._generate_tensor_literal_expr(var_name, py_type, ast)
+        raise RuntimeError(f"unsupported owned buffer type: {py_type}")
 
     def generate_array_struct(self, py_type: str) -> None:
         base = self.strip_borrow_type(py_type)
@@ -198,7 +173,7 @@ class ArrayCodegenMixin:
         if struct_name in self.generated_structures:
             return
         element_type = self.array_element_type(base)
-        if self.is_array_type(element_type) or self.is_tensor_type(element_type):
+        if self.is_array_type(element_type):
             raise RuntimeError("nested array/tensor elements are not supported in backend v1")
         c_element_type = self.map_type_to_c(element_type)
         self.generated_structures.add(struct_name)

@@ -2,13 +2,10 @@
 
 ## Purpose
 
-`Tensor` is the only public, device-aware tensor object. The lower-case
-`tensor[T]` primitive is deprecated and retained temporarily only as an
-internal/native ABI compatibility type:
+`Tensor` is the device-aware tensor object and the only tensor type:
 
 ```text
 Tensor[float32]        # public device-aware tensor
-tensor[float32]        # internal/native CPU storage compatibility type
 ```
 
 The facade accepts numeric `T`: `bool`, signed/unsigned integer types,
@@ -78,8 +75,7 @@ var C_gpu: Tensor[float32] = A_gpu.matmul(B_gpu)
 var C: Tensor[float32] = C_gpu.to("cpu")
 ```
 
-For user code, literals can be converted directly without declaring a native
-`tensor[T]` variable:
+For user code, literals are converted directly into backend-owned storage:
 
 ```text
 var A: Tensor[float32] = Tensor.from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
@@ -105,12 +101,6 @@ model:
 
 The original tensor remains valid after a transfer. A future `to_inplace()` may
 be added, but it must be explicit because it changes the owned backend storage.
-
-## Native tensor compatibility
-
-The compiler-native `tensor[T]` is no longer part of the public `Tensor` API.
-It remains only as an internal compatibility type while legacy compiler
-layouts and tests are migrated to the unified opaque `Tensor` backend.
 
 ## Internal representation
 

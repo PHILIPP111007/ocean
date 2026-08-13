@@ -162,12 +162,11 @@ Current deliberate boundaries:
 - interprocedural lifetime parameters and proven non-lexical lifetimes are not implemented yet;
 - raw C pointers are not automatically freed;
 - scalar/value borrows are not implemented yet;
-- full integer-overflow semantics, `Shared[T]`, `Send`/`Sync`, arenas and owned `array`/`tensor` are future work.
+- full integer-overflow semantics, `Shared[T]`, `Send`/`Sync`, arenas and owned `array` are future work.
 
-For OS/ML, `array[T]` and the deprecated native `tensor[T]` are unique-owned buffers plus `&T` /
-`&mut T`, so hot loops do not perform reference-count operations. New numerical code should use
-the managed opaque `Tensor[T]` facade, which owns backend storage and exposes device-aware
-operations. The native tensor remains only for compatibility and low-level migration tests.
+For OS/ML, `array[T]` is a unique-owned buffer plus `&T` / `&mut T`, so hot loops do not perform
+reference-count operations. Numerical code should use the managed opaque `Tensor[T]` facade,
+which owns backend storage and exposes device-aware operations.
 
 ## Recommended compiler flags during development
 

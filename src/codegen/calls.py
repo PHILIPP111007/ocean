@@ -69,10 +69,6 @@ class CallsMixin:
             return self._generate_tuple_method_call(
                 object_expression, obj_type, method_name, arg_strings, is_standalone, target_var
             )
-        if self.is_tensor_type(obj_type):
-            return self._generate_tensor_method_call(
-                object_expression, obj_type, method_name, arg_strings, is_standalone, target_var
-            )
         if self.is_device_tensor_type(obj_type):
             full_args = object_expression
             if arg_strings:
@@ -360,7 +356,6 @@ class CallsMixin:
                         if (
                             (
                                 self.is_array_type(object_type)
-                                or self.is_tensor_type(object_type)
                                 or self.is_device_tensor_type(object_type)
                             )
                             and arg.get("attribute") in {"size", "capacity", "ndim"}
@@ -379,11 +374,6 @@ class CallsMixin:
                             else ""
                         )
                         if (
-                            self.is_tensor_type(object_type)
-                            and arg.get("attribute") == "shape"
-                        ):
-                            format_parts.append("%zu")
-                        elif (
                             self.is_device_tensor_type(object_type)
                             and arg.get("attribute") == "shape"
                         ):
@@ -451,8 +441,6 @@ class CallsMixin:
                             source_type = self.strip_borrow_type(source_info.get("py_type", ""))
                             if self.is_array_type(source_type):
                                 element_type = self.array_element_type(source_type)
-                            elif self.is_tensor_type(source_type):
-                                element_type = self.tensor_element_type(source_type)
                             elif self.is_device_tensor_type(source_type):
                                 # Public Tensor.get() exposes numeric values
                                 # through the stable float64 scalar ABI.
@@ -822,9 +810,6 @@ class CallsMixin:
             elif self.is_array_type(arg_type):
                 self.generate_array_struct(arg_type)
                 func_call = f"{self.array_struct_name(arg_type)}_len({arg_expr})"
-            elif self.is_tensor_type(arg_type):
-                self.generate_tensor_struct(arg_type)
-                func_call = f"{self.tensor_struct_name(arg_type)}_len({arg_expr})"
             elif arg_type.startswith("dict["):
                 key_type, value_type = self._extract_dict_types(arg_type)
                 key_name = self.clean_type_name_for_c(key_type)

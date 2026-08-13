@@ -10,7 +10,6 @@ GENERIC_TYPES = {
     "tuple",
     "set",
     "array",
-    "tensor",
     "shared",
     "optional",
 }
@@ -70,7 +69,7 @@ TENSOR_DTYPES = {
 }
 
 SHARED_TYPES = {"str", "list", "dict", "tuple"}
-OWNED_TYPES = {"array", "tensor"}
+OWNED_TYPES = {"array"}
 
 
 @dataclass(frozen=True)
@@ -122,9 +121,8 @@ class TypeSpec:
             if self.name == "shared":
                 return "shared"
             if self.name == "Tensor":
-                # Device-aware Tensor is an ARC-managed public facade.  Its
-                # backend storage is opaque and released by the class
-                # destructor, unlike the compiler-native tensor[T] buffer.
+                # Device-aware Tensor is an ARC-managed public facade with
+                # opaque storage released by the class destructor.
                 return "shared"
             if self.name in OWNED_TYPES:
                 return "owned"

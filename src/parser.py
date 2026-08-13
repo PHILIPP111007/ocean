@@ -2066,7 +2066,6 @@ class Parser:
         * ``&mut T`` -- exclusive mutable lexical borrow;
         * ``*T`` -- raw pointer (unsafe boundary);
         * ``array[T]`` -- uniquely owned contiguous buffer;
-        * ``tensor[T]`` -- deprecated compiler-native dense tensor metadata;
         * ``shared[T]`` -- explicit thread-shareable/shared wrapper;
         * ``T?`` -- nullable/optional type.
         """
@@ -5216,12 +5215,6 @@ class Parser:
                         if method_found:
                             break
 
-        tensor_methods = {
-            "fill", "sum", "copy", "transpose", "transpose_view", "matmul",
-            "row", "column", "slice",
-        }
-        if obj_type.startswith("tensor[") and method_name in tensor_methods:
-            method_found = True
         if obj_type == "Tensor" or obj_type.startswith("Tensor["):
             if method_name in {
                 "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
@@ -5250,7 +5243,7 @@ class Parser:
         # standalone there as well (for example ``self.hidden.initialize()``).
         builtin_receiver = (
             obj_type == "str"
-            or obj_type.startswith(("list[", "dict[", "tuple[", "tensor[", "Tensor["))
+            or obj_type.startswith(("list[", "dict[", "tuple[", "Tensor["))
             or obj_type == "Tensor"
         )
         is_standalone = "." in obj_name or (

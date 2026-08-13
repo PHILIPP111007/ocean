@@ -81,7 +81,7 @@ ocean_object_header
 
 ocean_list_int
 ocean_dict_str_int
-ocean_tensor_float32
+Tensor runtime handle
 
 ocean_retain()
 ocean_release()
@@ -124,13 +124,13 @@ VALUE
 
 OWNED
     array[T]
-    tensor[T]
 
 SHARED
     list[T]
     dict[K, V]
     str
     class
+    Tensor[T]
 
 BORROWED
     &T
@@ -189,7 +189,6 @@ ocean_release(a);
 
 ```python
 array[T]
-tensor[T]
 ```
 
 предполагается unique ownership.
@@ -487,7 +486,7 @@ tuple[int]
 
 array[float32]
 
-tensor[float32]
+Tensor[float32]
 
 shared[list[int]]
 
@@ -713,7 +712,7 @@ class references
 ```text
 generic containers -> memcpy/compiler auto-vectorization
 
-array/tensor numeric types ->
+array and Tensor numeric types ->
 type-specific SIMD
 ```
 
@@ -899,7 +898,7 @@ typedef struct ocean_array_float32 {
 
 # 22. Tensor — принятое устройство
 
-`tensor[T]` — N-dimensional dense row-major object.
+`Tensor[T]` — публичный N-dimensional dense row-major объект с managed runtime handle.
 
 Он **не должен быть `list[list[T]]`**.
 
@@ -908,7 +907,7 @@ typedef struct ocean_array_float32 {
 Например:
 
 ```python
-var A: tensor[float32] = [
+var A: Tensor[float32] = [
     [1.0, 2.0],
     [3.0, 4.0]
 ]
@@ -936,15 +935,8 @@ size:
 Целевая структура:
 
 ```c
-typedef struct ocean_tensor_float32 {
-    float* data;
-
-    size_t* shape;
-    size_t* strides;
-
-    size_t ndim;
-    size_t size;
-} ocean_tensor_float32;
+Tensor хранит opaque runtime handle; layout и backend details остаются внутри
+`std/tensor/tensor_runtime`.
 ```
 
 ---
@@ -955,7 +947,7 @@ typedef struct ocean_tensor_float32 {
 array[T]
     1D contiguous buffer
 
-tensor[T]
+Tensor[T]
     N-D abstraction over contiguous storage
 ```
 
@@ -989,7 +981,7 @@ A[i][j]
 
 как для nested lists.
 
-Для row-major tensor:
+Для row-major Tensor:
 
 ```text
 offset =
@@ -1028,10 +1020,10 @@ Metadata lookup не должен копировать tensor data.
 
 # 26. Tensor ownership
 
-Tensor должен быть:
+Tensor должен быть managed публичным объектом:
 
 ```text
-OWNED
+SHARED
 ```
 
 а не ARC-managed по умолчанию.
@@ -1039,7 +1031,7 @@ OWNED
 Например:
 
 ```python
-var A: tensor[float32] = ...
+var A: Tensor[float32] = ...
 ```
 
 владеет storage.
@@ -1048,7 +1040,7 @@ var A: tensor[float32] = ...
 
 ```python
 def forward(
-    A: &tensor[float32]
+    A: &Tensor[float32]
 ) -> None:
 ```
 
@@ -1065,7 +1057,7 @@ allocation = 0
 
 ```python
 def normalize(
-    A: &mut tensor[float32]
+    A: &mut Tensor[float32]
 ) -> None:
 ```
 
@@ -1079,9 +1071,9 @@ def normalize(
 
 ```python
 def matmul(
-    A: &tensor[float32],
-    B: &tensor[float32],
-    C: &mut tensor[float32]
+    A: &Tensor[float32],
+    B: &Tensor[float32],
+    C: &mut Tensor[float32]
 ) -> None:
 
     var M: int = A.shape[0]
@@ -1103,9 +1095,9 @@ def matmul(
 
 ```c
 void ocean_matmul(
-    const ocean_tensor_float32* restrict A,
-    const ocean_tensor_float32* restrict B,
-    ocean_tensor_float32* restrict C
+    const Tensor* restrict A,
+    const Tensor* restrict B,
+    Tensor* restrict C
 )
 ```
 
@@ -1121,7 +1113,7 @@ void ocean_matmul(
 
 ```text
 array[T]
-tensor[T]
+Tensor[T]
 ```
 
 в parser v0.2.
@@ -1136,15 +1128,16 @@ rank
 is_rectangular
 ```
 
-для tensor literals.
+для Tensor construction и array literals.
 
 ### Backend
 
-Полноценный lowering `array/tensor` **ещё не завершён**.
+Lowering `array` и публичного `Tensor` поддерживается; удалённый native
+старый native tensor-тип больше не является частью языка.
 
 Последний запрос перед handoff был:
 
-> реализовать `array` и `tensor`.
+> реализовать `array` и публичный `Tensor`.
 
 Начат план следующей backend-итерации:
 
@@ -1158,7 +1151,7 @@ array[T]
     cleanup
     borrowing
 
-tensor[T]
+Tensor[T]
     contiguous row-major storage
     shape
     strides
@@ -1178,8 +1171,8 @@ tensor[T]
 
 Не следует:
 
-1. делать tensor через `list[list[T]]`;
-2. добавлять ARC в tensor hot path;
+1. делать Tensor через `list[list[T]]`;
+2. добавлять лишние копирования в Tensor hot path;
 3. делать generic handwritten SIMD для любых T;
 4. возвращаться к одному 8000-line `CCodeGenerator`;
 5. добавлять новые type semantics непосредственно во время C emission;
@@ -1224,7 +1217,7 @@ class CCodeGenerator(...)
 ### Tensor
 
 ```text
-1. tensor struct
+1. Tensor runtime handle
 2. contiguous literal flattening
 3. shape generation
 4. stride generation
@@ -1312,7 +1305,7 @@ Value
     ↓
 zero-cost
 
-Owned array/tensor
+Owned array / managed Tensor
     ↓
 unique ownership
     ↓

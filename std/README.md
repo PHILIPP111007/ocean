@@ -8,19 +8,16 @@ backend-independent.
 ## Current priorities
 
 1. `Tensor` — the public high-level tensor object with device-aware operations.
-2. CPU tensor backend — currently retained only for legacy compiler compatibility.
-3. OpenCL GPU backend — persistent context, device buffers, kernels, and
+2. OpenCL GPU backend — persistent context, device buffers, kernels, and
    transfers.
 
-The upper-case `Tensor[T]` is the only public tensor type. The lower-case
-`tensor[T]` remains temporarily as an internal typed dense storage primitive for
-legacy compiler layouts and C ABI interoperability; it is deprecated and will
-be removed after the compatibility bridges are retired. User code should not
-access `cl_mem`, OpenCL contexts, queues, or backend-specific pointers directly.
+`Tensor[T]` is the only tensor type. Its storage is opaque and managed by the
+standard runtime; user code should not access `cl_mem`, OpenCL contexts,
+queues, or backend-specific pointers directly.
 
-The compiler-native CPU tensor is isolated from the public API. New user code
-must use `Tensor.from_list(...)` and public metadata/accessor methods; this
-keeps the compiler-native CPU layout out of the public GPU ABI.
+Tensor data enters through `Tensor.from_list(...)` and public
+metadata/accessor methods; the CPU/GPU layout stays behind the opaque runtime
+handle.
 
 See:
 

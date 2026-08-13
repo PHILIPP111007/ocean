@@ -246,7 +246,7 @@ class TypedIRBuilder:
             items = ast.get("items", []) or []
             scalar = self._infer_expression(self._first_scalar(items), scope)
             if shape and len(shape) > 1:
-                return IRType.parse(f"tensor[{scalar.canonical}]")
+                return IRType.parse(f"array[{scalar.canonical}]")
             return IRType.parse(f"array[{scalar.canonical}]")
 
         if ast_type in {"index_access", "tensor_index_access", "nested_index_access"}:
@@ -264,12 +264,10 @@ class TypedIRBuilder:
                 return IRType.parse("int")
 
         if ast_type == "method_call":
-            if ast.get("object") == "tensor" and ast.get("method") == "zeros":
-                return IRType.parse("tensor[any]")
             info = self._scope_symbol(ast.get("object", ""), scope)
             object_type = info.get("type", "") if info else ""
             if (
-                object_type.startswith(("tensor[", "Tensor["))
+                object_type.startswith("Tensor[")
                 or object_type == "Tensor"
             ) and ast.get("method") in {
                 "row", "column", "slice", "transpose_view", "copy", "transpose", "matmul",
@@ -314,10 +312,6 @@ class TypedIRBuilder:
             right = self._infer_expression(ast.get("right"), scope)
             if ast.get("operator_symbol") in {"<", ">", "<=", ">=", "==", "!=", "and", "or"}:
                 return IRType.parse("bool")
-            if left.canonical.startswith("tensor["):
-                return left
-            if right.canonical.startswith("tensor["):
-                return right
             if "float" in {left.canonical, right.canonical}:
                 return IRType.parse("float")
             return left if left.canonical != "any" else right

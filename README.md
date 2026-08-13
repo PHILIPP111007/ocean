@@ -69,13 +69,10 @@ independent copying tensor.
 
 ### Device-aware `Tensor[T]`
 
-The standard library provides the public uppercase `Tensor[T]` object with an explicit device.
-The lowercase `tensor[T]` is deprecated and retained temporarily as an internal compiler/native
-compatibility type:
+The standard library provides the public uppercase `Tensor[T]` object with an explicit device:
 
 ```text
 Tensor[float32]   # public device-aware standard-library facade
-tensor[float32]   # deprecated native compatibility type
 ```
 
 `Tensor[T]` supports numeric element types such as `bool`, signed and unsigned integers,
@@ -208,7 +205,6 @@ backend is available.
 | `list[T]`, `dict[K,V]`, tuples, classes | non-atomic reference counting |
 | `str` | owned C string with copied aliases |
 | `array[T]` | unique-owned buffer |
-| `tensor[T]` | deprecated compiler-native unique-owned buffer |
 | `Tensor[T]` | ARC-managed facade over CPU or GPU tensor storage |
 | `&T` / `&mut T` | lexical immutable / exclusive borrow |
 | raw pointers and direct C calls | explicit `unsafe:` boundary |

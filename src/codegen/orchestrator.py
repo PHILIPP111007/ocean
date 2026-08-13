@@ -74,8 +74,6 @@ class OrchestratorMixin:
                 self.generate_list_struct(py_type)
             elif self.is_array_type(py_type):
                 self.generate_array_struct(py_type)
-            elif self.is_tensor_type(py_type):
-                self.generate_tensor_struct(py_type)
         for py_type in sorted_types:
             if py_type.startswith("tuple["):
                 self.generate_tuple_struct(py_type)

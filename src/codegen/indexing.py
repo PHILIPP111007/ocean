@@ -54,13 +54,6 @@ class IndexingMixin:
                     f"self->{attr_name}", attr_type, [index_ast], value_expr
                 )
                 return
-            if attr_type and self.is_tensor_type(attr_type):
-                self.add_line(
-                    self._tensor_set_call(
-                        f"self->{attr_name}", attr_type, [index_expr], value_expr
-                    )
-                )
-                return
 
             # Для атрибутов, которые могут быть списками
             if attr_name == "data":
@@ -124,9 +117,6 @@ class IndexingMixin:
                 self.add_line(
                     f"{self.array_struct_name(py_type)}_set({variable}, (size_t)({index_expr}), {value_expr});"
                 )
-            elif self.is_tensor_type(py_type):
-                self.generate_tensor_index_assignment(variable, py_type, [index_ast], value_expr)
-
             # Обработка для кортежей (неизменяемые)
             elif py_type.startswith("tuple["):
                 struct_name = self.generate_tuple_struct_name(py_type)
@@ -258,13 +248,6 @@ class IndexingMixin:
                     f"self->{attr_name}", attr_type, indices_ast, value_expr
                 )
                 return
-            if attr_type and self.is_tensor_type(attr_type):
-                self.add_line(
-                    self._tensor_set_call(
-                        f"self->{attr_name}", attr_type, indices, value_expr
-                    )
-                )
-                return
 
         var_info = self.get_variable_info(var_name)
         if not var_info:
@@ -274,9 +257,6 @@ class IndexingMixin:
         py_type = var_info.get("py_type", "")
 
         if self.is_device_tensor_type(py_type):
-            self.generate_tensor_index_assignment(var_name, py_type, indices_ast, value_expr)
-            return
-        if self.is_tensor_type(py_type):
             self.generate_tensor_index_assignment(var_name, py_type, indices_ast, value_expr)
             return
 
@@ -410,21 +390,15 @@ class IndexingMixin:
             field = self.class_registry.field(current_class, variable[5:]) if current_class else None
             target_type = field.py_type if field else ""
 
-        if self.is_device_tensor_type(target_type) or self.is_tensor_type(target_type):
-            if self.is_device_tensor_type(target_type):
-                target_expr = variable
-                if variable.startswith("self."):
-                    target_expr = f"self->{variable[5:]}"
-                literal = ", ".join(f"(size_t)({index})" for index in index_exprs)
-                current_expr = (
-                    f"ocean_tensor_get_nd({target_expr}->handle, "
-                    f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
-                )
-            else:
-                target_expr = variable
-                current_expr = self._tensor_index_call(
-                    target_expr, target_type, index_exprs
-                )
+        if self.is_device_tensor_type(target_type):
+            target_expr = variable
+            if variable.startswith("self."):
+                target_expr = f"self->{variable[5:]}"
+            literal = ", ".join(f"(size_t)({index})" for index in index_exprs)
+            current_expr = (
+                f"ocean_tensor_get_nd({target_expr}->handle, "
+                f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
+            )
             op_symbol = operator.replace("=", "")
             updated_expr = f"({current_expr} {op_symbol} {value_expr})"
             self.generate_tensor_index_assignment(
@@ -493,9 +467,6 @@ class IndexingMixin:
                 elif self.is_array_type(py_type):
                     self.generate_array_struct(py_type)
                     return f"{self.array_struct_name(py_type)}_get({variable}, (size_t)({index_expr}))"
-                elif self.is_tensor_type(py_type):
-                    self.generate_tensor_struct(py_type)
-                    return self._tensor_index_call(variable, py_type, [index_expr])
                 elif py_type.startswith("tuple["):
                     struct_name = self.generate_tuple_struct_name(py_type)
                     return f"get_{struct_name}({variable}, {index_expr})"
@@ -594,9 +565,6 @@ class IndexingMixin:
         result = var_name
         current_type = py_type
 
-        if self.is_tensor_type(current_type):
-            return self._tensor_index_call(result, current_type, indices)
-
         for idx in indices:
             if current_type.startswith("list["):
                 struct_name = self.generate_list_struct_name(current_type)
@@ -635,10 +603,6 @@ class IndexingMixin:
                             f"ocean_tensor_get_nd(self->{attr_name}->handle, "
                             f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
                         )
-                    if attr_type and self.is_tensor_type(attr_type):
-                        return self._tensor_index_call(
-                            f"self->{attr_name}", attr_type, index_exprs
-                        )
                     if attr_type and attr_type.startswith("list["):
                         # Генерируем вызов специализированной функции
                         struct_name = self.generate_list_struct_name(attr_type)
@@ -652,10 +616,6 @@ class IndexingMixin:
                 if len(index_exprs) != 1:
                     raise RuntimeError("Tensor.shape expects one axis")
                 return f"Tensor_shape({obj_name}, {index_exprs[0]})"
-            if self.is_tensor_type(obj_py_type) and attr_name == "shape":
-                self.generate_tensor_struct(obj_py_type)
-                return f"{self.tensor_struct_name(obj_py_type)}_shape_at({obj_name}, (size_t)({index_expr}))"
-
             # Если это класс или указатель на класс
             if self._is_class_type(obj_py_type) or var_info.get("is_pointer", False):
                 # Получаем информацию о классе
@@ -667,10 +627,6 @@ class IndexingMixin:
                     return (
                         f"ocean_tensor_get_nd({obj_name}->{attr_name}->handle, "
                         f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
-                    )
-                if attr_type and self.is_tensor_type(attr_type):
-                    return self._tensor_index_call(
-                        f"{obj_name}->{attr_name}", attr_type, index_exprs
                     )
                 if attr_type and attr_type.startswith("list["):
                     struct_name = self.generate_list_struct_name(attr_type)

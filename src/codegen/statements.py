@@ -360,10 +360,7 @@ class StatementsMixin:
         self.assert_can_move_or_delete(target)
         kind = info.get("memory_kind")
         if kind == self.MEMORY_OWNED:
-            if self.is_array_type(info.get("py_type", "")):
-                self.generate_array_assignment(node)
-            else:
-                self.generate_tensor_assignment(node)
+            self.generate_array_assignment(node)
             return
         if kind in {self.MEMORY_BORROW, self.MEMORY_MUT_BORROW}:
             raise RuntimeError(
@@ -501,10 +498,6 @@ class StatementsMixin:
         if self.is_array_type(var_type):
             self.generate_array_declaration(node)
             return
-        if self.is_tensor_type(var_type):
-            self.generate_tensor_declaration(node)
-            return
-
         if var_type.startswith("dict["):
             self._generate_dict_declaration(var_name, var_type, expression_ast, node)
             return

@@ -91,30 +91,6 @@ def main() -> int:
     assert compile_and_run(source, tmp_path) == "42\n"
 
 
-def test_oop_tensor_fields_use_generic_constructor_initializers(tmp_path):
-    source = """
-class TensorBox:
-    def __init__(self, rows: int, cols: int) -> None:
-        self.storage: tensor[float32] = tensor.zeros(rows, cols)
-        self.seed: tensor[float32] = [[1.0, 2.0]]
-
-    def size(self) -> int:
-        return self.storage.size
-
-    def first(self) -> float32:
-        return self.seed[0, 0]
-
-def main() -> int:
-    var box: TensorBox = TensorBox(2, 3)
-    var first: float32 = box.first()
-    print(box.size())
-    print(first)
-    return 0
-"""
-
-    assert compile_and_run(source, tmp_path) == "6\n1.000000\n"
-
-
 def test_oop_inherited_field_access_uses_embedded_base_layout(tmp_path):
     source = """
 class Base:

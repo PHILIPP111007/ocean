@@ -615,7 +615,7 @@ class JSONValidator:
             value = value[5:].strip()
         elif value.startswith("&"):
             value = value[1:].strip()
-        return value.startswith(("array[", "tensor["))
+        return value.startswith("array[")
 
     def _lifetime_variable_names(self, value) -> set[str]:
         """Collect variable references from expression ASTs only."""
@@ -1061,15 +1061,15 @@ class JSONValidator:
         if symbol_name == "self":
             return
 
-        native_tensor_type = var_type.strip()
-        while native_tensor_type.startswith(("&mut ", "&")):
-            if native_tensor_type.startswith("&mut "):
-                native_tensor_type = native_tensor_type[5:].strip()
+        normalized_type = var_type.strip()
+        while normalized_type.startswith(("&mut ", "&")):
+            if normalized_type.startswith("&mut "):
+                normalized_type = normalized_type[5:].strip()
             else:
-                native_tensor_type = native_tensor_type[1:].strip()
-        if native_tensor_type.startswith("tensor["):
-            self.add_warning(
-                "тип tensor[T] устаревает и будет удален; используйте публичный Tensor[T]",
+                normalized_type = normalized_type[1:].strip()
+        if normalized_type.startswith("tensor["):
+            self.add_error(
+                "тип tensor[T] удален; используйте публичный Tensor[T]",
                 scope_idx,
                 None,
             )
@@ -1085,7 +1085,7 @@ class JSONValidator:
                 )
         known_generic = (
             type_info.get("kind") in {"generic", "borrow", "mut_borrow", "raw_pointer", "optional"}
-            or var_type.startswith(("list[", "dict[", "tuple[", "array[", "tensor[", "shared["))
+            or var_type.startswith(("list[", "dict[", "tuple[", "array[", "shared["))
         )
         if (
             var_type not in DATA_TYPES
@@ -2655,10 +2655,10 @@ class JSONValidator:
                 indices = body_node.get("indices")
                 if indices is None:
                     indices = body_node.get("index")
-                if not normalized_type.startswith(("array[", "tensor[", "Tensor")):
+                if not normalized_type.startswith(("array[", "Tensor")):
                     self.add_error(
                         f"запись в '{variable}' внутри OpenMP loop разрешена только для "
-                        "array/tensor",
+                        "array/Tensor",
                         scope_idx,
                         node_idx,
                     )
@@ -3084,14 +3084,8 @@ class JSONValidator:
                         return "str"
 
         elif ast_type == "method_call":
-            if ast.get("object") == "tensor" and ast.get("method") == "zeros":
-                return "tensor"
             obj_info = self.get_symbol_info(ast.get("object", ""), level)
             obj_type = obj_info.get("type", "") if obj_info else ""
-            if obj_type.startswith("tensor[") and ast.get("method") in {
-                "row", "column", "slice", "transpose_view", "copy", "transpose", "matmul"
-            }:
-                return obj_type
 
         elif ast_type == "binary_operation":
             # Определяем тип результата бинарной операции
@@ -3105,10 +3099,6 @@ class JSONValidator:
 
             # Для арифметических операций
             if operator in ["+", "-", "*", "/", "//", "%", "**"]:
-                if left_type.startswith("tensor["):
-                    return left_type
-                if right_type.startswith("tensor["):
-                    return right_type
                 if left_type == "float" or right_type == "float":
                     return "float"
                 elif left_type == "int" and right_type == "int":
@@ -3516,21 +3506,8 @@ class JSONValidator:
         ]
 
         if operator in arithmetic_ops:
-            tensor_types = (type1.startswith("tensor["), type2.startswith("tensor["))
-            if any(tensor_types):
-                scalar_types = {
-                    "int", "float", "double", "float16", "float32", "float64",
-                    "int8", "int16", "int32", "int64", "uint8", "uint16",
-                    "uint32", "uint64",
-                }
-                return (
-                    (type1.startswith("tensor[") and type2.startswith("tensor["))
-                    or (type1.startswith("tensor[") and type2 in scalar_types)
-                    or (type2.startswith("tensor[") and type1 in scalar_types)
-                )
             # Все встроенные целочисленные и floating-point типы могут
-            # участвовать в арифметике. Это важно для scalar access к
-            # tensor[float32], который возвращает именно float32.
+            # участвовать в арифметике.
             numeric_types = [
                 "int", "float", "double", "float16", "float32", "float64",
                 "int8", "int16", "int32", "int64",
@@ -3920,12 +3897,12 @@ class JSONValidator:
         # Container literals and factory methods carry their element type in
         # the declaration, while the expression AST only knows the container
         # kind at this stage.
-        generic_containers = ("list[", "dict[", "tuple[", "array[", "tensor[")
+        generic_containers = ("list[", "dict[", "tuple[", "array[")
         if target_type.startswith(generic_containers) and value_type in {
-            "list", "dict", "tuple", "array", "tensor"
+            "list", "dict", "tuple", "array"
         }:
             if value_type == "list":
-                return target_type.startswith(("list[", "array[", "tensor["))
+                return target_type.startswith(("list[", "array["))
             return target_type.startswith(f"{value_type}[")
 
         # Ошибка: если функция должна возвращать int, а возвращает str
@@ -5179,12 +5156,6 @@ class JSONValidator:
             ],
             "tuple": ["count", "index"],
         }
-
-        if type_name.startswith("tensor["):
-            return method_name in {
-                "fill", "sum", "copy", "transpose", "transpose_view", "matmul",
-                "row", "column", "slice",
-            }
 
         if type_name == "Tensor" or type_name.startswith("Tensor["):
             return method_name in {

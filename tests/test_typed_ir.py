@@ -7,21 +7,21 @@ from src.debug import JSONValidator
 def test_typed_ir_tracks_types_reads_writes_and_effects():
     source = """
 def main() -> int:
-    var matrix: tensor[float32] = tensor.zeros(2, 2)
-    var view: &tensor[float32] = matrix
-    matrix[0, 0] = 1.0
+    var values: array[float32] = [0.0, 0.0]
+    var view: &array[float32] = values
+    values[0] = 1.0
     return 0
 """
     module = build_typed_ir(Parser().parse_code(source))
     function = next(scope for scope in module.scopes if scope.raw.get("type") == "function")
 
     declaration, borrow, write, _ = function.nodes
-    assert declaration.result_type.canonical == "tensor[float32]"
+    assert declaration.result_type.canonical == "array[float32]"
     assert declaration.effect == "declare"
-    assert borrow.result_type.canonical == "&tensor[float32]"
-    assert borrow.reads == ("matrix",)
+    assert borrow.result_type.canonical == "&array[float32]"
+    assert borrow.reads == ("values",)
     assert write.effect == "write"
-    assert write.writes == ("matrix",)
+    assert write.writes == ("values",)
 
 
 def test_typed_ir_keeps_codegen_compatibility_format():
@@ -39,7 +39,7 @@ def main() -> int:
 def test_typed_ir_is_the_canonical_validator_and_codegen_api():
     source = """
 def main() -> int:
-    var values: tensor[float32] = tensor.zeros(2, 2)
+    var values: array[float32] = [1.0, 2.0]
     return 0
 """
     module = build_typed_ir(Parser().parse_code(source))
@@ -48,7 +48,7 @@ def main() -> int:
     generated = CCodeGenerator().generate_from_typed_ir(module)
 
     assert report["is_valid"] is True
-    assert "ocean_tensor_float32" in generated
+    assert "ocean_array_float32" in generated
 
 
 def test_typed_ir_models_device_tensor_as_managed_public_type():
@@ -68,7 +68,7 @@ def main() -> int:
     assert value_type.memory_kind == "shared"
 
 
-def test_legacy_native_tensor_is_reported_for_migration():
+def test_removed_native_tensor_is_rejected():
     module = build_typed_ir(
         Parser().parse_code(
             """
@@ -81,5 +81,5 @@ def main() -> int:
 
     report = JSONValidator().validate_typed_ir(module)
 
-    assert report["is_valid"]
-    assert any("tensor[T]" in warning["message"] for warning in report["warnings"])
+    assert not report["is_valid"]
+    assert any("тип tensor[T] удален" in error["message"] for error in report["errors"])

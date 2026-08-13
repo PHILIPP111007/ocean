@@ -197,7 +197,6 @@ int main(void) {
 """
     run(P, C)
 
-
 def test_matmul_2():
     P = r"""
 class Matrix:
@@ -528,31 +527,3 @@ int main(void) {
 }
 """
     run(P, C)
-
-
-def test_matmul_4_uses_checked_once_tensor_fast_path():
-    source = r"""
-def matmul(A: &tensor[float32], B: &tensor[float32], C: &mut tensor[float32]) -> None:
-    var rows_A: int = A.shape[0]
-    var cols_A: int = A.shape[1]
-    var cols_B: int = B.shape[1]
-
-    for i in range(rows_A):
-        for j in range(cols_B):
-            var sum_value: float32 = 0.0
-            for k in range(cols_A):
-                sum_value = sum_value + A[i, k] * B[k, j]
-            C[i, j] = sum_value
-
-    return None
-"""
-    output = CCodeGenerator().generate_from_json(Parser().parse_code(source))
-    matmul = output.split("void* ocean_matmul", 1)[1].split("int main", 1)[0]
-
-    assert "Tensor fast-path shape check failed" in matmul
-    assert "ocean_fast_a_data" in matmul
-    assert "ocean_fast_b_data" in matmul
-    assert "ocean_fast_c_data" in matmul
-    assert "ocean_tensor_float32_get2(A" not in matmul
-    assert "ocean_tensor_float32_get2(B" not in matmul
-    assert "ocean_tensor_float32_set2(C" not in matmul

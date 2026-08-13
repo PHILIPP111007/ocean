@@ -62,7 +62,6 @@ class ScopeMixin:
         self.tensor_fast_access = {}
         self.tensor_fast_loop_bounds = {}
         self.tensor_fast_patterns = set()
-        self._prepare_tensor_fast_path(scope)
 
         processed_declarations = set()
         for node in scope.get("graph", []):
