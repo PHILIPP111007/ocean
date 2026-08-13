@@ -1,0 +1,12 @@
+import <std/tensor/tensor.oc>
+
+
+def main() -> int:
+    var weights: Tensor[float32] = Tensor.load_npy("./examples/data/weights.npy", "cpu")
+    # weights.save_npy("data/weights_copy.npy")
+
+    
+    var w_len: int = len(weights)
+    for i in range(w_len):
+        print(weights[i], end=" ")
+    return 0

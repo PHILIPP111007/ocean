@@ -2,6 +2,8 @@
 #include "std/tensor/tensor_backend.h"
 
 #include <stdbool.h>
+#include <ctype.h>
+#include <errno.h>
 #include <stdint.h>
 #include <math.h>
 #include <stdio.h>
@@ -1861,6 +1863,459 @@ ocean_tensor_handle_t ocean_tensor_matmul(
         ocean_tensor_fail("matmul requires Tensors on the same device");
     }
     return ocean_tensor_backend_for_device(left->device)->matmul(left, right);
+}
+
+static bool ocean_tensor_host_is_little_endian(void) {
+    const uint16_t value = 1u;
+    return *((const unsigned char *)&value) == 1u;
+}
+
+static const char *ocean_tensor_npy_descr(ocean_tensor_dtype dtype) {
+    switch (dtype) {
+        case OCEAN_TENSOR_BOOL: return "|b1";
+        case OCEAN_TENSOR_INT8: return "|i1";
+        case OCEAN_TENSOR_INT16: return "<i2";
+        case OCEAN_TENSOR_INT32: return "<i4";
+        case OCEAN_TENSOR_INT64: return "<i8";
+        case OCEAN_TENSOR_UINT8: return "|u1";
+        case OCEAN_TENSOR_UINT16: return "<u2";
+        case OCEAN_TENSOR_UINT32: return "<u4";
+        case OCEAN_TENSOR_UINT64: return "<u8";
+        case OCEAN_TENSOR_FLOAT16: return "<f2";
+        case OCEAN_TENSOR_FLOAT32: return "<f4";
+        case OCEAN_TENSOR_FLOAT64: return "<f8";
+    }
+    ocean_tensor_fail("unsupported Tensor dtype for .npy");
+    return "";
+}
+
+static bool ocean_tensor_npy_write(
+    FILE *stream,
+    const void *data,
+    size_t bytes,
+    size_t item_size
+) {
+    if (ocean_tensor_host_is_little_endian() || item_size <= 1 || bytes == 0) {
+        return fwrite(data, 1, bytes, stream) == bytes;
+    }
+
+    unsigned char *swapped = (unsigned char *)malloc(bytes);
+    if (!swapped) ocean_tensor_fail("out of memory byte-swapping .npy data");
+    const unsigned char *source = (const unsigned char *)data;
+    for (size_t offset = 0; offset < bytes; offset += item_size) {
+        for (size_t byte = 0; byte < item_size; ++byte) {
+            swapped[offset + byte] = source[offset + item_size - byte - 1];
+        }
+    }
+    bool written = fwrite(swapped, 1, bytes, stream) == bytes;
+    free(swapped);
+    return written;
+}
+
+static char *ocean_tensor_npy_header(
+    const ocean_tensor_handle_t tensor,
+    unsigned char major,
+    size_t *header_size_out
+) {
+    if (tensor->ndim > (SIZE_MAX - 256u) / 64u) {
+        ocean_tensor_fail("Tensor rank is too large for .npy header");
+    }
+    size_t capacity = 256u + tensor->ndim * 64u;
+    char *header = (char *)malloc(capacity);
+    if (!header) ocean_tensor_fail("out of memory allocating .npy header");
+
+    int prefix = snprintf(
+        header, capacity,
+        "{'descr': '%s', 'fortran_order': False, 'shape': (",
+        ocean_tensor_npy_descr(tensor->dtype)
+    );
+    if (prefix < 0 || (size_t)prefix >= capacity) {
+        free(header);
+        ocean_tensor_fail("failed to format .npy header");
+    }
+    size_t position = (size_t)prefix;
+    for (size_t axis = 0; axis < tensor->ndim; ++axis) {
+        const char *separator = axis + 1 < tensor->ndim
+            ? ", " : (tensor->ndim == 1 ? "," : "");
+        int written = snprintf(
+            header + position, capacity - position, "%zu%s",
+            tensor->shape[axis], separator
+        );
+        if (written < 0 || (size_t)written >= capacity - position) {
+            free(header);
+            ocean_tensor_fail("failed to format .npy shape");
+        }
+        position += (size_t)written;
+    }
+    int suffix = snprintf(header + position, capacity - position, "), }");
+    if (suffix < 0 || (size_t)suffix >= capacity - position) {
+        free(header);
+        ocean_tensor_fail("failed to finish .npy header");
+    }
+    position += (size_t)suffix;
+
+    size_t prefix_size = major == 1 ? 10u : 12u;
+    size_t with_newline = prefix_size + position + 1u;
+    size_t padding = (64u - (with_newline % 64u)) % 64u;
+    if (position > capacity - padding - 2u) {
+        free(header);
+        ocean_tensor_fail(".npy header is too large");
+    }
+    memset(header + position, ' ', padding);
+    position += padding;
+    header[position++] = '\n';
+    header[position] = '\0';
+    *header_size_out = position;
+    return header;
+}
+
+static void ocean_tensor_npy_write_u16(FILE *stream, uint16_t value) {
+    unsigned char bytes[2] = {
+        (unsigned char)(value & 0xffu),
+        (unsigned char)((value >> 8) & 0xffu),
+    };
+    if (fwrite(bytes, 1, sizeof(bytes), stream) != sizeof(bytes)) {
+        ocean_tensor_fail("failed writing .npy header length");
+    }
+}
+
+static void ocean_tensor_npy_write_u32(FILE *stream, uint32_t value) {
+    unsigned char bytes[4] = {
+        (unsigned char)(value & 0xffu),
+        (unsigned char)((value >> 8) & 0xffu),
+        (unsigned char)((value >> 16) & 0xffu),
+        (unsigned char)((value >> 24) & 0xffu),
+    };
+    if (fwrite(bytes, 1, sizeof(bytes), stream) != sizeof(bytes)) {
+        ocean_tensor_fail("failed writing .npy header length");
+    }
+}
+
+void ocean_tensor_save_npy(
+    ocean_tensor_handle_t tensor,
+    const char *path
+) {
+    if (!tensor || !path) ocean_tensor_fail("Tensor.save_npy received invalid arguments");
+    if (tensor->ndim == 0) ocean_tensor_fail("cannot save a scalar Tensor as .npy");
+
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? NULL : ocean_tensor_to(tensor, "cpu");
+    ocean_tensor_handle_t source = cpu ? cpu : tensor;
+    ocean_tensor_handle_t contiguous = ocean_tensor_is_contiguous(source)
+        ? NULL : ocean_tensor_contiguous(source);
+    if (contiguous) source = contiguous;
+
+    size_t header_size = 0;
+    unsigned char version = 1;
+    char *header = ocean_tensor_npy_header(source, version, &header_size);
+    if (header_size > UINT16_MAX) {
+        free(header);
+        version = 2;
+        header = ocean_tensor_npy_header(source, version, &header_size);
+    }
+    if (version == 1 && header_size > UINT16_MAX) {
+        free(header);
+        if (contiguous) ocean_tensor_release(contiguous);
+        if (cpu) ocean_tensor_release(cpu);
+        ocean_tensor_fail(".npy v2 header length is required but could not be encoded");
+    }
+    if (version == 2 && header_size > UINT32_MAX) {
+        free(header);
+        if (contiguous) ocean_tensor_release(contiguous);
+        if (cpu) ocean_tensor_release(cpu);
+        ocean_tensor_fail(".npy header is too large");
+    }
+
+    FILE *stream = fopen(path, "wb");
+    if (!stream) {
+        free(header);
+        if (contiguous) ocean_tensor_release(contiguous);
+        if (cpu) ocean_tensor_release(cpu);
+        ocean_tensor_fail("could not open .npy file for writing");
+    }
+    const unsigned char magic[6] = {0x93u, 'N', 'U', 'M', 'P', 'Y'};
+    const unsigned char version_bytes[2] = {version, 0};
+    bool ok = fwrite(magic, 1, sizeof(magic), stream) == sizeof(magic) &&
+        fwrite(version_bytes, 1, sizeof(version_bytes), stream) == sizeof(version_bytes);
+    if (ok) {
+        if (version == 1) ocean_tensor_npy_write_u16(stream, (uint16_t)header_size);
+        else ocean_tensor_npy_write_u32(stream, (uint32_t)header_size);
+        ok = fwrite(header, 1, header_size, stream) == header_size &&
+            ocean_tensor_npy_write(
+                stream, source->cpu_data, ocean_tensor_bytes(source), source->item_size
+            );
+    }
+    free(header);
+    fclose(stream);
+    if (contiguous) ocean_tensor_release(contiguous);
+    if (cpu) ocean_tensor_release(cpu);
+    if (!ok) ocean_tensor_fail("failed writing .npy file");
+}
+
+static uint16_t ocean_tensor_npy_read_u16(const unsigned char *bytes) {
+    return (uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8);
+}
+
+static uint32_t ocean_tensor_npy_read_u32(const unsigned char *bytes) {
+    return (uint32_t)bytes[0] |
+        ((uint32_t)bytes[1] << 8) |
+        ((uint32_t)bytes[2] << 16) |
+        ((uint32_t)bytes[3] << 24);
+}
+
+static const char *ocean_tensor_npy_value(
+    const char *header,
+    const char *name
+) {
+    char quoted_name[32];
+    int written = snprintf(quoted_name, sizeof(quoted_name), "'%s'", name);
+    if (written < 0 || (size_t)written >= sizeof(quoted_name)) {
+        ocean_tensor_fail("invalid .npy header field name");
+    }
+    const char *field = strstr(header, quoted_name);
+    if (!field) {
+        written = snprintf(quoted_name, sizeof(quoted_name), "\"%s\"", name);
+        if (written < 0 || (size_t)written >= sizeof(quoted_name)) {
+            ocean_tensor_fail("invalid .npy header field name");
+        }
+        field = strstr(header, quoted_name);
+    }
+    if (!field) ocean_tensor_fail(".npy header is missing a required field");
+    const char *colon = strchr(field, ':');
+    if (!colon) ocean_tensor_fail("invalid .npy header field");
+    colon += 1;
+    while (isspace((unsigned char)*colon)) ++colon;
+    return colon;
+}
+
+static void ocean_tensor_npy_read_descr(
+    const char *header,
+    ocean_tensor_dtype *dtype_out,
+    bool *swap_out
+) {
+    const char *value = ocean_tensor_npy_value(header, "descr");
+    if (*value != '\'' && *value != '"') ocean_tensor_fail("invalid .npy descr");
+    char quote = *value++;
+    char descr[32];
+    size_t length = 0;
+    while (value[length] && value[length] != quote) {
+        if (length + 1 >= sizeof(descr)) ocean_tensor_fail(".npy descr is too long");
+        descr[length] = value[length];
+        ++length;
+    }
+    if (value[length] != quote || length < 3) ocean_tensor_fail("invalid .npy descr");
+    descr[length] = '\0';
+
+    char order = descr[0];
+    char kind = descr[1];
+    if (order != '<' && order != '>' && order != '|' && order != '=') {
+        ocean_tensor_fail("unsupported .npy byte order");
+    }
+    errno = 0;
+    char *end = NULL;
+    unsigned long item_size = strtoul(descr + 2, &end, 10);
+    if (errno == ERANGE || end == descr + 2 || *end != '\0' || item_size > SIZE_MAX) {
+        ocean_tensor_fail("invalid .npy dtype size");
+    }
+
+    ocean_tensor_dtype dtype;
+    switch (kind) {
+        case 'b':
+        case '?':
+            if (item_size != 1) ocean_tensor_fail("invalid .npy bool dtype");
+            dtype = OCEAN_TENSOR_BOOL;
+            break;
+        case 'i':
+            if (item_size == 1) dtype = OCEAN_TENSOR_INT8;
+            else if (item_size == 2) dtype = OCEAN_TENSOR_INT16;
+            else if (item_size == 4) dtype = OCEAN_TENSOR_INT32;
+            else if (item_size == 8) dtype = OCEAN_TENSOR_INT64;
+            else ocean_tensor_fail("unsupported .npy signed integer dtype");
+            break;
+        case 'u':
+            if (item_size == 1) dtype = OCEAN_TENSOR_UINT8;
+            else if (item_size == 2) dtype = OCEAN_TENSOR_UINT16;
+            else if (item_size == 4) dtype = OCEAN_TENSOR_UINT32;
+            else if (item_size == 8) dtype = OCEAN_TENSOR_UINT64;
+            else ocean_tensor_fail("unsupported .npy unsigned integer dtype");
+            break;
+        case 'f':
+            if (item_size == 2) dtype = OCEAN_TENSOR_FLOAT16;
+            else if (item_size == 4) dtype = OCEAN_TENSOR_FLOAT32;
+            else if (item_size == 8) dtype = OCEAN_TENSOR_FLOAT64;
+            else ocean_tensor_fail("unsupported .npy floating-point dtype");
+            break;
+        default:
+            ocean_tensor_fail(".npy dtype is not a supported numeric type");
+            return;
+    }
+    if (item_size > 1 && order == '|') {
+        ocean_tensor_fail("invalid .npy byte order for multi-byte dtype");
+    }
+    bool host_little = ocean_tensor_host_is_little_endian();
+    *swap_out = item_size > 1 &&
+        ((order == '<' && !host_little) || (order == '>' && host_little));
+    *dtype_out = dtype;
+}
+
+static size_t *ocean_tensor_npy_read_shape(
+    const char *header,
+    size_t *ndim_out
+) {
+    const char *cursor = ocean_tensor_npy_value(header, "shape");
+    if (*cursor != '(') ocean_tensor_fail("invalid .npy shape");
+    ++cursor;
+    size_t capacity = 4;
+    size_t ndim = 0;
+    size_t *shape = (size_t *)malloc(capacity * sizeof(size_t));
+    if (!shape) ocean_tensor_fail("out of memory reading .npy shape");
+    for (;;) {
+        while (isspace((unsigned char)*cursor)) ++cursor;
+        if (*cursor == ')') break;
+        errno = 0;
+        char *end = NULL;
+        unsigned long long value = strtoull(cursor, &end, 10);
+        if (errno == ERANGE || end == cursor || value > SIZE_MAX) {
+            free(shape);
+            ocean_tensor_fail("invalid .npy shape dimension");
+        }
+        if (ndim == capacity) {
+            if (capacity > SIZE_MAX / 2u) {
+                free(shape);
+                ocean_tensor_fail(".npy rank is too large");
+            }
+            capacity *= 2u;
+            size_t *grown = (size_t *)realloc(shape, capacity * sizeof(size_t));
+            if (!grown) {
+                free(shape);
+                ocean_tensor_fail("out of memory growing .npy shape");
+            }
+            shape = grown;
+        }
+        shape[ndim++] = (size_t)value;
+        cursor = end;
+        while (isspace((unsigned char)*cursor)) ++cursor;
+        if (*cursor == ',') {
+            ++cursor;
+            continue;
+        }
+        if (*cursor != ')') {
+            free(shape);
+            ocean_tensor_fail("invalid .npy shape tuple");
+        }
+        break;
+    }
+    if (ndim == 0) {
+        free(shape);
+        ocean_tensor_fail("scalar .npy arrays are not supported as Tensor");
+    }
+    *ndim_out = ndim;
+    return shape;
+}
+
+ocean_tensor_handle_t ocean_tensor_load_npy(
+    const char *path,
+    const char *device
+) {
+    if (!path) ocean_tensor_fail("Tensor.load_npy requires a path");
+    FILE *stream = fopen(path, "rb");
+    if (!stream) ocean_tensor_fail("could not open .npy file for reading");
+
+    unsigned char magic[6];
+    unsigned char version[2];
+    if (fread(magic, 1, sizeof(magic), stream) != sizeof(magic) ||
+        memcmp(magic, "\x93NUMPY", sizeof(magic)) != 0 ||
+        fread(version, 1, sizeof(version), stream) != sizeof(version)) {
+        fclose(stream);
+        ocean_tensor_fail("invalid .npy file header");
+    }
+    uint64_t header_size;
+    if (version[0] == 1) {
+        unsigned char length[2];
+        if (fread(length, 1, sizeof(length), stream) != sizeof(length)) {
+            fclose(stream);
+            ocean_tensor_fail("truncated .npy header length");
+        }
+        header_size = ocean_tensor_npy_read_u16(length);
+    } else if (version[0] == 2 || version[0] == 3) {
+        unsigned char length[4];
+        if (fread(length, 1, sizeof(length), stream) != sizeof(length)) {
+            fclose(stream);
+            ocean_tensor_fail("truncated .npy header length");
+        }
+        header_size = ocean_tensor_npy_read_u32(length);
+    } else {
+        fclose(stream);
+        ocean_tensor_fail("unsupported .npy format version");
+    }
+    if (header_size == 0 || header_size > 64u * 1024u * 1024u ||
+        header_size > SIZE_MAX - 1u) {
+        fclose(stream);
+        ocean_tensor_fail("invalid .npy header size");
+    }
+    char *header = (char *)malloc((size_t)header_size + 1u);
+    if (!header) {
+        fclose(stream);
+        ocean_tensor_fail("out of memory reading .npy header");
+    }
+    if (fread(header, 1, (size_t)header_size, stream) != (size_t)header_size) {
+        free(header);
+        fclose(stream);
+        ocean_tensor_fail("truncated .npy header");
+    }
+    header[header_size] = '\0';
+    const char *fortran = ocean_tensor_npy_value(header, "fortran_order");
+    if (strncmp(fortran, "False", 5) != 0) {
+        free(header);
+        fclose(stream);
+        ocean_tensor_fail("Fortran-order .npy arrays are not supported yet");
+    }
+    ocean_tensor_dtype dtype;
+    bool swap = false;
+    ocean_tensor_npy_read_descr(header, &dtype, &swap);
+    size_t ndim = 0;
+    size_t *shape = ocean_tensor_npy_read_shape(header, &ndim);
+    free(header);
+
+    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+        shape, ndim, dtype, OCEAN_TENSOR_CPU
+    );
+    free(shape);
+    size_t bytes = ocean_tensor_bytes(result);
+    if (!swap) {
+        if (fread(result->cpu_data, 1, bytes, stream) != bytes) {
+            ocean_tensor_release(result);
+            fclose(stream);
+            ocean_tensor_fail("truncated .npy data");
+        }
+    } else {
+        unsigned char *payload = (unsigned char *)malloc(bytes);
+        if (!payload && bytes != 0) {
+            ocean_tensor_release(result);
+            fclose(stream);
+            ocean_tensor_fail("out of memory byte-swapping .npy data");
+        }
+        if (fread(payload, 1, bytes, stream) != bytes) {
+            free(payload);
+            ocean_tensor_release(result);
+            fclose(stream);
+            ocean_tensor_fail("truncated .npy data");
+        }
+        unsigned char *destination = (unsigned char *)result->cpu_data;
+        for (size_t offset = 0; offset < bytes; offset += result->item_size) {
+            for (size_t byte = 0; byte < result->item_size; ++byte) {
+                destination[offset + byte] =
+                    payload[offset + result->item_size - byte - 1];
+            }
+        }
+        free(payload);
+    }
+    fclose(stream);
+
+    if (device && strcmp(device, "cpu") == 0) return result;
+    ocean_tensor_handle_t moved = ocean_tensor_to(result, device);
+    ocean_tensor_release(result);
+    return moved;
 }
 
 int ocean_tensor_shape(ocean_tensor_handle_t tensor, int axis) {

@@ -22,6 +22,14 @@ ocean_tensor_handle_t ocean_tensor_from_cpu_strided(
     const char *dtype,
     const char *device
 );
+ocean_tensor_handle_t ocean_tensor_load_npy(
+    const char *path,
+    const char *device
+);
+void ocean_tensor_save_npy(
+    ocean_tensor_handle_t tensor,
+    const char *path
+);
 ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor);
 ocean_tensor_handle_t ocean_tensor_to(ocean_tensor_handle_t tensor, const char *device);
 ocean_tensor_handle_t ocean_tensor_matmul(

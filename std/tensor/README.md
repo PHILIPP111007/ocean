@@ -34,6 +34,9 @@ class Tensor:
     @staticmethod
     def zeros(*shape: int, device: str) -> Tensor[T]
     def from_list(source: list, device: str) -> Tensor[T]
+    @staticmethod
+    def load_npy(path: str, device: str) -> Tensor[T]
+    def save_npy(self, path: str) -> None
 
     def to(self, device: str) -> Tensor[T]
     def matmul(self, other: &Tensor[T]) -> Tensor[T]
@@ -87,6 +90,29 @@ For user code, literals are converted directly into backend-owned storage:
 ```text
 var A: Tensor[float32] = Tensor.from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
 ```
+
+## NumPy `.npy` files
+
+`Tensor.load_npy(path, device)` and `tensor.save_npy(path)` provide a
+NumPy-compatible interchange path for dense numeric tensors:
+
+```text
+var weights: Tensor[float32] = Tensor.load_npy("weights.npy", "cpu")
+weights.save_npy("weights_copy.npy")
+```
+
+The runtime reads `.npy` versions 1.0, 2.0, and 3.0, including little- and
+big-endian numeric descriptors for `bool`, signed/unsigned 8/16/32/64-bit
+integers, and `float16`/`float32`/`float64`. v1 output is emitted whenever the
+header fits its 16-bit length field; larger headers use v2.0. Data is stored
+in row-major (`fortran_order: False`) form. Fortran-order arrays and object,
+string, and structured dtypes are rejected because they do not map to the
+numeric `Tensor[T]` model yet.
+
+Saving a GPU tensor first downloads a CPU copy. Non-contiguous views are
+materialized as contiguous row-major data before writing, so the file can be
+loaded by NumPy and other `.npy` implementations without Ocean-specific
+metadata.
 
 Indexing is rank-generic and supports read, write, and augmented assignment:
 

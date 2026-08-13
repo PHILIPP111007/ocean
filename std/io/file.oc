@@ -1,0 +1,94 @@
+cimport <std/io/file_runtime.h>
+
+class File:
+    def __init__(self, handle: ocean_file_handle_t):
+        self.handle = handle
+
+    def read(self) -> str:
+        return ocean_file_read(self.handle)
+
+    def readline(self) -> str:
+        return ocean_file_readline(self.handle)
+
+    def readlines(self) -> list[str]:
+        var result: list[str] = []
+        while not self.eof():
+            result.append(self.readline())
+        return result
+
+    def write(self, value: str) -> None:
+        ocean_file_write(self.handle, value)
+        return None
+
+    def writelines(self, values: list[str]) -> None:
+        var index: int = 0
+        while index < len(values):
+            self.write(values[index])
+            index = index + 1
+        return None
+
+    def flush(self) -> None:
+        ocean_file_flush(self.handle)
+        return None
+
+    def eof(self) -> bool:
+        return ocean_file_eof(self.handle)
+
+    def close(self) -> None:
+        ocean_file_close(self.handle)
+        self.handle = None
+        return None
+
+
+class BinaryFile:
+    def __init__(self, handle: ocean_file_handle_t):
+        self.handle = handle
+
+    def read_byte(self) -> int:
+        return ocean_file_read_byte(self.handle)
+
+    def read_bytes(self, count: int) -> list[int]:
+        var result: list[int] = []
+        var index: int = 0
+        while index < count:
+            var value: int = self.read_byte()
+            if value < 0:
+                break
+            result.append(value)
+            index = index + 1
+        return result
+
+    def write_byte(self, value: int) -> None:
+        ocean_file_write_byte(self.handle, value)
+        return None
+
+    def write_bytes(self, values: list[int]) -> None:
+        var index: int = 0
+        while index < len(values):
+            self.write_byte(values[index])
+            index = index + 1
+        return None
+
+    def flush(self) -> None:
+        ocean_file_flush(self.handle)
+        return None
+
+    def eof(self) -> bool:
+        return ocean_file_eof(self.handle)
+
+    def close(self) -> None:
+        ocean_file_close(self.handle)
+        self.handle = None
+        return None
+
+
+def open(path: str, mode: str) -> File:
+    var handle: ocean_file_handle_t = ocean_file_open(path, mode)
+    var result: File = File(handle)
+    return result
+
+
+def open_binary(path: str, mode: str) -> BinaryFile:
+    var handle: ocean_file_handle_t = ocean_file_open(path, mode)
+    var result: BinaryFile = BinaryFile(handle)
+    return result

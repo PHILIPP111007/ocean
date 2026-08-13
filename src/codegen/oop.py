@@ -194,6 +194,8 @@ class OopMixin:
                 # not a raw pointer in Ocean source, but its destructor still
                 # has an explicit runtime release operation.
                 self.add_line(f"ocean_tensor_release({access});")
+            elif field_type == "ocean_file_handle_t":
+                self.add_line(f"ocean_file_close({access});")
         self.add_line("free(self);")
         self.indent_level -= 1
         self.add_line("}")

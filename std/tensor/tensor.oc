@@ -20,6 +20,16 @@ class Tensor:
         # Tensor.from_list(...) before the class method is emitted.
         return Tensor.zeros(1, 1, device)
 
+    @staticmethod
+    def load_npy(path: str, device: str) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_load_npy(path, device)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def save_npy(self, path: str) -> None:
+        ocean_tensor_save_npy(self.handle, path)
+        return None
+
     def to(self, device: str) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_to(self.handle, device)
         var value: Tensor = Tensor(handle)

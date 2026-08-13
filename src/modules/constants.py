@@ -76,6 +76,7 @@ KNOWN_C_TYPES = set(
         "time_t",
         "clock_t",
         "ocean_tensor_handle_t",
+        "ocean_file_handle_t",
     ]
 )
 

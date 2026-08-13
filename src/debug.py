@@ -111,6 +111,8 @@ class Validator:
                             "ocean_tensor_zeros",
                             "ocean_tensor_zeros_nd",
                             "ocean_tensor_from_cpu_strided",
+                            "ocean_tensor_load_npy",
+                            "ocean_tensor_save_npy",
                             "ocean_tensor_copy",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",
@@ -140,6 +142,24 @@ class Validator:
                             "ocean_tensor_size",
                             "ocean_tensor_device",
                             "ocean_tensor_release",
+                        }
+                    )
+                if (
+                    isinstance(node, Mapping)
+                    and node.get("node") == "c_import"
+                    and node.get("header") == "std/io/file_runtime.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "ocean_file_open",
+                            "ocean_file_close",
+                            "ocean_file_read",
+                            "ocean_file_readline",
+                            "ocean_file_write",
+                            "ocean_file_flush",
+                            "ocean_file_eof",
+                            "ocean_file_read_byte",
+                            "ocean_file_write_byte",
                         }
                     )
             level = scope.get("level", 0)

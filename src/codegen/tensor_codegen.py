@@ -120,6 +120,13 @@ class TensorCodegenMixin:
             )
             return result_name
 
+        if method == "load_npy":
+            if len(args) != 2:
+                raise RuntimeError("Tensor.load_npy expects path and device")
+            path = generate_argument(args[0])
+            device = generate_argument(args[1])
+            return f"create_Tensor(ocean_tensor_load_npy({path}, {device}))"
+
         return None
 
     def _tensor_list_types(self, source_type: str) -> List[str]:

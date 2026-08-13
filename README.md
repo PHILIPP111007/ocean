@@ -114,6 +114,40 @@ use OpenCL kernels; broadcasting and other dtypes use the CPU implementation and
 result back to the original device. `reshape` and `transpose` currently return independent
 contiguous tensors, while `fill` mutates the existing tensor.
 
+### File IO and NumPy weights
+
+The standard library provides managed text and binary streams:
+
+```python
+import <std/io/file.oc>
+
+var output: File = open("notes.txt", "w")
+output.writelines(["hello\n", "world\n"])
+output.close()
+
+var input: File = open("notes.txt", "r")
+var lines: list[str] = input.readlines()
+input.close()
+```
+
+Use `open_binary(...)` and `BinaryFile.read_bytes()` / `write_bytes()` for
+raw bytes. File objects close their managed C stream at scope exit or when
+`close()` is called. For tensor weights, `Tensor.load_npy(path, device)` and
+`tensor.save_npy(path)` read and write standard NumPy `.npy` files. The
+implementation supports `.npy` v1/v2/v3 and numeric dtypes from `bool`,
+signed/unsigned integers, and `float16`/`float32`/`float64`; it writes
+row-major arrays and rejects Fortran-order and non-numeric/object dtypes.
+
+```python
+import <std/tensor/tensor.oc>
+
+var weights: Tensor[float32] = Tensor.load_npy("weights.npy", "cpu")
+weights.save_npy("weights_copy.npy")
+```
+
+GPU tensors are downloaded to CPU while saving, and non-contiguous views are
+materialized into a compatible row-major `.npy` payload.
+
 The public facade owns an opaque runtime handle. Ocean code does not access `cl_mem`, OpenCL
 contexts, queues, or backend-specific pointers directly. `Tensor.from_list(...)` is the public
 constructor for literal data; native compiler tensors are not part of this API. See

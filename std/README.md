@@ -7,8 +7,9 @@ backend-independent.
 
 ## Current priorities
 
-1. `Tensor` — the public high-level tensor object with device-aware operations.
-2. OpenCL GPU backend — persistent context, device buffers, kernels, and
+1. `File` / `BinaryFile` — managed text and byte-stream access.
+2. `Tensor` — the public high-level tensor object with device-aware operations.
+3. OpenCL GPU backend — persistent context, device buffers, kernels, and
    transfers.
 
 `Tensor[T]` is the only tensor type. Its storage is opaque and managed by the
@@ -23,6 +24,7 @@ See:
 
 - [Tensor API](tensor/README.md)
 - [OpenCL backend](tensor/OpenCL.md)
+- [File and BinaryFile API](io/README.md)
 
 ## Imports
 
