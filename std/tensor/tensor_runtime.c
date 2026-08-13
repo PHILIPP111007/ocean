@@ -363,6 +363,15 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_kernel scalar_int32_kernel;
 } ocean_tensor_opencl_runtime;
 
+typedef enum ocean_tensor_opencl_kernel_key {
+    OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_INT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_BINARY_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_BINARY_INT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_SCALAR_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_SCALAR_INT32,
+} ocean_tensor_opencl_kernel_key;
+
 static ocean_tensor_opencl_runtime ocean_tensor_opencl;
 static int ocean_tensor_opencl_initialized = 0;
 
@@ -443,8 +452,15 @@ static void ocean_tensor_opencl_init(void) {
     ocean_tensor_opencl.context =
         clCreateContext(NULL, 1, &device, NULL, NULL, &status);
     ocean_tensor_opencl_check(status, "clCreateContext");
+#ifdef CL_VERSION_2_0
+    const cl_queue_properties queue_properties[] = {0};
+    ocean_tensor_opencl.queue = clCreateCommandQueueWithProperties(
+        ocean_tensor_opencl.context, device, queue_properties, &status
+    );
+#else
     ocean_tensor_opencl.queue =
         clCreateCommandQueue(ocean_tensor_opencl.context, device, 0, &status);
+#endif
     ocean_tensor_opencl_check(status, "clCreateCommandQueue");
 
     const char *sources[] = {ocean_tensor_matmul_kernel_source};
@@ -472,30 +488,47 @@ static void ocean_tensor_opencl_init(void) {
         }
         ocean_tensor_opencl_check(status, "clBuildProgram");
     }
-    ocean_tensor_opencl.matmul_kernel = clCreateKernel(
-        ocean_tensor_opencl.program, "ocean_tensor_matmul", &status
-    );
-    ocean_tensor_opencl_check(status, "clCreateKernel");
-    ocean_tensor_opencl.matmul_int32_kernel = clCreateKernel(
-        ocean_tensor_opencl.program, "ocean_tensor_matmul_int32", &status
-    );
-    ocean_tensor_opencl_check(status, "clCreateKernel");
-    ocean_tensor_opencl.binary_kernel = clCreateKernel(
-        ocean_tensor_opencl.program, "ocean_tensor_binary", &status
-    );
-    ocean_tensor_opencl_check(status, "clCreateKernel");
-    ocean_tensor_opencl.binary_int32_kernel = clCreateKernel(
-        ocean_tensor_opencl.program, "ocean_tensor_binary_int32", &status
-    );
-    ocean_tensor_opencl_check(status, "clCreateKernel");
-    ocean_tensor_opencl.scalar_kernel = clCreateKernel(
-        ocean_tensor_opencl.program, "ocean_tensor_scalar", &status
-    );
-    ocean_tensor_opencl_check(status, "clCreateKernel");
-    ocean_tensor_opencl.scalar_int32_kernel = clCreateKernel(
-        ocean_tensor_opencl.program, "ocean_tensor_scalar_int32", &status
-    );
-    ocean_tensor_opencl_check(status, "clCreateKernel");
+}
+
+static cl_kernel ocean_tensor_opencl_get_kernel(
+    ocean_tensor_opencl_kernel_key key
+) {
+    ocean_tensor_opencl_init();
+    cl_kernel *slot = NULL;
+    const char *name = NULL;
+    switch (key) {
+        case OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_FLOAT32:
+            slot = &ocean_tensor_opencl.matmul_kernel;
+            name = "ocean_tensor_matmul";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_INT32:
+            slot = &ocean_tensor_opencl.matmul_int32_kernel;
+            name = "ocean_tensor_matmul_int32";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_BINARY_FLOAT32:
+            slot = &ocean_tensor_opencl.binary_kernel;
+            name = "ocean_tensor_binary";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_BINARY_INT32:
+            slot = &ocean_tensor_opencl.binary_int32_kernel;
+            name = "ocean_tensor_binary_int32";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_SCALAR_FLOAT32:
+            slot = &ocean_tensor_opencl.scalar_kernel;
+            name = "ocean_tensor_scalar";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_SCALAR_INT32:
+            slot = &ocean_tensor_opencl.scalar_int32_kernel;
+            name = "ocean_tensor_scalar_int32";
+            break;
+    }
+    if (!slot || !name) ocean_tensor_fail("invalid OpenCL Tensor kernel key");
+    if (!*slot) {
+        cl_int status = CL_SUCCESS;
+        *slot = clCreateKernel(ocean_tensor_opencl.program, name, &status);
+        ocean_tensor_opencl_check(status, name);
+    }
+    return *slot;
 }
 
 static void ocean_tensor_gpu_alloc(ocean_tensor_handle_t tensor) {
@@ -1170,9 +1203,11 @@ static ocean_tensor_handle_t ocean_tensor_binary_opencl(
         ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
             left->shape, left->ndim, left->dtype, OCEAN_TENSOR_GPU
         );
-        cl_kernel kernel = left->dtype == OCEAN_TENSOR_INT32
-            ? ocean_tensor_opencl.binary_int32_kernel
-            : ocean_tensor_opencl.binary_kernel;
+        cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+            left->dtype == OCEAN_TENSOR_INT32
+                ? OCEAN_TENSOR_OPENCL_KERNEL_BINARY_INT32
+                : OCEAN_TENSOR_OPENCL_KERNEL_BINARY_FLOAT32
+        );
         ocean_tensor_opencl_binary(left, right, result, operation, kernel);
         return result;
     }
@@ -1222,9 +1257,11 @@ static ocean_tensor_handle_t ocean_tensor_scalar_opencl(
         ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
             tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_GPU
         );
-        cl_kernel kernel = tensor->dtype == OCEAN_TENSOR_INT32
-            ? ocean_tensor_opencl.scalar_int32_kernel
-            : ocean_tensor_opencl.scalar_kernel;
+        cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+            tensor->dtype == OCEAN_TENSOR_INT32
+                ? OCEAN_TENSOR_OPENCL_KERNEL_SCALAR_INT32
+                : OCEAN_TENSOR_OPENCL_KERNEL_SCALAR_FLOAT32
+        );
         ocean_tensor_opencl_scalar(
             tensor, result, scalar, operation, kernel,
             tensor->dtype == OCEAN_TENSOR_INT32
@@ -1726,9 +1763,11 @@ static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
         right->shape[1] > (size_t)INT32_MAX) {
         ocean_tensor_fail("GPU Tensor dimensions are too large for OpenCL kernel indexing");
     }
-    cl_kernel kernel = left->dtype == OCEAN_TENSOR_INT32
-        ? ocean_tensor_opencl.matmul_int32_kernel
-        : ocean_tensor_opencl.matmul_kernel;
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        left->dtype == OCEAN_TENSOR_INT32
+            ? OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_INT32
+            : OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_FLOAT32
+    );
     int rows = (int)left->shape[0];
     int cols = (int)left->shape[1];
     int result_cols = (int)right->shape[1];

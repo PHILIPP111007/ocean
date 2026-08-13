@@ -6,8 +6,8 @@ generated C includes `std/tensor/tensor_runtime.h`.
 
 - `tensor_runtime.c` contains the tiled matmul design: each 8x8 work-group
   cooperatively loads input tiles into `__local` memory;
-- the host wrapper creates or reuses `cl_kernel`, uploads `A`, accepts a device
-  buffer for `B`, launches a 2D NDRange, and downloads `C`;
+- the host wrapper lazily creates and reuses `cl_kernel` objects, uploads `A`,
+  accepts a device buffer for `B`, launches a 2D NDRange, and downloads `C`;
 - local workgroup size is `8 x 8`; partial tiles are zero-padded, so matrix
   dimensions do not need to be multiples of eight.
 
@@ -16,7 +16,7 @@ generated C includes `std/tensor/tensor_runtime.h`.
 The runtime needs opaque objects with these ownership rules:
 
 ```text
-OpenCLContext  owns cl_context, queue, program, and cached kernels
+  OpenCLContext  owns cl_context, queue, program, and a lazy kernel cache
 GpuStorage     owns cl_mem, shape, strides, and a reference to OpenCLContext
 ```
 
@@ -46,7 +46,7 @@ Before production use, the wrapper must also:
 - round global sizes up to the local size;
 - keep bounds checks in the kernel;
 - check every OpenCL return code;
-- cache kernels instead of creating one for every matmul;
+- cache kernels by operation and dtype instead of creating one for every call;
 - use blocking transfers where host data is requested and an in-order queue
   with `clFlush` for asynchronous matmul dispatch;
 - release buffers, kernels, programs, queues, and contexts on every failure path.

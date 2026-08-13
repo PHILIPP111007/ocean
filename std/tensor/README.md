@@ -181,3 +181,6 @@ The OpenCL runtime caches its context, queue, program, and kernels for the proce
 them through an exit handler. Individual GPU buffers are released with their owning `Tensor`
 object. OpenCL failures are converted to a descriptive process error with the operation and error
 code.
+
+Kernel objects are created lazily on first use and cached by operation and dtype. A program using
+only CPU tensors does not initialize OpenCL, and a GPU program does not create unused kernels.
