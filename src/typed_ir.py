@@ -54,6 +54,24 @@ class IRType:
 
 
 @dataclass(frozen=True)
+class TypedExpression(Mapping[str, Any]):
+    """Recursive typed view of one expression AST node."""
+
+    raw: dict[str, Any]
+    result_type: IRType
+    fields: dict[str, Any]
+
+    def __getitem__(self, key: str) -> Any:
+        return self.fields[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.fields)
+
+    def __len__(self) -> int:
+        return len(self.fields)
+
+
+@dataclass(frozen=True)
 class TypedNode(Mapping[str, Any]):
     """Semantic metadata and read-only mapping view for one graph node."""
 
@@ -63,6 +81,7 @@ class TypedNode(Mapping[str, Any]):
     reads: tuple[str, ...]
     writes: tuple[str, ...]
     effect: str
+    fields: dict[str, Any]
 
     @property
     def source_line(self) -> int | None:
@@ -85,13 +104,13 @@ class TypedNode(Mapping[str, Any]):
     # Keep the backend's existing read interface while preventing mutation of
     # the parser graph through the typed pipeline.
     def __getitem__(self, key: str) -> Any:
-        return self.raw[key]
+        return self.fields[key]
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self.raw)
+        return iter(self.fields)
 
     def __len__(self) -> int:
-        return len(self.raw)
+        return len(self.fields)
 
 
 @dataclass(frozen=True)
@@ -221,7 +240,45 @@ class TypedIRBuilder:
         if node_type == "for_loop" and node.get("openmp"):
             effect = "parallel_loop"
 
-        return TypedNode(deepcopy(node), node_type, result, reads, writes, effect)
+        raw_node = deepcopy(node)
+        return TypedNode(
+            raw_node,
+            node_type,
+            result,
+            reads,
+            writes,
+            effect,
+            self._typed_payload(node, scope),
+        )
+
+    def _typed_payload(
+        self, value: Any, scope: dict[str, Any], *, expression_context: bool = False
+    ) -> Any:
+        """Wrap expression payloads recursively while preserving AST keys."""
+        if isinstance(value, dict):
+            is_expression = "type" in value
+            fields = {
+                key: self._typed_payload(
+                    child,
+                    scope,
+                    expression_context=expression_context or is_expression,
+                )
+                for key, child in value.items()
+            }
+            if is_expression:
+                return TypedExpression(
+                    deepcopy(value),
+                    self._infer_expression(value, scope),
+                    fields,
+                )
+            return fields
+        if isinstance(value, list):
+            items = [
+                self._typed_payload(child, scope, expression_context=expression_context)
+                for child in value
+            ]
+            return tuple(items) if expression_context else items
+        return value
 
     def _scope_symbol(self, name: str, scope: dict[str, Any]) -> dict[str, Any] | None:
         current = scope
@@ -389,4 +446,4 @@ def _build_typed_module(scopes: list[dict[str, Any]]) -> TypedModule:
     return TypedIRBuilder().build(scopes)
 
 
-__all__ = ["IRType", "TypedNode", "TypedScope", "TypedModule"]
+__all__ = ["IRType", "TypedExpression", "TypedNode", "TypedScope", "TypedModule"]

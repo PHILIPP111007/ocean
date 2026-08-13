@@ -315,8 +315,8 @@
     "semantic_hash": ""
   },
   "src/typed_ir.py": {
-    "mtime": 1786641705.4099374,
-    "ast_hash": "259b395f58c34152295838e08ad63db0",
+    "mtime": 1786641868.488039,
+    "ast_hash": "3c2abbe810c54b2a3d720e05a554a8bf",
     "semantic_hash": ""
   },
   "tests/test_debug_validator.py": {
@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "tests/test_typed_ir.py": {
-    "mtime": 1786641246.0080216,
-    "ast_hash": "3b744f5e70f8ab43eb1915ca1fc8374b",
+    "mtime": 1786641846.699758,
+    "ast_hash": "3d8d02f0fccd2a4625ed219517740598",
     "semantic_hash": ""
   },
   "requirements.txt": {

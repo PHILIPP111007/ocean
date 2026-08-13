@@ -1,5 +1,5 @@
 from src.parser import Parser
-from src.typed_ir import TypedModule, TypedNode, TypedScope
+from src.typed_ir import TypedExpression, TypedModule, TypedNode, TypedScope
 from src.codegen import CCodeGenerator
 from src.debug import Validator
 
@@ -48,6 +48,25 @@ def main() -> int:
         for scope in backend_scopes
         for node in scope.get("graph", ())
     )
+
+
+def test_typed_ir_wraps_nested_expression_nodes():
+    module = Parser().parse_typed(
+        """
+def main() -> int:
+    var value: int = 1 + 2
+    return value
+"""
+    )
+    declaration = next(
+        node for node in module.iter_nodes() if node.node_type == "declaration"
+    )
+    expression = declaration.get("expression_ast")
+
+    assert isinstance(expression, TypedExpression)
+    assert expression.result_type.canonical == "int"
+    assert isinstance(expression.get("left"), TypedExpression)
+    assert isinstance(expression.get("right"), TypedExpression)
 
 
 def test_typed_ir_exposes_source_location_metadata(tmp_path):
