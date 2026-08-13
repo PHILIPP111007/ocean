@@ -1,5 +1,11 @@
 # Handoff — Phils Language / Ocean backend
 
+> Обновлено: 2026-08-13. Этот документ описывает фактическое состояние
+> репозитория после перехода на Typed IR, удаления legacy tensor/JSON-пути,
+> добавления OpenMP/OpenCL, File IO и NumPy `.npy`. Исторические разделы ниже
+> сохранены для контекста; актуальный статус и следующий план находятся в
+> разделах 33–39.
+
 ## 1. Цель проекта
 
 Разрабатывается язык **Phils** — компилируемый системный язык с Python-подобным синтаксисом и C-like производительностью.
@@ -1105,7 +1111,7 @@ void ocean_matmul(
 
 ---
 
-# 28. Статус array/tensor на момент handoff
+# 28. Исторический статус array/tensor до завершения backend-перехода
 
 ### Parser
 
@@ -1167,7 +1173,7 @@ Tensor[T]
 
 ---
 
-# 29. Что НЕ делать дальше
+# 29. Устойчивые архитектурные ограничения
 
 Не следует:
 
@@ -1182,7 +1188,7 @@ Tensor[T]
 
 ---
 
-# 30. Следующий рекомендуемый этап
+# 30. Устаревший план до завершения Tensor backend
 
 Продолжить с реализации:
 
@@ -1327,3 +1333,286 @@ unsafe/raw
 Главная цель производительности:
 
 > В OS/ML hot paths Phils должен уметь генерировать C без hidden allocation, ARC и копирования, чтобы итоговый код мог оптимизироваться clang/gcc примерно на уровне C/Rust.
+
+---
+
+# 33. Актуальная архитектура компилятора
+
+Текущий основной pipeline:
+
+```text
+Ocean source → Parser → TypedModule / Typed IR → validation
+    → ownership/borrow analysis → structured diagnostics
+    → CCodeGenerator → generated C11 → gcc/clang
+```
+
+`TypedModule` является главным API backend’а:
+
+```python
+typed_module = Parser().parse_typed(source)
+c_code = CCodeGenerator().generate_from_typed_ir(typed_module)
+```
+
+Основные компоненты:
+
+- `src/parser.py` — синтаксис и построение типизированного модуля;
+- `src/typed_ir.py` — типы, зависимости, reads/writes и ownership effects;
+- `src/debug.py` — validation, borrow/move checks и внешние C symbols;
+- `src/diagnostics.py` — typed diagnostics с location и стабильными кодами;
+- `src/codegen/` — lowering в C11;
+- `src/compiler.py` — сохранённый public compatibility API;
+- `std/` — стандартная библиотека и C runtime.
+
+Внутреннее представление compiler pipeline больше не сериализуется в JSON.
+Совместимость сохранена только для legacy dictionary projection diagnostics и
+mapping-представлений Typed IR. JSON-файлы Graphify являются артефактами
+инструмента анализа кода, а не частью compiler/runtime IR.
+
+Импорты разделены по назначению:
+
+```text
+import "./examples/matmul.oc"       # относительно импортирующего файла
+import <std/tensor/tensor.oc>        # из ./std/
+```
+
+Package CLI поддерживает `init`, `check`, `build`, `run`, `test`, `clean`.
+Артефакты package build находятся в `build/<profile>/`; legacy single-file
+workflow остаётся доступным при передаче исходного `.oc` файла.
+
+# 34. Актуальная модель памяти
+
+```text
+scalar value       → plain C value
+list/dict/class    → non-atomic ARC
+str                → owned C string semantics
+array[T]           → unique-owned numeric buffer
+Tensor[T]          → ARC-managed facade over opaque runtime handle
+File/BinaryFile    → ARC-managed facade over opaque FILE handle
+&T / &mut T        → lexical zero-cost borrow
+*T / C calls       → explicit unsafe boundary
+```
+
+Реализованы детерминированный cleanup managed объектов при выходе из scope,
+`del` как раннее освобождение, ownership effects в Typed IR, move/use-after-move
+checks, immutable/mutable lexical borrows, retain/release элементов list/dict,
+ownership transfer через `pop` и return paths, а также bounds checks,
+не зависящие от `NDEBUG`.
+
+Ограничения v1:
+
+- ARC неатомарен и рассчитан на thread-confined managed objects;
+- полноценные NLL/lifetime parameters ещё не реализованы;
+- `Send`/`Sync`, `Shared[T]`, arenas и allocator API отсутствуют;
+- циклы ARC могут приводить к leak;
+- raw C pointers и произвольные C ownership contracts не анализируются;
+- multiple inheritance запрещён, безопасная модель пока single inheritance.
+
+# 35. OpenMP и параллельные циклы
+
+Поддерживается ограниченный безопасный subset:
+
+```text
+#pragma omp parallel for collapse(2) schedule(static)
+for i in range(rows):
+    for j in range(cols):
+        output[i, j] = left[i, j] + right[i, j]
+```
+
+Допускается совместимое написание `#pragma opm`; в C всегда генерируется
+правильный `#pragma omp`. Поддерживаются clauses `schedule`, `collapse`,
+`reduction`, `private`, `firstprivate`, `lastprivate`, `shared`, `default`,
+`nowait`, `ordered`.
+
+Для `collapse(n)` циклы должны быть идеально вложенными, с постоянным
+ненулевым integer step. Managed objects, вызовы функций, `break`, `continue`
+и небезопасные формы вложенности отклоняются validator’ом. Если generated C
+содержит OpenMP pragma, CLI автоматически добавляет `-fopenmp`.
+
+# 36. Tensor backend: фактическое состояние
+
+`Tensor[T]` — единственный публичный tensor type. Старый отдельный lowercase
+`tensor` больше не является частью публичного API. Пользовательский код не
+видит `cl_mem`, OpenCL context, queue или CPU pointers.
+
+Основной API:
+
+```text
+Tensor.zeros(..., device)
+Tensor.from_list(..., device)
+Tensor.load_npy(path, device)
+tensor.save_npy(path)
+tensor.to(device), tensor.copy(), tensor.matmul(other)
+tensor.add/sub/mul/div(...), tensor.reshape/transpose/row/column/slice(...)
+tensor.sum/mean/min/max/item(), tensor.shape(axis), tensor.ndim()
+tensor.size(), tensor.device(), tensor.get/set/fill()
+```
+
+Поддерживаются numeric dtypes: `bool`, signed/unsigned integers,
+`float16`, `float32`, `float64`. `Tensor[str]` отклоняется. Устройства:
+`"cpu"` и `"gpu"` (OpenCL).
+
+Runtime использует backend operation table. OpenCL context, queue, program и
+kernels создаются лениво и кэшируются по процессу; kernel cache разделён по
+операции и dtype. Очередь in-order, операции flush’ятся без лишних глобальных
+barrier, host reads ждут собственные read events. OpenCL events освобождаются
+после постановки команды.
+
+CPU `float32`/`float64` 2D matmul имеет contiguous row-major `i-k-j` fast path.
+OpenCL kernels есть для `float32` и `int32`; остальные numeric dtypes используют
+корректный CPU fallback с переносом результата на исходное устройство.
+
+Для одноиндексного scalar iteration:
+
+```text
+len(tensor)  → число скалярных элементов
+tensor[i]    → плоский row-major элемент
+tensor[i, j] → строгий многомерный доступ с проверкой rank
+```
+
+Это позволяет загружать веса и проходить их линейным циклом. `Tensor` пока не
+имеет zero-copy view semantics: `reshape`, `transpose`, `row`, `column` и
+`slice` материализуют независимое contiguous storage.
+
+# 37. File и BinaryFile
+
+Добавлен стандартный импорт:
+
+```text
+import <std/io/file.oc>
+```
+
+`File` предоставляет `read`, `readline`, `readlines`, `write`, `writelines`,
+`flush`, `eof`, `close`.
+
+`open_binary(path, mode)` возвращает `BinaryFile` с методами `read_byte`,
+`read_bytes`, `write_byte`, `write_bytes`, `flush`, `eof`, `close`.
+
+Runtime находится в `std/io/file_runtime.h` и `std/io/file_runtime.c`.
+В safe Ocean code проходят opaque handles; `FILE*` напрямую не экспортируется.
+File handles закрываются явно или при уничтожении владеющего Ocean объекта.
+
+# 38. NumPy `.npy`
+
+Добавлены методы `Tensor.load_npy(path, device)` и `tensor.save_npy(path)`.
+Reader/writer реализован напрямую в C runtime без зависимости от NumPy.
+
+Поддерживаются `.npy` v1.0, v2.0 и v3.0, little/big endian и numeric
+descriptors `bool`, `int8/int16/int32/int64`, `uint8/uint16/uint32/uint64`,
+`float16/float32/float64`.
+
+Writer использует v1, пока header помещается в 16-bit length field, иначе v2.
+Данные сохраняются в C-order row-major виде. При сохранении GPU Tensor сначала
+скачивается на CPU; non-contiguous storage материализуется перед записью.
+
+Reader проверяет magic/version/header, извлекает `descr`, `fortran_order` и
+`shape`, читает raw payload через `fread`, при необходимости делает endian
+byte-swap и затем переносит Tensor на запрошенное устройство.
+
+Пока отклоняются Fortran-order, object/string/structured dtypes и scalar arrays.
+`.npy` не сжимается и не хранит quantization metadata. `Tensor[int8]` уже
+поддерживается как компактный dtype, но настоящие `scale`/`zero_point`
+quantization API ещё не реализованы.
+
+# 39. Примеры и проверки
+
+ML/OOP примеры:
+
+- `examples/transformer_pytorch.py` — PyTorch reference implementation;
+- `examples/transformer_ocean.oc` — OOP Transformer-like implementation;
+- `examples/matmul.oc` — CPU Tensor/matmul;
+- `examples/matmul_gpu.oc` — OpenCL Tensor path;
+- `examples/load_npy.oc` — загрузка и линейная итерация `.npy` weights;
+- `examples/openmp.oc` — OpenMP loops;
+- `examples/neural_network.oc` — ML-oriented language example.
+
+Последняя проверенная база:
+
+```text
+pytest -q                 → 109 passed
+python main.py check --quiet
+python main.py build --quiet
+git diff --check
+```
+
+Runtime C проверяется также строгой компиляцией:
+
+```bash
+gcc -std=c11 -Wall -Wextra -Wpedantic -I. \
+    -c std/tensor/tensor_runtime.c
+gcc -std=c11 -Wall -Wextra -Wpedantic -I. \
+    -c std/io/file_runtime.c
+```
+
+Для OpenCL необходимо передавать include directory с `CL/cl.h`, library
+directory с `libOpenCL.so`, `-lOpenCL` и
+`-DOCEAN_TENSOR_ENABLE_OPENCL`, например:
+
+```bash
+ocean run ./examples/matmul_gpu.oc \
+  --cflags "-I${CONDA_PREFIX}/include \
+-L/usr/local/cuda/targets/x86_64-linux/lib \
+-lOpenCL -DOCEAN_TENSOR_ENABLE_OPENCL"
+```
+
+Graphify после последнего изменения кода:
+
+```text
+1468 nodes
+3159 edges
+89 communities
+```
+
+Обновлять graph artifacts:
+
+```bash
+./.venv/bin/graphify update .
+```
+
+# 40. Текущие ограничения и ближайший roadmap
+
+Приоритет P0 — завершить compiler foundation:
+
+1. Убрать оставшиеся прямые AST обходы из backend в пользу Typed IR.
+2. Добавить `Result[T, E]`, `Option[T]` и `defer` вместо process-exit для обычных ошибок.
+3. Улучшить diagnostics для rank/type/ownership ошибок, включая точные source spans.
+4. Довести interprocedural borrow/data-flow checks и явные move diagnostics.
+
+Приоритет P1 — Tensor performance:
+
+1. Ввести zero-copy Tensor views через `offset`, `shape`, `strides`, `owns_data`.
+2. Добавить memory pool для повторного использования CPU/GPU buffers.
+3. Реализовать kernel fusion для цепочек elementwise операций.
+4. Добавить SIMD CPU backend и benchmark suite с `-O2`/`-O3`.
+5. Сделать async Tensor events публичным безопасным API без ручного OpenCL доступа.
+
+Приоритет P2 — compact ML weights:
+
+1. Реализовать affine `int8` quantization: `scale` и `zero_point`.
+2. Добавить per-channel quantization для Linear/Conv weights.
+3. Использовать стандартный `.npz` для `data`, `scale`, `zero_point`, не вводя
+   собственный checkpoint format.
+4. Позже добавить packed `int4`/`int2` storage.
+
+Приоритет P3 — язык и backend:
+
+1. Traits/interfaces: `Numeric`, `Readable`, `Writable`, `Backend`, `Allocator`.
+2. Value generics/comptime для dtype, rank, layout и tile sizes.
+3. Явные allocator’ы и arena lifetime для системного кода.
+4. `Send`/`Sync`-подобные ограничения для pthread/OpenMP объектов.
+5. Дополнительные backend’ы: SIMD, CUDA/внешний BLAS, затем возможно LLVM/MLIR.
+6. `ocean fmt`, `ocean lint`, LSP, profiler и incremental compilation cache.
+
+Целевая ниша Ocean — не полная замена Rust, Zig или Mojo, а их практический
+пересекающийся слой:
+
+```text
+Python-like syntax
++ lexical ownership/borrows
++ explicit C ABI and unsafe boundary
++ comptime specialization
++ Tensor/OpenCL/ML standard library
+```
+
+Не следует возвращаться к Tensor через `list[list[T]]`, отключать bounds checks
+через `NDEBUG`, добавлять handwritten generic SIMD без dtype/layout доказательств
+или снова смешивать backend semantics с C emission.
