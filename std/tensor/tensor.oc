@@ -20,8 +20,9 @@ class Tensor:
 
     @staticmethod
     def from_list(source: pointer, device: str) -> Tensor:
-        # Tensor[T].from_list(...) is compiler-lowered so the element dtype
-        # and rectangular shape are preserved before entering the runtime.
+        # Tensor.from_list(...) is compiler-lowered so the element dtype from
+        # the surrounding Tensor[T] annotation and rectangular shape are
+        # preserved before entering the runtime.
         var handle: ocean_tensor_handle_t = ocean_tensor_from_cpu_native(source, "float32", device)
         var value: Tensor = Tensor(handle)
         return value

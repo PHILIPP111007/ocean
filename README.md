@@ -86,10 +86,18 @@ The initial API supports arbitrary tensor rank for allocation and transfer:
 ```python
 import <std/tensor/tensor.oc>
 
-var cpu: Tensor[float32] = Tensor[float32].from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
+var cpu: Tensor[float32] = Tensor.from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
 var gpu: Tensor[float32] = cpu.to("gpu")
 var result_gpu: Tensor[float32] = gpu.matmul(gpu)
 var result_cpu: Tensor[float32] = result_gpu.to("cpu")
+```
+
+Static constructors follow Python-style class calls. `T` comes from the target
+annotation, so the runtime call does not repeat the generic type:
+
+```python
+var weights: Tensor[float32] = Tensor.zeros(128, 128, "cpu")
+var labels: Tensor[int32] = Tensor.from_list([[1, 2, 3]], "cpu")
 ```
 
 The supported devices are exactly `"cpu"` and `"gpu"`. `.to(device)` is non-mutating: it returns

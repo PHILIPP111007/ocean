@@ -46,7 +46,10 @@ class StatementsMixin:
             self.add_line("return NULL;")
             return
 
-        expr = self.generate_expression(value_ast)
+        if self.is_device_tensor_type(return_type):
+            expr = self._generate_device_tensor_expression(value_ast, return_type)
+        else:
+            expr = self.generate_expression(value_ast)
         c_type = self.map_type_to_c(return_type)
         temp = f"ocean_return_{self.temp_var_counter}"
         self.temp_var_counter += 1
@@ -298,11 +301,15 @@ class StatementsMixin:
             if info:
                 self.assert_can_mutate(object_name)
 
-        value_expr = self.generate_expression(value_ast)
         field_type, field_lvalue = self.resolve_class_field(
             class_name, object_expr, attribute
         ) if class_name else (None, None)
         field_lvalue = field_lvalue or f"{object_expr}->{attribute}"
+
+        if field_type and self.is_device_tensor_type(field_type):
+            value_expr = self._generate_device_tensor_expression(value_ast, field_type)
+        else:
+            value_expr = self.generate_expression(value_ast)
 
         if not field_type:
             self.add_line(f"{field_lvalue} = {value_expr};")
@@ -383,7 +390,12 @@ class StatementsMixin:
             self.add_line(f"{target} = {temp};")
             return
 
-        expr = self.generate_expression(expression_ast)
+        if self.is_device_tensor_type(info.get("py_type", "")):
+            expr = self._generate_device_tensor_expression(
+                expression_ast, info.get("py_type", "")
+            )
+        else:
+            expr = self.generate_expression(expression_ast)
         if self._is_none_expression(expression_ast) and kind == self.MEMORY_VALUE:
             expr = f"({info['c_type']}){{0}}"
         ownership = self.expression_ownership(expression_ast, info.get("py_type", ""))
@@ -531,7 +543,10 @@ class StatementsMixin:
                 self.add_line(f"append_{struct_name}({var_name}, {item_expr});")
             return
 
-        expr = self.generate_expression(expression_ast)
+        if self.is_device_tensor_type(var_type):
+            expr = self._generate_device_tensor_expression(expression_ast, var_type)
+        else:
+            expr = self.generate_expression(expression_ast)
         if self._is_none_expression(expression_ast) and kind == self.MEMORY_VALUE:
             expr = f"({c_type}){{0}}"
         ownership = self.expression_ownership(expression_ast, var_type)

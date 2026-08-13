@@ -290,6 +290,17 @@ class TypedIRBuilder:
                 return IRType.parse(object_type or "Tensor[float32]")
             return IRType.parse("any")
 
+        if ast_type == "static_method_call":
+            class_name = ast.get("class_name", "")
+            class_type = ast.get("class_type") or class_name
+            if class_name == "Tensor" and ast.get("method") in {
+                "zeros", "from_tensor", "from_list"
+            }:
+                return IRType.parse(
+                    class_type if class_type != "Tensor" else "Tensor[float32]"
+                )
+            return IRType.parse("any")
+
         if ast_type == "function_call":
             function = ast.get("function")
             info = self._functions.get(function)

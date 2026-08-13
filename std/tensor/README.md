@@ -15,6 +15,18 @@ The facade accepts numeric `T`: `bool`, signed/unsigned integer types,
 `str` and other reference types are rejected. `Tensor` without a type
 argument is an alias for `Tensor[float32]`.
 
+Static constructors use the class itself as the receiver, in the same style as
+Python. The dtype is taken from the surrounding `Tensor[T]` annotation; if no
+dtype context is available, it defaults to `float32`:
+
+```text
+var weights: Tensor[float32] = Tensor.zeros(128, 128, "cpu")
+var labels: Tensor[int32] = Tensor.from_list([[1, 2, 3]], "cpu")
+```
+
+The legacy spelling `Tensor[T].zeros(...)` remains accepted for compatibility,
+but new code should prefer the bare `Tensor.method(...)` form.
+
 ## Public API
 
 The initial API contract is:
@@ -55,8 +67,8 @@ Valid device strings in v1 are exactly `"cpu"` and `"gpu"`.
 Example:
 
 ```text
-var A: Tensor[float32] = Tensor[float32].zeros(100, 100, "cpu")
-var B: Tensor[float32] = Tensor[float32].zeros(100, 100, "cpu")
+var A: Tensor[float32] = Tensor.zeros(100, 100, "cpu")
+var B: Tensor[float32] = Tensor.zeros(100, 100, "cpu")
 
 var A_gpu: Tensor[float32] = A.to("gpu")
 var B_gpu: Tensor[float32] = B.to("gpu")
@@ -68,7 +80,7 @@ For user code, literals can be converted directly without declaring a native
 `tensor[T]` variable:
 
 ```text
-var A: Tensor[float32] = Tensor[float32].from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
+var A: Tensor[float32] = Tensor.from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
 ```
 
 ## Semantics of `.to(device)`
@@ -91,7 +103,7 @@ The compiler-native tensor[T] remains the private CPU storage type. The standard
 facade provides explicit compatibility conversions:
 
 var cpu: tensor[int32] = [[1, 2], [3, 4]]
-var device_tensor: Tensor[int32] = Tensor[int32].from_tensor(cpu, "cpu")
+var device_tensor: Tensor[int32] = Tensor.from_tensor(cpu, "cpu")
 var gpu_tensor: Tensor[int32] = device_tensor.to("gpu")
 var restored: tensor[int32] = gpu_tensor.to_tensor()
 

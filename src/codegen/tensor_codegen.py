@@ -6,13 +6,36 @@ from typing import Dict, Iterable, List
 class TensorCodegenMixin:
     """Lower dense row-major ``tensor[T]`` values with owned storage."""
 
+    def _generate_device_tensor_expression(self, ast: Dict, expected_type: str) -> str:
+        """Generate a device Tensor expression with declaration type context.
+
+        ``Tensor.zeros(...)`` is intentionally not parameterized at runtime.
+        When the receiver is bare, the surrounding ``Tensor[T]`` annotation
+        supplies ``T`` to the lowering pass.  The context is lexical so nested
+        expressions and later declarations cannot accidentally inherit it.
+        """
+        previous = getattr(self, "device_tensor_expected_type", None)
+        self.device_tensor_expected_type = expected_type
+        try:
+            return self.generate_expression(ast)
+        finally:
+            self.device_tensor_expected_type = previous
+
+    def _device_tensor_call_dtype(self, class_type: str) -> str:
+        """Resolve dtype from an explicit receiver or the expected target."""
+        if class_type == "Tensor":
+            expected_type = getattr(self, "device_tensor_expected_type", None)
+            if expected_type and self.is_device_tensor_type(expected_type):
+                return self.device_tensor_dtype(expected_type)
+        return self.device_tensor_dtype(class_type)
+
     def _device_tensor_static_call(self, ast: Dict):
-        """Lower Tensor[T].zeros/from_tensor without runtime dtype erasure."""
+        """Lower Tensor.zeros/from_tensor without runtime dtype erasure."""
         class_type = ast.get("class_type") or ast.get("class_name", "")
         if not class_type.startswith("Tensor"):
             return None
 
-        dtype = self.device_tensor_dtype(class_type)
+        dtype = self._device_tensor_call_dtype(class_type)
         args = ast.get("arguments", []) or []
         method = ast.get("method", "")
 

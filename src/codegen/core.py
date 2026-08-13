@@ -101,6 +101,11 @@ class CoreMixin:
         self.tensor_fast_loop_bounds = {}
         self.tensor_fast_patterns = set()
         self.openmp_collapse_remaining = 0
+        # Expected type for a bare ``Tensor.zeros(...)``/``from_list(...)``
+        # expression while lowering a declaration or assignment.  The
+        # annotation supplies the runtime dtype without putting a generic
+        # receiver into the call syntax.
+        self.device_tensor_expected_type = None
 
     def reset(self):
         """Reset all per-compilation mutable state."""
@@ -134,6 +139,7 @@ class CoreMixin:
         self.tensor_fast_loop_bounds = {}
         self.tensor_fast_patterns = set()
         self.openmp_collapse_remaining = 0
+        self.device_tensor_expected_type = None
         self.known_c_types = set(KNOWN_C_TYPES)
         logger.debug("CCodeGenerator state reset")
 
