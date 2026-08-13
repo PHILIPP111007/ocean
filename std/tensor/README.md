@@ -51,6 +51,8 @@ class Tensor:
     def sub_scalar(self, value: float64) -> Tensor[T]
     def mul_scalar(self, value: float64) -> Tensor[T]
     def div_scalar(self, value: float64) -> Tensor[T]
+    def get(self, row: int, col: int) -> float64
+    def set(self, row: int, col: int, value: float64) -> None
     def reshape(self, rows: int, cols: int) -> Tensor[T]
     def transpose(self) -> Tensor[T]
     def sum(self) -> float64

@@ -358,7 +358,11 @@ class CallsMixin:
                             else ""
                         )
                         if (
-                            (self.is_array_type(object_type) or self.is_tensor_type(object_type))
+                            (
+                                self.is_array_type(object_type)
+                                or self.is_tensor_type(object_type)
+                                or self.is_device_tensor_type(object_type)
+                            )
                             and arg.get("attribute") in {"size", "capacity", "ndim"}
                         ):
                             format_parts.append("%zu")
@@ -379,6 +383,11 @@ class CallsMixin:
                             and arg.get("attribute") == "shape"
                         ):
                             format_parts.append("%zu")
+                        elif (
+                            self.is_device_tensor_type(object_type)
+                            and arg.get("attribute") == "shape"
+                        ):
+                            format_parts.append("%d")
                         else:
                             format_parts.append("%d")
                         value_parts.append(expr)
@@ -428,6 +437,8 @@ class CallsMixin:
                             format_parts.append("%zu")
                         elif method_name == "sum":
                             format_parts.append("%f")
+                        elif method_name == "get":
+                            format_parts.append("%f")
                         else:
                             format_parts.append("%d")
                         value_parts.append(expr)
@@ -442,6 +453,10 @@ class CallsMixin:
                                 element_type = self.array_element_type(source_type)
                             elif self.is_tensor_type(source_type):
                                 element_type = self.tensor_element_type(source_type)
+                            elif self.is_device_tensor_type(source_type):
+                                # Public Tensor.get() exposes numeric values
+                                # through the stable float64 scalar ABI.
+                                element_type = "float64"
                         format_parts.append("%f" if element_type in {"float", "float16", "float32", "float64", "double"} else "%d")
                         value_parts.append(expr)
                     else:

@@ -1,7 +1,9 @@
-def matmul(A: &tensor[float32], B: &tensor[float32], C: &mut tensor[float32]) -> None:
-    var rows_A: int = A.shape[0]
-    var cols_A: int = A.shape[1]
-    var cols_B: int = B.shape[1]
+import <std/tensor/tensor.oc>
+
+def matmul(A: &Tensor[float32], B: &Tensor[float32], C: &mut Tensor[float32]) -> None:
+    var rows_A: int = A.shape(0)
+    var cols_A: int = A.shape(1)
+    var cols_B: int = B.shape(1)
 
     #pragma omp parallel for collapse(2)
     for i in range(rows_A):
@@ -19,10 +21,9 @@ def matmul(A: &tensor[float32], B: &tensor[float32], C: &mut tensor[float32]) ->
 def main() -> int:
     var size: int = 100
 
-    var A: tensor[float32] = tensor.zeros(size, size)
-    var B: tensor[float32] = tensor.zeros(size, size)
-    var C: tensor[float32] = tensor.zeros(size, size)
-
+    var A: Tensor[float32] = Tensor.zeros(size, size, "cpu")
+    var B: Tensor[float32] = Tensor.zeros(size, size, "cpu")
+    var C: Tensor[float32] = Tensor.zeros(size, size, "cpu")
     for i in range(size):
         A[i, i] = 1.0
         B[i, i] = 2.0
@@ -31,8 +32,8 @@ def main() -> int:
         matmul(A, B, C)
 
     print("C[0, 0] =", C[0, 0])
-    print("C.shape[0] =", C.shape[0])
-    print("C.shape[1] =", C.shape[1])
-    print("C.size =", C.size)
+    print("C.shape(0) =", C.shape(0))
+    print("C.shape(1) =", C.shape(1))
+    print("C.size() =", C.size())
 
     return 0

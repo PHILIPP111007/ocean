@@ -49,6 +49,11 @@ class IndexingMixin:
             current_class = self._get_current_class()
             field = self.class_registry.field(current_class, attr_name) if current_class else None
             attr_type = field.py_type if field else ""
+            if attr_type and self.is_device_tensor_type(attr_type):
+                self.generate_tensor_index_assignment(
+                    f"self->{attr_name}", attr_type, [index_ast], value_expr
+                )
+                return
             if attr_type and self.is_tensor_type(attr_type):
                 self.add_line(
                     self._tensor_set_call(
@@ -248,6 +253,11 @@ class IndexingMixin:
             current_class = self._get_current_class()
             field = self.class_registry.field(current_class, attr_name) if current_class else None
             attr_type = field.py_type if field else ""
+            if attr_type and self.is_device_tensor_type(attr_type):
+                self.generate_tensor_index_assignment(
+                    f"self->{attr_name}", attr_type, indices_ast, value_expr
+                )
+                return
             if attr_type and self.is_tensor_type(attr_type):
                 self.add_line(
                     self._tensor_set_call(
@@ -263,6 +273,9 @@ class IndexingMixin:
 
         py_type = var_info.get("py_type", "")
 
+        if self.is_device_tensor_type(py_type):
+            self.generate_tensor_index_assignment(var_name, py_type, indices_ast, value_expr)
+            return
         if self.is_tensor_type(py_type):
             self.generate_tensor_index_assignment(var_name, py_type, indices_ast, value_expr)
             return
@@ -586,6 +599,10 @@ class IndexingMixin:
                     # Проверяем тип атрибута
                     field = self.class_registry.field(current_class, attr_name)
                     attr_type = field.py_type if field else None
+                    if attr_type and self.is_device_tensor_type(attr_type):
+                        if len(index_exprs) != 2:
+                            raise RuntimeError("Tensor indexing currently expects exactly two indices")
+                        return f"Tensor_get(self->{attr_name}, {index_exprs[0]}, {index_exprs[1]})"
                     if attr_type and self.is_tensor_type(attr_type):
                         return self._tensor_index_call(
                             f"self->{attr_name}", attr_type, index_exprs
@@ -599,6 +616,10 @@ class IndexingMixin:
         if var_info:
             obj_py_type = var_info.get("py_type", "")
 
+            if self.is_device_tensor_type(obj_py_type) and attr_name == "shape":
+                if len(index_exprs) != 1:
+                    raise RuntimeError("Tensor.shape expects one axis")
+                return f"Tensor_shape({obj_name}, {index_exprs[0]})"
             if self.is_tensor_type(obj_py_type) and attr_name == "shape":
                 self.generate_tensor_struct(obj_py_type)
                 return f"{self.tensor_struct_name(obj_py_type)}_shape_at({obj_name}, (size_t)({index_expr}))"
@@ -609,6 +630,10 @@ class IndexingMixin:
                 class_name = obj_py_type.replace("*", "").strip()
                 field = self.class_registry.field(class_name, attr_name)
                 attr_type = field.py_type if field else None
+                if attr_type and self.is_device_tensor_type(attr_type):
+                    if len(index_exprs) != 2:
+                        raise RuntimeError("Tensor indexing currently expects exactly two indices")
+                    return f"Tensor_get({obj_name}->{attr_name}, {index_exprs[0]}, {index_exprs[1]})"
                 if attr_type and self.is_tensor_type(attr_type):
                     return self._tensor_index_call(
                         f"{obj_name}->{attr_name}", attr_type, index_exprs

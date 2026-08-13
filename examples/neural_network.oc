@@ -1,3 +1,5 @@
+import <std/tensor/tensor.oc>
+
 # Universal fully connected layers composed through ordinary Ocean objects.
 #
 # DenseLayer is reusable: its input/output sizes and activation are supplied
@@ -9,9 +11,8 @@ class DenseLayer:
         self.input_size: int = input_size
         self.output_size: int = output_size
         self.activation: int = activation
-        self.weights: tensor[float32] = tensor.zeros(input_size, output_size)
-        self.bias: tensor[float32] = tensor.zeros(1, output_size)
-
+        self.weights: Tensor[float32] = Tensor.zeros(input_size, output_size, "cpu")
+        self.bias: Tensor[float32] = Tensor.zeros(1, output_size, "cpu")
     def initialize(self, initial_weight: float32) -> None:
         for i in range(self.input_size):
             for j in range(self.output_size):
@@ -22,9 +23,8 @@ class DenseLayer:
 
         return None
 
-    def forward(self, inputs: &tensor[float32]) -> tensor[float32]:
-        var outputs: tensor[float32] = tensor.zeros(1, self.output_size)
-
+    def forward(self, inputs: &Tensor[float32]) -> Tensor[float32]:
+        var outputs: Tensor[float32] = Tensor.zeros(1, self.output_size, "cpu")
         for j in range(self.output_size):
             var value: float32 = self.bias[0, j]
             for i in range(self.input_size):
@@ -40,9 +40,8 @@ class DenseLayer:
 
         return outputs
 
-    def backward(self, inputs: &tensor[float32], outputs: &tensor[float32], upstream: &tensor[float32], learning_rate: float32) -> tensor[float32]:
-        var input_gradient: tensor[float32] = tensor.zeros(1, self.input_size)
-
+    def backward(self, inputs: &Tensor[float32], outputs: &Tensor[float32], upstream: &Tensor[float32], learning_rate: float32) -> Tensor[float32]:
+        var input_gradient: Tensor[float32] = Tensor.zeros(1, self.input_size, "cpu")
         for j in range(self.output_size):
             var gradient: float32 = upstream[0, j]
 
@@ -74,25 +73,25 @@ class NeuralNetwork:
         self.output.initialize(initial_weight)
         return None
 
-    def forward(self, inputs: &tensor[float32]) -> tensor[float32]:
-        var hidden_outputs: tensor[float32] = self.hidden.forward(inputs)
-        var outputs: tensor[float32] = self.output.forward(hidden_outputs)
+    def forward(self, inputs: &Tensor[float32]) -> Tensor[float32]:
+        var hidden_outputs: Tensor[float32] = self.hidden.forward(inputs)
+        var outputs: Tensor[float32] = self.output.forward(hidden_outputs)
         return outputs
 
-    def train_step(self, inputs: &tensor[float32], target: &tensor[float32], learning_rate: float32) -> float32:
-        var hidden_outputs: tensor[float32] = self.hidden.forward(inputs)
-        var outputs: tensor[float32] = self.output.forward(hidden_outputs)
-        var output_gradient: tensor[float32] = tensor.zeros(1, self.output.output_size)
+    def train_step(self, inputs: &Tensor[float32], target: &Tensor[float32], learning_rate: float32) -> float32:
+        var hidden_outputs: Tensor[float32] = self.hidden.forward(inputs)
+        var outputs: Tensor[float32] = self.output.forward(hidden_outputs)
+        var output_gradient: Tensor[float32] = Tensor.zeros(1, self.output.output_size, "cpu")
         var error: float32 = outputs[0, 0] + target[0, 0] * -1.0
         output_gradient[0, 0] = error
 
-        var hidden_gradient: tensor[float32] = self.output.backward(hidden_outputs, outputs, output_gradient, learning_rate)
-        var input_gradient: tensor[float32] = self.hidden.backward(inputs, hidden_outputs, hidden_gradient, learning_rate)
+        var hidden_gradient: Tensor[float32] = self.output.backward(hidden_outputs, outputs, output_gradient, learning_rate)
+        var input_gradient: Tensor[float32] = self.hidden.backward(inputs, hidden_outputs, hidden_gradient, learning_rate)
 
         return error * error
 
-    def predict(self, inputs: &tensor[float32]) -> float32:
-        var outputs: tensor[float32] = self.forward(inputs)
+    def predict(self, inputs: &Tensor[float32]) -> float32:
+        var outputs: Tensor[float32] = self.forward(inputs)
         var result: float32 = outputs[0, 0]
         return result
 
@@ -101,8 +100,8 @@ def main() -> int:
     var network: NeuralNetwork = NeuralNetwork(2, 4, 1)
     network.initialize(0.1)
 
-    var inputs: tensor[float32] = [[1.0, 0.0]]
-    var target: tensor[float32] = [[1.0]]
+    var inputs: Tensor[float32] = Tensor.from_list([[1.0, 0.0]], "cpu")
+    var target: Tensor[float32] = Tensor.from_list([[1.0]], "cpu")
     var loss: float32 = 0.0
 
     for _ in range(20):

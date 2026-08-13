@@ -2617,18 +2617,32 @@ class Parser:
         if static_method_match:
             class_type, method_name, args_str = static_method_match.groups()
             class_name = class_type.split("[", 1)[0]
-            args = (
-                self.parse_function_arguments_to_ast(args_str)
-                if args_str.strip()
-                else []
-            )
-            return {
-                "type": "static_method_call",
-                "class_name": class_name,
-                "class_type": class_type,
-                "method": method_name,
-                "arguments": args,
-            }
+            known_class = class_name == "Tensor"
+            if not known_class:
+                for parser_scope in self.scopes:
+                    table = parser_scope.get("symbol_table")
+                    symbol = table.get_symbol(class_name) if table else None
+                    if symbol and symbol.get("key") == "class":
+                        known_class = True
+                        break
+            # Uppercase variable names (A, B, C are common matrix names) are
+            # object receivers, not static classes. Only registered classes
+            # and the imported Tensor facade use this AST shape.
+            if not known_class:
+                static_method_match = None
+            else:
+                args = (
+                    self.parse_function_arguments_to_ast(args_str)
+                    if args_str.strip()
+                    else []
+                )
+                return {
+                    "type": "static_method_call",
+                    "class_name": class_name,
+                    "class_type": class_type,
+                    "method": method_name,
+                    "arguments": args,
+                }
 
         obj_method_pattern = (
             r"^([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\."
@@ -5303,7 +5317,7 @@ class Parser:
                 "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
                 "mul_scalar", "div_scalar", "fill", "sum", "copy",
                 "transpose", "reshape", "matmul", "to", "to_tensor",
-                "shape", "ndim", "size", "device", "release",
+                "shape", "ndim", "size", "device", "get", "set", "release",
             }:
                 method_found = True
 

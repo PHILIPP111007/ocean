@@ -174,6 +174,17 @@ class ExpressionsMixin:
             # Проверяем тип объекта
             var_info = self.get_variable_info(object_name)
 
+            # Parameters such as ``A: &Tensor[T]`` may be resolved through a
+            # class/borrow path even when they are not present as a direct
+            # local binding. Preserve the public Tensor method ABI there.
+            resolved_type, resolved_object = self.resolve_object_path(object_name)
+            if not var_info and self.is_device_tensor_type(resolved_type or ""):
+                arg_strings = [self.generate_expression(arg) for arg in args]
+                full_args = resolved_object
+                if arg_strings:
+                    full_args += ", " + ", ".join(arg_strings)
+                return f"Tensor_{method_name}({full_args})"
+
             if var_info:
                 obj_type = var_info.get("py_type", "")
 
@@ -376,6 +387,9 @@ class ExpressionsMixin:
             or self.is_array_type(var_info.get("py_type", ""))
             or self.is_tensor_type(var_info.get("py_type", ""))
         ):
+            if self.is_device_tensor_type(var_info.get("py_type", "")):
+                if attr_name in {"ndim", "size", "device"}:
+                    return f"Tensor_{attr_name}({obj_name})"
             return f"{obj_name}->{attr_name}"
         return f"{obj_name}.{attr_name}"
 
@@ -436,6 +450,23 @@ class ExpressionsMixin:
                 )
             raise RuntimeError(
                 f"method call '{ast.get('object', '')}.{ast.get('method', '')}' "
+                "is not supported in a constructor initializer"
+            )
+
+        elif node_type == "static_method_call":
+            if ast.get("class_name") == "Tensor" and self.is_device_tensor_type(target_type):
+                previous = getattr(self, "device_tensor_argument_generator", None)
+                self.device_tensor_argument_generator = (
+                    lambda argument: self._generate_expression_from_ast_for_init(
+                        argument, param_names
+                    )
+                )
+                try:
+                    return self._generate_device_tensor_expression(ast, target_type)
+                finally:
+                    self.device_tensor_argument_generator = previous
+            raise RuntimeError(
+                f"static call '{ast.get('class_name', '')}.{ast.get('method', '')}' "
                 "is not supported in a constructor initializer"
             )
 

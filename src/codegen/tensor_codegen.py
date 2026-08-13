@@ -38,6 +38,9 @@ class TensorCodegenMixin:
         dtype = self._device_tensor_call_dtype(class_type)
         args = ast.get("arguments", []) or []
         method = ast.get("method", "")
+        generate_argument = getattr(
+            self, "device_tensor_argument_generator", None
+        ) or self.generate_expression
 
         if method == "zeros":
             if len(args) < 2:
@@ -47,13 +50,13 @@ class TensorCodegenMixin:
             shape_name = f"ocean_device_tensor_shape_{self.temp_var_counter}"
             self.temp_var_counter += 1
             values = ", ".join(
-                f"(size_t)({self.generate_expression(argument)})"
+                f"(size_t)({generate_argument(argument)})"
                 for argument in dimensions
             )
             self.add_line(
                 f"size_t {shape_name}[{len(dimensions)}] = {{ {values} }};"
             )
-            device = self.generate_expression(device_ast)
+            device = generate_argument(device_ast)
             return (
                 f"create_Tensor(ocean_tensor_zeros_nd({shape_name}, "
                 f"{len(dimensions)}, \"{dtype}\", {device}))"
@@ -63,7 +66,7 @@ class TensorCodegenMixin:
             if len(args) != 2:
                 raise RuntimeError("Tensor[T].from_tensor expects tensor and device")
             source_ast, device_ast = args
-            source = self.generate_expression(source_ast)
+            source = generate_argument(source_ast)
             source_info = None
             if source_ast.get("type") == "variable":
                 source_info = self.get_variable_info(source_ast.get("value", ""))
@@ -77,7 +80,7 @@ class TensorCodegenMixin:
                 raise RuntimeError(
                     "Tensor[T].from_tensor requires matching native and device dtypes"
                 )
-            device = self.generate_expression(device_ast)
+            device = generate_argument(device_ast)
             return (
                 f"create_Tensor(ocean_tensor_from_cpu_strided("
                 f"(const void*){source}->data, {source}->shape, {source}->strides, "
@@ -99,7 +102,7 @@ class TensorCodegenMixin:
                 native_name, native_type, args[0]
             )
             self.add_line(f"{native_struct}* {native_name} = {native_expr};")
-            device = self.generate_expression(device_ast)
+            device = generate_argument(device_ast)
             result_name = f"ocean_device_tensor_{self.temp_var_counter}"
             self.temp_var_counter += 1
             self.add_line(
@@ -627,10 +630,21 @@ static {struct_name}* {struct_name}_scalar_broadcast(
         self.assert_can_read(variable)
         py_type = self.strip_borrow_type(info.get("py_type", ""))
         indices = [self.generate_expression(index) for index in ast.get("indices", [])]
+        if self.is_device_tensor_type(py_type):
+            if len(indices) != 2:
+                raise RuntimeError("Tensor indexing currently expects exactly two indices")
+            return f"Tensor_get({variable}, {indices[0]}, {indices[1]})"
         return self._tensor_index_call(variable, py_type, indices)
 
     def generate_tensor_index_assignment(self, variable: str, py_type: str, indices, value: str) -> None:
         expressions = [self.generate_expression(index) for index in indices]
+        if self.is_device_tensor_type(py_type):
+            if len(expressions) != 2:
+                raise RuntimeError("Tensor indexing currently expects exactly two indices")
+            self.add_line(
+                f"Tensor_set({variable}, {expressions[0]}, {expressions[1]}, {value});"
+            )
+            return
         self.add_line(self._tensor_set_call(variable, py_type, expressions, value))
 
     def _is_tensor_zeros_expression(self, ast: Dict) -> bool:

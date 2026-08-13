@@ -128,6 +128,8 @@ class JSONValidator:
                             "ocean_tensor_transpose",
                             "ocean_tensor_sum",
                             "ocean_tensor_fill",
+                            "ocean_tensor_get_2d",
+                            "ocean_tensor_set_2d",
                             "ocean_tensor_shape",
                             "ocean_tensor_ndim",
                             "ocean_tensor_size",
@@ -2793,7 +2795,7 @@ class JSONValidator:
                 indices = body_node.get("indices")
                 if indices is None:
                     indices = body_node.get("index")
-                if not normalized_type.startswith(("array[", "tensor[")):
+                if not normalized_type.startswith(("array[", "tensor[", "Tensor")):
                     self.add_error(
                         f"запись в '{variable}' внутри OpenMP loop разрешена только для "
                         "array/tensor",
@@ -5352,6 +5354,14 @@ class JSONValidator:
             return method_name in {
                 "fill", "sum", "copy", "transpose", "transpose_view", "matmul",
                 "row", "column", "slice",
+            }
+
+        if type_name == "Tensor" or type_name.startswith("Tensor["):
+            return method_name in {
+                "get", "set", "fill", "sum", "copy", "transpose", "matmul",
+                "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
+                "mul_scalar", "div_scalar", "reshape", "to", "to_tensor",
+                "shape", "ndim", "size", "device", "release",
             }
 
         if type_name in builtin_methods:

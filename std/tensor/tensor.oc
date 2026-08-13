@@ -99,6 +99,13 @@ class Tensor:
         ocean_tensor_fill(self.handle, value)
         return None
 
+    def get(self, row: int, col: int) -> float64:
+        return ocean_tensor_get_2d(self.handle, row, col)
+
+    def set(self, row: int, col: int, value: float64) -> None:
+        ocean_tensor_set_2d(self.handle, row, col, value)
+        return None
+
     def shape(self, axis: int) -> int:
         return ocean_tensor_shape(self.handle, axis)
 
