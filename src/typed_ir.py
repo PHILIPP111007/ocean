@@ -85,16 +85,45 @@ class TypedScope:
 
 @dataclass(frozen=True)
 class TypedModule:
-    """Typed compilation unit with a lossless legacy representation."""
+    """Typed compilation unit with an explicit compatibility projection.
+
+    Compiler passes should exchange ``TypedModule`` instances.  The raw parser
+    scopes are retained only as a lossless lowering view for the current C
+    emitter and for compatibility with the pre-Typed-IR public API.
+    """
 
     scopes: tuple[TypedScope, ...]
 
+    @property
+    def raw_scopes(self) -> tuple[dict[str, Any], ...]:
+        """Return immutable-pass input for legacy lowering code.
+
+        The returned dictionaries are deep copies so a backend cannot mutate
+        the semantic module accidentally while emitting C.
+        """
+        return tuple(deepcopy(scope.raw) for scope in self.scopes)
+
+    def scope(self, level: int) -> TypedScope | None:
+        """Find a typed scope by its parser level."""
+        return next(
+            (scope for scope in self.scopes if scope.raw.get("level") == level),
+            None,
+        )
+
+    def iter_nodes(self):
+        """Iterate semantic nodes in source/scope order."""
+        for scope in self.scopes:
+            yield from scope.nodes
+
     def to_legacy_json(self) -> list[dict[str, Any]]:
-        """Return a deep copy accepted by the existing validator and C backend."""
-        return [deepcopy(scope.raw) for scope in self.scopes]
+        """Return the compatibility graph used by legacy callers."""
+        return list(self.raw_scopes)
 
     def __len__(self) -> int:
         return len(self.scopes)
+
+    def __iter__(self):
+        return iter(self.scopes)
 
 
 class TypedIRBuilder:
@@ -239,10 +268,26 @@ class TypedIRBuilder:
                 return IRType.parse("tensor[any]")
             info = self._scope_symbol(ast.get("object", ""), scope)
             object_type = info.get("type", "") if info else ""
-            if object_type.startswith("tensor[") and ast.get("method") in {
-                "row", "column", "slice", "transpose_view", "copy", "transpose", "matmul"
+            if (
+                object_type.startswith(("tensor[", "Tensor["))
+                or object_type == "Tensor"
+            ) and ast.get("method") in {
+                "row", "column", "slice", "transpose_view", "copy", "transpose", "matmul",
+                "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
+                "mul_scalar", "div_scalar", "reshape", "sum", "fill", "to",
+                "to_tensor", "shape", "ndim", "size", "device",
             }:
-                return IRType.parse(object_type)
+                if ast.get("method") == "sum":
+                    return IRType.parse("float64")
+                if ast.get("method") in {"shape", "ndim"}:
+                    return IRType.parse("int")
+                if ast.get("method") == "size":
+                    return IRType.parse("size_t")
+                if ast.get("method") == "device":
+                    return IRType.parse("str")
+                if ast.get("method") == "to_tensor":
+                    return IRType.parse("pointer")
+                return IRType.parse(object_type or "Tensor[float32]")
             return IRType.parse("any")
 
         if ast_type == "function_call":

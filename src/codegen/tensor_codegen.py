@@ -61,6 +61,32 @@ class TensorCodegenMixin:
                 f"{source}->ndim, \"{dtype}\", {device}))"
             )
 
+        if method == "from_list":
+            if len(args) != 2 or args[0].get("type") != "list_literal":
+                raise RuntimeError(
+                    "Tensor[T].from_list expects a rectangular list literal and device"
+                )
+            device_ast = args[1]
+            native_type = f"tensor[{dtype}]"
+            self.generate_tensor_struct(native_type)
+            native_struct = self.tensor_struct_name(native_type)
+            native_name = f"ocean_tensor_device_native_{self.temp_var_counter}"
+            self.temp_var_counter += 1
+            native_expr = self._generate_tensor_literal_expr(
+                native_name, native_type, args[0]
+            )
+            self.add_line(f"{native_struct}* {native_name} = {native_expr};")
+            device = self.generate_expression(device_ast)
+            result_name = f"ocean_device_tensor_{self.temp_var_counter}"
+            self.temp_var_counter += 1
+            self.add_line(
+                f"Tensor* {result_name} = create_Tensor(ocean_tensor_from_cpu_strided("
+                f"(const void*){native_name}->data, {native_name}->shape, "
+                f"{native_name}->strides, {native_name}->ndim, \"{dtype}\", {device}));"
+            )
+            self.add_line(f"{native_struct}_free({native_name});")
+            return result_name
+
         return None
 
     def _tensor_fast_index_expression(self, tensor_expr: str, indices: Iterable[str]):

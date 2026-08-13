@@ -5,16 +5,21 @@ from typing import Dict, List, Optional
 
 from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOWN_C_TYPES
 from src.modules.logger import logger
+from src.typed_ir import TypedModule, build_typed_ir
 
 class OrchestratorMixin:
     def generate_from_typed_ir(self, typed_ir) -> str:
-        """Generate C from the semantic IR while preserving the legacy backend."""
-        if not hasattr(typed_ir, "to_legacy_json"):
+        """Generate C from the canonical semantic IR."""
+        if not isinstance(typed_ir, TypedModule):
             raise TypeError("generate_from_typed_ir expects a TypedModule")
-        return self.generate_from_json(typed_ir.to_legacy_json())
+        return self._generate_from_scopes(typed_ir.raw_scopes)
 
     def generate_from_json(self, json_data: List[Dict]) -> str:
-        """Run semantic prepasses, instantiate runtime types, then emit C."""
+        """Compatibility entry point for callers with parser JSON."""
+        return self.generate_from_typed_ir(build_typed_ir(json_data))
+
+    def _generate_from_scopes(self, json_data: List[Dict]) -> str:
+        """Lower the compatibility scope view after typed IR is established."""
         self.reset()
         logger.debug(f"Starting Ocean C generation with {len(json_data)} scopes")
         self.scan_runtime_requirements(json_data)

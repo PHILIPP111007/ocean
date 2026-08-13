@@ -12,14 +12,16 @@ backend-independent.
 3. OpenCL GPU backend — persistent context, device buffers, kernels, and
    transfers.
 
-The lower-case `tensor[T]` remains the typed dense storage primitive. The
-upper-case `Tensor` is the public facade that owns metadata and one backend
-storage variant. User code should not access `cl_mem`, OpenCL contexts, queues,
-or backend-specific pointers directly.
+The upper-case `Tensor[T]` is the public facade that owns metadata and one
+backend storage variant. The lower-case `tensor[T]` remains an internal typed
+dense storage primitive for compiler-generated CPU layouts and C ABI
+interoperability. User code should not access `cl_mem`, OpenCL contexts,
+queues, or backend-specific pointers directly.
 
-The two types interoperate explicitly through Tensor.from_tensor(...) and
-Tensor.to_tensor(). This avoids making the compiler-native CPU layout part of
-the public GPU ABI.
+The two types interoperate explicitly through `Tensor.from_tensor(...)` and
+`Tensor.to_tensor()`. New user code should prefer `Tensor.from_list(...)`; the
+native bridge remains available for low-level code. This avoids making the
+compiler-native CPU layout part of the public GPU ABI.
 
 See:
 

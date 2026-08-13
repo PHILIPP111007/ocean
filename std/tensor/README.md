@@ -2,12 +2,12 @@
 
 ## Purpose
 
-`Tensor` is the public, device-aware tensor object. It is intentionally
-separate from the existing lower-case `tensor[T]` primitive:
+`Tensor` is the public, device-aware tensor object. The lower-case
+`tensor[T]` primitive is retained only as an internal/native ABI type:
 
 ```text
-tensor[float32]   # typed CPU storage primitive
-Tensor[float32]   # standard-library facade with a device
+Tensor[float32]        # public device-aware tensor
+tensor[float32]        # internal/native CPU storage compatibility type
 ```
 
 The facade accepts numeric `T`: `bool`, signed/unsigned integer types,
@@ -25,6 +25,8 @@ class Tensor:
     def zeros(*shape: int, device: str) -> Tensor[T]
     @staticmethod
     def from_tensor(source: &tensor[T], device: str) -> Tensor[T]
+    @staticmethod
+    def from_list(source: list, device: str) -> Tensor[T]
 
     def to(self, device: str) -> Tensor[T]
     def to_tensor(self) -> pointer
@@ -62,6 +64,13 @@ var C_gpu: Tensor[float32] = A_gpu.matmul(B_gpu)
 var C: Tensor[float32] = C_gpu.to("cpu")
 ```
 
+For user code, literals can be converted directly without declaring a native
+`tensor[T]` variable:
+
+```text
+var A: Tensor[float32] = Tensor[float32].from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
+```
+
 ## Semantics of `.to(device)`
 
 `.to()` is a non-mutating operation, matching the useful part of the PyTorch
@@ -78,16 +87,18 @@ be added, but it must be explicit because it changes the owned backend storage.
 
 ## Interoperability with tensor[T]
 
-The compiler-native tensor[T] remains the CPU storage type. The standard
-facade provides explicit conversions for the first backend version:
+The compiler-native tensor[T] remains the private CPU storage type. The standard
+facade provides explicit compatibility conversions:
 
 var cpu: tensor[int32] = [[1, 2], [3, 4]]
 var device_tensor: Tensor[int32] = Tensor[int32].from_tensor(cpu, "cpu")
 var gpu_tensor: Tensor[int32] = device_tensor.to("gpu")
 var restored: tensor[int32] = gpu_tensor.to_tensor()
 
-from_tensor() copies source data into backend-owned storage for any rank and
-numeric `T`, preserving tensor views through their shape and strides.
+from_list() is the preferred public constructor and preserves rectangular
+literal shape and numeric `T`. `from_tensor()` copies a native source into
+backend-owned storage for any rank and numeric `T`, preserving tensor views
+through their shape and strides.
 to_tensor() always returns a new CPU tensor; a GPU source is
 downloaded first. This copy boundary keeps native tensor ownership separate
 from the opaque device handle.

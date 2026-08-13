@@ -39,11 +39,33 @@ class JSONValidator:
         self.variable_history = {}  # {(scope_level, var_name): [{"action": "declare"/"assign"/"delete", "node_id": str}]}
         self.variable_states = {}  # {(scope_level, var_name): "active"/"deleted"}
         self.classes = {}  # {class_name: class_info}
+        self.typed_ir = None
 
     def validate(self, json_data: List[Dict] | TypedModule) -> list[Dict]:
-        """Основной метод валидации"""
+        """Validate a typed module or legacy parser graph.
+
+        ``TypedModule`` is the canonical compiler input.  The list form stays
+        supported for compatibility with older library users and tests.
+        """
         if isinstance(json_data, TypedModule):
-            json_data = json_data.to_legacy_json()
+            return self.validate_typed_ir(json_data)
+        self.typed_ir = None
+        return self._validate_scopes(json_data)
+
+    def validate_typed_ir(self, typed_ir: TypedModule) -> list[Dict]:
+        """Validate the canonical semantic module before C lowering."""
+        if not isinstance(typed_ir, TypedModule):
+            raise TypeError("validate_typed_ir expects a TypedModule")
+        self.typed_ir = typed_ir
+        return self._validate_scopes(list(typed_ir.raw_scopes))
+
+    def _validate_scopes(self, json_data: List[Dict]) -> list[Dict]:
+        """Run the existing validation passes over a typed lowering view."""
+        if not isinstance(json_data, list):
+            self.errors = []
+            self.warnings = []
+            self.add_error("JSON должен быть списком scope'ов")
+            return self.get_report()
         self.errors = []
         self.warnings = []
         self.scope_symbols = {}

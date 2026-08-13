@@ -5,9 +5,15 @@ The public Python API remains:
 
 ```python
 from src.codegen import CCodeGenerator
+from src.typed_ir import build_typed_ir
 
-c_code = CCodeGenerator().generate_from_json(ast)
+typed_module = build_typed_ir(ast)
+c_code = CCodeGenerator().generate_from_typed_ir(typed_module)
 ```
+
+`TypedModule` is the canonical compiler-pass API. `generate_from_json()` remains
+as a compatibility adapter for older callers and converts the parser graph into
+the typed module before lowering.
 
 ## What changed
 

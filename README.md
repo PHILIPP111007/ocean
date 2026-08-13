@@ -86,12 +86,10 @@ The initial API supports arbitrary tensor rank for allocation and transfer:
 ```python
 import <std/tensor/tensor.oc>
 
-var native: tensor[float32] = [[1.0, 2.0], [3.0, 4.0]]
-var cpu: Tensor[float32] = Tensor[float32].from_tensor(native, "cpu")
+var cpu: Tensor[float32] = Tensor[float32].from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
 var gpu: Tensor[float32] = cpu.to("gpu")
 var result_gpu: Tensor[float32] = gpu.matmul(gpu)
 var result_cpu: Tensor[float32] = result_gpu.to("cpu")
-var restored: tensor[float32] = result_cpu.to_tensor()
 ```
 
 The supported devices are exactly `"cpu"` and `"gpu"`. `.to(device)` is non-mutating: it returns
@@ -111,8 +109,10 @@ result back to the original device. `reshape` and `transpose` currently return i
 contiguous tensors, while `fill` mutates the existing tensor.
 
 The public facade owns an opaque runtime handle. Ocean code does not access `cl_mem`, OpenCL
-contexts, queues, or backend-specific pointers directly. See [std/tensor/README.md](std/tensor/README.md)
-and [std/gpu/opencl.md](std/gpu/opencl.md) for the API and backend design.
+contexts, queues, or backend-specific pointers directly. `from_tensor()` and `to_tensor()` remain
+low-level compatibility bridges for compiler/native code; new user code should prefer
+`Tensor.from_list(...)`. See [std/tensor/README.md](std/tensor/README.md) and
+[std/gpu/opencl.md](std/gpu/opencl.md) for the API and backend design.
 
 ## Imports and the standard library
 
@@ -286,11 +286,12 @@ compiler-dependent; the benchmark is the source of truth for comparisons.
 ## Compiler pipeline
 
 ```text
-Ocean source → Parser → typed JSON graph → JSONValidator → CCodeGenerator → C11
+Ocean source → Parser → TypedModule → JSONValidator → CCodeGenerator → C11
 ```
 
 - `src/parser.py` — syntax, types, expressions, indexing, arrays, and tensors.
-- `src/typed_ir.py` — typed scopes, expression result types, data dependencies, and ownership effects.
+- `src/typed_ir.py` — canonical typed scopes, expression result types, data dependencies, and
+  ownership effects. Legacy parser JSON is retained only as a compatibility projection.
 - `src/debug.py` — diagnostics, source locations, ownership, and borrow validation.
 - `src/codegen/` — C lowering for scopes, types, ownership, containers, tensors, and OOP.
 - `src/compiler.py` — public `CCodeGenerator` compatibility API.

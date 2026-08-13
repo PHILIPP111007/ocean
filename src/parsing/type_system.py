@@ -121,6 +121,11 @@ class TypeSpec:
         if self.kind == "generic":
             if self.name == "shared":
                 return "shared"
+            if self.name == "Tensor":
+                # Device-aware Tensor is an ARC-managed public facade.  Its
+                # backend storage is opaque and released by the class
+                # destructor, unlike the compiler-native tensor[T] buffer.
+                return "shared"
             if self.name in OWNED_TYPES:
                 return "owned"
             if self.name in SHARED_TYPES:

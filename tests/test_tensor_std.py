@@ -71,12 +71,9 @@ def test_standard_tensor_operations_and_metadata(tmp_path):
 import <std/tensor/tensor.oc>
 
 def main() -> int:
-    var native_left: tensor[int32] = [[1, 2], [3, 4]]
-    var native_right: tensor[int32] = [[5, 6], [7, 8]]
-    var native_bias: tensor[int32] = [[10, 20]]
-    var left: Tensor[int32] = Tensor[int32].from_tensor(native_left, "cpu")
-    var right: Tensor[int32] = Tensor[int32].from_tensor(native_right, "cpu")
-    var bias: Tensor[int32] = Tensor[int32].from_tensor(native_bias, "cpu")
+    var left: Tensor[int32] = Tensor[int32].from_list([[1, 2], [3, 4]], "cpu")
+    var right: Tensor[int32] = Tensor[int32].from_list([[5, 6], [7, 8]], "cpu")
+    var bias: Tensor[int32] = Tensor[int32].from_list([[10, 20]], "cpu")
     var added: Tensor[int32] = left.add(right)
     var subtracted: Tensor[int32] = right.sub(left)
     var multiplied: Tensor[int32] = left.mul(right)

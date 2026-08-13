@@ -265,7 +265,7 @@ def compile_pipeline(base_path: str | Path, p_path: str | Path, json_path: str |
     if not quiet:
         print("\n=========== DEBUGGER ===========")
     typed_ir = build_typed_ir(data)
-    result_validation = JSONValidator().validate(typed_ir)
+    result_validation = JSONValidator().validate_typed_ir(typed_ir)
     if not quiet:
         print("\nРезультат валидации:")
         print(f"Валидный: {result_validation['is_valid']}")
