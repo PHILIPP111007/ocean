@@ -126,6 +126,9 @@ class JSONValidator:
                             "ocean_tensor_reshape",
                             "ocean_tensor_reshape_2d",
                             "ocean_tensor_transpose",
+                            "ocean_tensor_row",
+                            "ocean_tensor_column",
+                            "ocean_tensor_slice",
                             "ocean_tensor_sum",
                             "ocean_tensor_fill",
                             "ocean_tensor_get_2d",
@@ -5188,7 +5191,8 @@ class JSONValidator:
             return method_name in {
                 "get", "set", "fill", "sum", "copy", "transpose", "matmul",
                 "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
-                "mul_scalar", "div_scalar", "reshape", "to", "to_tensor",
+                "mul_scalar", "div_scalar", "reshape", "row", "column", "slice",
+                "to", "to_tensor",
                 "shape", "ndim", "size", "device", "release",
             }
 

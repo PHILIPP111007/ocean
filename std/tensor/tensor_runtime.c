@@ -1116,6 +1116,119 @@ ocean_tensor_handle_t ocean_tensor_transpose(ocean_tensor_handle_t tensor) {
     return result;
 }
 
+static ocean_tensor_handle_t ocean_tensor_restore_device(
+    const ocean_tensor_handle_t source,
+    ocean_tensor_handle_t cpu_result
+) {
+    if (source->device == OCEAN_TENSOR_CPU) return cpu_result;
+    ocean_tensor_handle_t result = ocean_tensor_to(cpu_result, "gpu");
+    ocean_tensor_release(cpu_result);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_tensor_row(ocean_tensor_handle_t tensor, int row) {
+    if (!tensor || tensor->ndim != 2) {
+        ocean_tensor_fail("Tensor row() currently expects a 2D Tensor");
+    }
+    if (row < 0 || (size_t)row >= tensor->shape[0]) {
+        ocean_tensor_fail("Tensor row index out of bounds");
+    }
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor : ocean_tensor_to(tensor, "cpu");
+    size_t shape[1] = {tensor->shape[1]};
+    ocean_tensor_handle_t cpu_result = ocean_tensor_alloc_zeros(
+        shape, 1, tensor->dtype, OCEAN_TENSOR_CPU
+    );
+    for (size_t column = 0; column < shape[0]; ++column) {
+        size_t source_index = (size_t)row * cpu->strides[0]
+            + column * cpu->strides[1];
+        memcpy(
+            (unsigned char *)cpu_result->cpu_data + column * tensor->item_size,
+            (unsigned char *)cpu->cpu_data + source_index * tensor->item_size,
+            tensor->item_size
+        );
+    }
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return ocean_tensor_restore_device(tensor, cpu_result);
+}
+
+ocean_tensor_handle_t ocean_tensor_column(ocean_tensor_handle_t tensor, int column) {
+    if (!tensor || tensor->ndim != 2) {
+        ocean_tensor_fail("Tensor column() currently expects a 2D Tensor");
+    }
+    if (column < 0 || (size_t)column >= tensor->shape[1]) {
+        ocean_tensor_fail("Tensor column index out of bounds");
+    }
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor : ocean_tensor_to(tensor, "cpu");
+    size_t shape[1] = {tensor->shape[0]};
+    ocean_tensor_handle_t cpu_result = ocean_tensor_alloc_zeros(
+        shape, 1, tensor->dtype, OCEAN_TENSOR_CPU
+    );
+    for (size_t row = 0; row < shape[0]; ++row) {
+        size_t source_index = row * cpu->strides[0]
+            + (size_t)column * cpu->strides[1];
+        memcpy(
+            (unsigned char *)cpu_result->cpu_data + row * tensor->item_size,
+            (unsigned char *)cpu->cpu_data + source_index * tensor->item_size,
+            tensor->item_size
+        );
+    }
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return ocean_tensor_restore_device(tensor, cpu_result);
+}
+
+ocean_tensor_handle_t ocean_tensor_slice(
+    ocean_tensor_handle_t tensor,
+    int axis,
+    int start,
+    int stop,
+    int step
+) {
+    if (!tensor) ocean_tensor_fail("Tensor slice() received a null Tensor");
+    if (axis < 0 || (size_t)axis >= tensor->ndim) {
+        ocean_tensor_fail("Tensor slice axis out of bounds");
+    }
+    if (start < 0 || stop < 0 || step <= 0 || start > stop
+        || (size_t)stop > tensor->shape[axis]) {
+        ocean_tensor_fail("Tensor slice bounds are invalid");
+    }
+
+    size_t *shape = (size_t *)malloc(tensor->ndim * sizeof(size_t));
+    if (!shape) ocean_tensor_fail("out of memory allocating Tensor slice shape");
+    memcpy(shape, tensor->shape, tensor->ndim * sizeof(size_t));
+    shape[axis] = start == stop
+        ? 0 : ((size_t)(stop - start) + (size_t)step - 1) / (size_t)step;
+
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor : ocean_tensor_to(tensor, "cpu");
+    ocean_tensor_handle_t cpu_result = ocean_tensor_alloc_zeros(
+        shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_CPU
+    );
+    for (size_t linear = 0; linear < cpu_result->size; ++linear) {
+        size_t remaining = linear;
+        size_t source_offset = 0;
+        for (size_t current_axis = tensor->ndim; current_axis-- > 0;) {
+            size_t coordinate = cpu_result->shape[current_axis]
+                ? remaining % cpu_result->shape[current_axis] : 0;
+            remaining = cpu_result->shape[current_axis]
+                ? remaining / cpu_result->shape[current_axis] : 0;
+            if (current_axis == (size_t)axis) {
+                coordinate = (size_t)start + coordinate * (size_t)step;
+            }
+            source_offset += coordinate * cpu->strides[current_axis];
+        }
+        memcpy(
+            (unsigned char *)cpu_result->cpu_data + linear * tensor->item_size,
+            (unsigned char *)cpu->cpu_data + source_offset * tensor->item_size,
+            tensor->item_size
+        );
+    }
+    free(shape);
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return ocean_tensor_restore_device(tensor, cpu_result);
+}
+
 double ocean_tensor_sum(ocean_tensor_handle_t tensor) {
     if (!tensor) ocean_tensor_fail("Tensor sum on null handle");
     ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU

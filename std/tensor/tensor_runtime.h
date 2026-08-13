@@ -47,6 +47,15 @@ ocean_tensor_handle_t ocean_tensor_reshape_2d(
     int cols
 );
 ocean_tensor_handle_t ocean_tensor_transpose(ocean_tensor_handle_t tensor);
+ocean_tensor_handle_t ocean_tensor_row(ocean_tensor_handle_t tensor, int row);
+ocean_tensor_handle_t ocean_tensor_column(ocean_tensor_handle_t tensor, int column);
+ocean_tensor_handle_t ocean_tensor_slice(
+    ocean_tensor_handle_t tensor,
+    int axis,
+    int start,
+    int stop,
+    int step
+);
 double ocean_tensor_sum(ocean_tensor_handle_t tensor);
 void ocean_tensor_fill(ocean_tensor_handle_t tensor, double value);
 double ocean_tensor_get_2d(ocean_tensor_handle_t tensor, int row, int col);

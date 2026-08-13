@@ -56,6 +56,9 @@ class Tensor:
     def set(self, row: int, col: int, value: float64) -> None
     def reshape(self, rows: int, cols: int) -> Tensor[T]
     def transpose(self) -> Tensor[T]
+    def row(self, row: int) -> Tensor[T]
+    def column(self, column: int) -> Tensor[T]
+    def slice(self, axis: int, start: int, stop: int, step: int) -> Tensor[T]
     def sum(self) -> float64
     def fill(self, value: float64) -> None
     def copy(self) -> Tensor[T]
@@ -167,8 +170,10 @@ var total: float64 = flattened.sum()
 `add`, `sub`, `mul`, and `div` support trailing-axis broadcasting on CPU. GPU `float32` and
 `int32` tensors use OpenCL kernels for equal-shape elementwise operations; broadcasting and other
 numeric dtypes use the CPU implementation and are transferred back to the original device.
-`fill` updates the existing tensor in place. `reshape` and `transpose` currently return independent
-contiguous storage, so they do not share an ownership link with the source tensor.
+`fill` updates the existing tensor in place. `reshape`, `transpose`, `row`, `column`, and `slice`
+currently return independent contiguous storage, so they do not share an ownership link with the
+source tensor. `row` and `column` currently require a 2D tensor. `slice` uses a positive step and
+requires `0 <= start <= stop <= shape[axis]`.
 
 The OpenCL runtime caches its context, queue, program, and kernels for the process and releases
 them through an exit handler. Individual GPU buffers are released with their owning `Tensor`

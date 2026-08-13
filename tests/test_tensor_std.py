@@ -210,3 +210,57 @@ def main() -> int:
     )
 
     assert result.stdout.splitlines() == ["6.000000"]
+
+
+def test_standard_tensor_row_column_and_slice_operations(tmp_path):
+    source = tmp_path / "tensor_views.oc"
+    source.write_text(
+        """
+import <std/tensor/tensor.oc>
+
+def main() -> int:
+    var matrix: Tensor[float32] = Tensor.from_list([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], "cpu")
+    var row: Tensor[float32] = matrix.row(1)
+    var column: Tensor[float32] = matrix.column(1)
+    var sliced: Tensor[float32] = matrix.slice(1, 1, 3, 1)
+    print(row.ndim())
+    print(row.shape(0))
+    print(row.sum())
+    print(column.shape(0))
+    print(column.sum())
+    print(sliced.shape(0))
+    print(sliced.shape(1))
+    print(sliced.sum())
+    return 0
+""",
+        encoding="utf-8",
+    )
+    json_path = tmp_path / "tensor_views.json"
+    c_path = tmp_path / "tensor_views.generated.c"
+    binary_path = tmp_path / "tensor_views"
+
+    compile_pipeline(
+        str(Path(__file__).resolve().parents[1]),
+        source,
+        json_path,
+        c_path,
+        quiet=True,
+    )
+    compile_c(c_path, binary_path)
+    result = subprocess.run(
+        [str(binary_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "1",
+        "3",
+        "15.000000",
+        "2",
+        "7.000000",
+        "2",
+        "2",
+        "16.000000",
+    ]

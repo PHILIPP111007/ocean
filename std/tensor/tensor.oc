@@ -92,6 +92,21 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+    def row(self, row: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_row(self.handle, row)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def column(self, column: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_column(self.handle, column)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def slice(self, axis: int, start: int, stop: int, step: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_slice(self.handle, axis, start, stop, step)
+        var value: Tensor = Tensor(handle)
+        return value
+
     def sum(self) -> float64:
         return ocean_tensor_sum(self.handle)
 

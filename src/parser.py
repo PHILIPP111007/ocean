@@ -5226,7 +5226,7 @@ class Parser:
             if method_name in {
                 "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
                 "mul_scalar", "div_scalar", "fill", "sum", "copy",
-                "transpose", "reshape", "matmul", "to", "to_tensor",
+                "transpose", "row", "column", "slice", "reshape", "matmul", "to", "to_tensor",
                 "shape", "ndim", "size", "device", "get", "set", "release",
             }:
                 method_found = True
