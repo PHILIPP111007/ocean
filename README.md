@@ -117,7 +117,7 @@ The public facade owns an opaque runtime handle. Ocean code does not access `cl_
 contexts, queues, or backend-specific pointers directly. `Tensor.from_list(...)` is the public
 constructor for literal data; native compiler tensors are not part of this API. See
 [std/tensor/README.md](std/tensor/README.md) and
-[std/gpu/opencl.md](std/gpu/opencl.md) for the API and backend design.
+[std/tensor/OpenCL.md](std/tensor/OpenCL.md) for the API and backend design.
 
 ## Imports and the standard library
 
@@ -149,7 +149,7 @@ Nested loops must be perfectly nested when using `collapse(n)`. Supported clause
 OpenMP pragma; it can also be supplied explicitly:
 
 ```bash
-python main.py examples/matmul.oc --cflag=-fopenmp --run
+python main.py run examples/matmul.oc --cflag=-fopenmp --run
 ```
 
 The current parallel-loop subset requires constant non-zero integer steps and `range(...)` loops.

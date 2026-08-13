@@ -22,7 +22,7 @@ handle.
 See:
 
 - [Tensor API](tensor/README.md)
-- [OpenCL backend](gpu/opencl.md)
+- [OpenCL backend](tensor/OpenCL.md)
 
 ## Imports
 

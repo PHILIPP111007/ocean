@@ -62,6 +62,46 @@ def main() -> int:
     ]
 
 
+def test_standard_tensor_from_list_accepts_nested_list_variables(tmp_path):
+    source = tmp_path / "tensor_dynamic_list.oc"
+    source.write_text(
+        """
+import <std/tensor/tensor.oc>
+
+def main() -> int:
+    var first: list[float32] = [1.0, 2.0]
+    var second: list[float32] = [3.0, 4.0]
+    var rows: list[list[float32]] = [first, second]
+    var value: Tensor[float32] = Tensor.from_list(rows, "cpu")
+    print(value.ndim())
+    print(value.shape(1))
+    print(value[1, 0])
+    return 0
+""",
+        encoding="utf-8",
+    )
+    json_path = tmp_path / "tensor_dynamic_list.json"
+    c_path = tmp_path / "tensor_dynamic_list.generated.c"
+    binary_path = tmp_path / "tensor_dynamic_list"
+
+    compile_pipeline(
+        str(Path(__file__).resolve().parents[1]),
+        source,
+        json_path,
+        c_path,
+        quiet=True,
+    )
+    compile_c(c_path, binary_path)
+    result = subprocess.run(
+        [str(binary_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == ["2", "2", "3.000000"]
+
+
 def test_standard_tensor_operations_and_metadata(tmp_path):
     source = tmp_path / "tensor_operations.oc"
     source.write_text(

@@ -4,7 +4,7 @@ The first GPU backend uses the existing OpenCL design. The concrete runtime is
 `std/tensor/tensor_runtime.c`; the compiler links it automatically when the
 generated C includes `std/tensor/tensor_runtime.h`.
 
-- `matmul_gpu.cl` contains the tiled matmul design: each 8x8 work-group
+- `tensor_runtime.c` contains the tiled matmul design: each 8x8 work-group
   cooperatively loads input tiles into `__local` memory;
 - the host wrapper creates or reuses `cl_kernel`, uploads `A`, accepts a device
   buffer for `B`, launches a 2D NDRange, and downloads `C`;

@@ -44,5 +44,5 @@ thread-confined объекты и не является потокобезопа
 OpenMP pragma. Его также можно указать явно:
 
 ```bash
-python main.py examples/openmp.oc --cflag=-fopenmp --run
+python main.py run examples/openmp.oc --cflag=-fopenmp --run
 ```

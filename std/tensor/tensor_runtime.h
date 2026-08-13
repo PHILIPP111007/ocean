@@ -7,6 +7,9 @@
 
 typedef struct ocean_tensor_handle *ocean_tensor_handle_t;
 
+_Noreturn void ocean_tensor_fail(const char *message);
+void ocean_tensor_validate_list_length(size_t actual, size_t expected);
+
 ocean_tensor_handle_t ocean_tensor_zeros(int rows, int cols, const char *device);
 ocean_tensor_handle_t ocean_tensor_zeros_nd(
     const size_t *shape, size_t ndim, const char *dtype, const char *device

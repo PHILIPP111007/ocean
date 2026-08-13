@@ -28,17 +28,17 @@ def test_parser_does_not_assign_source_or_output_paths_by_default():
     assert args.binary_output is None
 
 
-def test_cli_preserves_legacy_default_paths():
+def test_cli_uses_package_default_paths():
     args = build_argument_parser().parse_args([])
 
     base_path, source_path, json_path, c_path, binary_path = parse_cli_paths(args)
 
-    expected_source = Path("examples/main.oc").resolve()
+    expected_source = Path("examples/tensor_std.oc").resolve()
     assert base_path == expected_source.parent
     assert source_path == expected_source
-    assert json_path == expected_source.parent / "parsed_code.json"
-    assert c_path == expected_source.parent / "generated_code.c"
-    assert binary_path == expected_source.parent / "generated_code"
+    assert json_path == expected_source.with_suffix(".parsed.json")
+    assert c_path == expected_source.with_suffix(".generated.c")
+    assert binary_path == expected_source.with_suffix("")
 
 
 def test_cli_accepts_custom_paths_flags_and_run_arguments(tmp_path):
@@ -152,3 +152,25 @@ def test_standard_runtime_is_discovered_from_paired_header(tmp_path):
     assert runtime_sources == [str(source)]
     assert include_flags == [f"-I{tmp_path}"]
     assert requires_opencl is False
+
+
+def test_compile_c_preserves_explicit_optimization_with_openmp(tmp_path, monkeypatch):
+    c_file = tmp_path / "openmp.c"
+    binary = tmp_path / "openmp"
+    c_file.write_text(
+        "#pragma omp parallel for\nint main(void) { return 0; }\n",
+        encoding="utf-8",
+    )
+    captured = {}
+
+    def fake_run(command, check):
+        captured["command"] = command
+        assert check is True
+
+    monkeypatch.setattr("main.subprocess.run", fake_run)
+    command = compile_c(c_file, binary, cflags=["-std=c11", "-O2"])
+
+    assert command == captured["command"]
+    assert "-fopenmp" in command
+    assert "-O2" in command
+    assert "-O3" not in command

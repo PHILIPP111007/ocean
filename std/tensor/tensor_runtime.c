@@ -45,9 +45,15 @@ enum {
     OCEAN_TENSOR_GPU = 1,
 };
 
-static void ocean_tensor_fail(const char *message) {
+_Noreturn void ocean_tensor_fail(const char *message) {
     fprintf(stderr, "Ocean Tensor error: %s\n", message);
     exit(EXIT_FAILURE);
+}
+
+void ocean_tensor_validate_list_length(size_t actual, size_t expected) {
+    if (actual != expected) {
+        ocean_tensor_fail("Tensor.from_list requires rectangular lists");
+    }
 }
 
 static int ocean_tensor_parse_device(const char *device) {
@@ -552,6 +558,10 @@ ocean_tensor_handle_t ocean_tensor_from_cpu_strided(
     size_t item_size = host->item_size;
     unsigned char *destination = (unsigned char *)host->cpu_data;
     const unsigned char *source = (const unsigned char *)data;
+
+    if (host->size && !data) {
+        ocean_tensor_fail("Tensor data cannot be null for a non-empty Tensor");
+    }
 
     for (size_t linear = 0; linear < host->size; ++linear) {
         size_t remaining = linear;
@@ -1358,6 +1368,7 @@ static ocean_tensor_handle_t ocean_tensor_matmul_cpu(
         size_t rows = left->shape[0];
         size_t inner = left->shape[1];
         size_t cols = right->shape[1];
+        if (rows == 0 || inner == 0 || cols == 0) return result;
 
         if (left->dtype == OCEAN_TENSOR_FLOAT32) {
             const float *restrict left_data =

@@ -25,8 +25,9 @@ Run the sample compiler pipeline with:
 python main.py build
 ```
 
-This parses `examples/main.oc`, emits package artifacts under `build/<profile>/`, then compiles the
-C output with `gcc`. Running `python main.py` with no arguments prints help and performs no build.
+This parses the package entry configured in `ocean.toml`, emits package artifacts under
+`build/<profile>/`, then compiles the C output with `gcc`. Running `python main.py` with no
+arguments prints help and performs no build.
 For generated C, use C11 and
 strict diagnostics; add `-pthread` for pthread examples. Sanitizers are recommended during runtime
 testing (`-fsanitize=address,undefined`).

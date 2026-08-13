@@ -1,4 +1,4 @@
-"""Benchmark the generated C program for examples/main.oc.
+"""Benchmark the generated C program for examples/matmul.oc.
 
 The benchmark intentionally compiles without an optimization flag.  This
 gives us a reproducible baseline for improving the generated structure before
@@ -27,6 +27,7 @@ if str(ROOT) not in sys.path:
 from src.compiler import CCodeGenerator
 from src.debug import JSONValidator
 from src.parser import Parser
+from main import compile_c
 
 
 def measure(
@@ -88,18 +89,18 @@ def run_benchmark(source_path: Path, runs: int, timeout: float, keep: bool) -> d
         binary_path = artifact_dir / "generated_code"
         c_path.write_text(generated)
 
-        # Deliberately no -O3 (or any other optimization flag).
-        compile_command = [
-            "gcc",
-            "-std=c11",
-            "-Wall",
-            "-Wextra",
-            "-Wpedantic",
-            str(c_path),
-            "-o",
-            str(binary_path),
-        ]
-        compile_seconds, _ = measure(compile_command, timeout)
+        # Deliberately no -O3 (or any other optimization flag).  Use the
+        # regular compiler facade so paired standard-library runtimes (for
+        # example std/tensor/tensor_runtime.c) are linked as well.
+        compile_started = time.perf_counter()
+        with contextlib.redirect_stdout(sys.stderr):
+            compile_command = compile_c(
+                c_path,
+                binary_path,
+                cflags=["-std=c11", "-Wall", "-Wextra", "-Wpedantic"],
+                timeout=timeout,
+            )
+        compile_seconds = time.perf_counter() - compile_started
 
         run_times = []
         output = ""
@@ -142,7 +143,7 @@ def main() -> int:
     argument_parser.add_argument(
         "--source",
         type=Path,
-        default=ROOT / "examples" / "main.oc",
+        default=ROOT / "examples" / "matmul.oc",
         help="Ocean source file to benchmark",
     )
     argument_parser.add_argument(

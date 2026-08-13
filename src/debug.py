@@ -2,7 +2,7 @@ import re
 from copy import deepcopy
 from typing import Dict, List, Optional
 
-from src.modules.constants import DATA_TYPES
+from src.modules.constants import DATA_TYPES, KNOWN_C_TYPES
 from src.parsing.type_system import TENSOR_DTYPES
 from src.modules.logger import logger
 from src.typed_ir import TypedModule
@@ -1089,7 +1089,7 @@ class JSONValidator:
         )
         if (
             var_type not in DATA_TYPES
-            and var_type not in {"ocean_tensor_handle_t"}
+            and var_type not in KNOWN_C_TYPES
             and not var_type.startswith("*")
             and not known_generic
         ):
@@ -3918,6 +3918,8 @@ class JSONValidator:
             "int", "int8", "int16", "int32", "int64",
             "uint8", "uint16", "uint32", "uint64", "size_t",
         }
+        if target_type in KNOWN_C_TYPES and value_type in integer_types:
+            return True
         if target_type in float_types and value_type in float_types | {"int"}:
             return True
         if target_type in integer_types and value_type in integer_types:

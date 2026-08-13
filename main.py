@@ -107,9 +107,7 @@ def _load_package_for_args(args: argparse.Namespace, source: Path | None = None)
 
 
 def default_output_paths(source_path: Path) -> tuple[Path, Path, Path]:
-    """Return legacy JSON, C, and executable locations for one source file."""
-    if source_path.name == "main.oc" and source_path.parent.name == "examples":
-        return source_path.parent / "parsed_code.json", source_path.parent / "generated_code.c", source_path.parent / "generated_code"
+    """Return JSON, C, and executable locations for one source file."""
     return source_path.with_suffix(".parsed.json"), source_path.with_suffix(".generated.c"), source_path.with_suffix("")
 
 
@@ -168,7 +166,13 @@ def _standard_runtime_dependencies(
     return runtime_sources, include_flags, requires_opencl
 
 
-def compile_c(c_path: Path, binary_path: Path, compiler: str = "gcc", cflags: list[str] | None = None) -> list[str]:
+def compile_c(
+    c_path: Path,
+    binary_path: Path,
+    compiler: str = "gcc",
+    cflags: list[str] | None = None,
+    timeout: float | None = None,
+) -> list[str]:
     """Compile generated C and return the exact command that was executed."""
     flags = list(cflags or DEFAULT_CFLAGS)
     generated_c = c_path.read_text(encoding="utf-8")
@@ -221,7 +225,7 @@ def compile_c(c_path: Path, binary_path: Path, compiler: str = "gcc", cflags: li
     ):
         flags.append("-fopenmp")
         
-        if "-O2" not in flags or "-O3" not in flags:
+        if not any(flag.startswith("-O") for flag in flags):
             flags.append("-O3")
 
     # ``math.h`` declares functions supplied by libm on GCC and Clang.  Keep
@@ -244,7 +248,10 @@ def compile_c(c_path: Path, binary_path: Path, compiler: str = "gcc", cflags: li
     _ensure_parent(binary_path)
     print("\n=========== C compiler ===========")
     print("$ " + " ".join(command))
-    subprocess.run(command, check=True)
+    if timeout is None:
+        subprocess.run(command, check=True)
+    else:
+        subprocess.run(command, check=True, timeout=timeout)
     return command
 
 
@@ -297,7 +304,7 @@ def parse_cli_paths(args: argparse.Namespace) -> tuple[Path, Path, Path, Path, P
     elif package:
         source_path = package.entry_path
     else:
-        source_path = Path("examples/main.oc").resolve()
+        source_path = Path("examples/tensor_std.oc").resolve()
 
     if package:
         default_json, default_c, default_binary = package.artifact_paths(args.profile)

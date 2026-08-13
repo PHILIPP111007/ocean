@@ -1,7 +1,7 @@
 [package]
 name = "ocean"
 version = "0.1.0"
-entry = "examples/main.oc"
+entry = "examples/tensor_std.oc"
 source = "examples"
 build = "build"
 tests = "tests"
