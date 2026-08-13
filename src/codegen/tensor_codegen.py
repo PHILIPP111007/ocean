@@ -93,24 +93,44 @@ class TensorCodegenMixin:
                     "Tensor[T].from_list expects a rectangular list literal and device"
                 )
             device_ast = args[1]
-            native_type = f"tensor[{dtype}]"
-            self.generate_tensor_struct(native_type)
-            native_struct = self.tensor_struct_name(native_type)
-            native_name = f"ocean_tensor_device_native_{self.temp_var_counter}"
+            shape = self._infer_tensor_shape(args[0])
+            if shape is None:
+                raise RuntimeError(
+                    "Tensor[T].from_list expects a rectangular list literal"
+                )
+            flat_items = self._flatten_tensor_items(args[0])
+            c_element_type = self.map_type_to_c(dtype)
+            data_name = f"ocean_device_tensor_data_{self.temp_var_counter}"
+            shape_name = f"ocean_device_tensor_shape_{self.temp_var_counter}"
+            strides_name = f"ocean_device_tensor_strides_{self.temp_var_counter}"
             self.temp_var_counter += 1
-            native_expr = self._generate_tensor_literal_expr(
-                native_name, native_type, args[0]
+            generate_item = generate_argument
+            if flat_items:
+                values = ", ".join(generate_item(item) for item in flat_items)
+                self.add_line(
+                    f"{c_element_type} {data_name}[{len(flat_items)}] = {{ {values} }};"
+                )
+            else:
+                data_name = "NULL"
+            shape_values = ", ".join(str(value) for value in shape)
+            strides = []
+            stride = 1
+            for dimension in reversed(shape):
+                strides.insert(0, stride)
+                stride *= dimension
+            stride_values = ", ".join(str(value) for value in strides)
+            self.add_line(f"size_t {shape_name}[{len(shape)}] = {{ {shape_values} }};")
+            self.add_line(
+                f"size_t {strides_name}[{len(shape)}] = {{ {stride_values} }};"
             )
-            self.add_line(f"{native_struct}* {native_name} = {native_expr};")
             device = generate_argument(device_ast)
             result_name = f"ocean_device_tensor_{self.temp_var_counter}"
             self.temp_var_counter += 1
             self.add_line(
                 f"Tensor* {result_name} = create_Tensor(ocean_tensor_from_cpu_strided("
-                f"(const void*){native_name}->data, {native_name}->shape, "
-                f"{native_name}->strides, {native_name}->ndim, \"{dtype}\", {device}));"
+                f"(const void*){data_name}, {shape_name}, {strides_name}, "
+                f"{len(shape)}, \"{dtype}\", {device}));"
             )
-            self.add_line(f"{native_struct}_free({native_name});")
             return result_name
 
         return None

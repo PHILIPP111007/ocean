@@ -198,6 +198,9 @@ def main() -> int:
         c_path,
         quiet=True,
     )
+    generated_c = c_path.read_text(encoding="utf-8")
+    assert "ocean_tensor_device_native" not in generated_c
+    assert "ocean_tensor_float32" not in generated_c
     compile_c(c_path, binary_path)
     result = subprocess.run(
         [str(binary_path)],

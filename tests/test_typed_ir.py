@@ -66,3 +66,20 @@ def main() -> int:
 
     assert value_type.canonical == "Tensor[int32]"
     assert value_type.memory_kind == "shared"
+
+
+def test_legacy_native_tensor_is_reported_for_migration():
+    module = build_typed_ir(
+        Parser().parse_code(
+            """
+def main() -> int:
+    var value: tensor[float32] = tensor.zeros(1, 1)
+    return 0
+"""
+        )
+    )
+
+    report = JSONValidator().validate_typed_ir(module)
+
+    assert report["is_valid"]
+    assert any("tensor[T]" in warning["message"] for warning in report["warnings"])

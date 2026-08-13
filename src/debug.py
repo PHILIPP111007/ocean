@@ -1059,6 +1059,19 @@ class JSONValidator:
         if symbol_name == "self":
             return
 
+        native_tensor_type = var_type.strip()
+        while native_tensor_type.startswith(("&mut ", "&")):
+            if native_tensor_type.startswith("&mut "):
+                native_tensor_type = native_tensor_type[5:].strip()
+            else:
+                native_tensor_type = native_tensor_type[1:].strip()
+        if native_tensor_type.startswith("tensor["):
+            self.add_warning(
+                "тип tensor[T] устаревает и будет удален; используйте публичный Tensor[T]",
+                scope_idx,
+                None,
+            )
+
         type_info = symbol_info.get("type_info") or {}
         if var_type.startswith("Tensor[") and var_type.endswith("]"):
             tensor_dtype = var_type[len("Tensor[") : -1].strip()

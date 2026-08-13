@@ -56,16 +56,6 @@ class OrchestratorMixin:
                 self._add_nested_types(py_type, all_types)
         sorted_types = sorted(all_types, key=lambda x: (x.count("["), x))
 
-        # Public device tensors use the opaque runtime handle, but
-        # ``Tensor.from_list`` still needs the compiler-native CPU tensor
-        # helper to materialize its rectangular literal before the transfer.
-        # Register those helpers before C includes/helpers are emitted.
-        for py_type in sorted_types:
-            if self.is_device_tensor_type(py_type):
-                self.generate_tensor_struct(
-                    f"tensor[{self.device_tensor_dtype(py_type)}]"
-                )
-
         # The memory runtime is emitted only when the compilation unit actually
         # contains managed/reference data.  Pure numeric/C-FFI programs should
         # lower to plain C without dragging the Ocean heap runtime into the TU.

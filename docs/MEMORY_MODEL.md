@@ -10,7 +10,9 @@
 | `dict[K,V]` | managed shared object | yes |
 | `tuple[T]` | managed shared immutable object | yes |
 | class instance | managed shared object | yes |
-| `array[T]`, `tensor[T]` | unique owned buffer | no |
+| `array[T]` | unique owned buffer | no |
+| `Tensor[T]` | managed opaque device/CPU handle | yes |
+| `tensor[T]` | deprecated compiler-native buffer | no |
 | `&T` | immutable lexical borrow | no |
 | `&mut T` | exclusive mutable lexical borrow | no |
 | raw C pointer | unsafe external ownership | no |
@@ -55,8 +57,9 @@ while the borrow is alive.
 
 ## Move
 
-`array[T]` and `tensor[T]` are unique owners. Initializing another variable from one of them, or
-passing one to a by-value parameter, transfers ownership and invalidates the original binding:
+`array[T]` and the deprecated compiler-native `tensor[T]` are unique owners. Initializing another
+variable from one of them, or passing one to a by-value parameter, transfers ownership and
+invalidates the original binding:
 
 ```python
 var source: array[float32] = [1.0]
@@ -67,9 +70,9 @@ var moved: array[float32] = source
 Use `&array[T]` or `&mut array[T]` for a non-consuming call. The same rules apply to tensors. The
 validator reports moves, use-after-move, and conflicts with active borrows before C generation.
 
-## Tensor views
+## Legacy native tensor views
 
-`tensor[T]` views are non-copying tensor handles. They keep the source tensor alive through an
+`tensor[T]` views are non-copying native handles. They keep the source tensor alive through an
 internal owner reference, while carrying their own `shape` and `strides` metadata:
 
 ```python

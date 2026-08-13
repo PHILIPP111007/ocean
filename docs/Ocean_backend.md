@@ -164,11 +164,10 @@ Current deliberate boundaries:
 - scalar/value borrows are not implemented yet;
 - full integer-overflow semantics, `Shared[T]`, `Send`/`Sync`, arenas and owned `array`/`tensor` are future work.
 
-For OS/ML, `array[T]` / `tensor[T]` are now unique-owned buffers plus `&T` / `&mut T`, so hot loops
-do not perform reference-count operations. Passing one by value transfers ownership; passing a
-borrow is non-consuming. Tensor views retain the source tensor through an internal owner link and
-reuse its data with independent shape/stride metadata. Tensor arithmetic supports trailing-axis
-broadcasting with runtime shape validation; incompatible shapes terminate with a diagnostic.
+For OS/ML, `array[T]` and the deprecated native `tensor[T]` are unique-owned buffers plus `&T` /
+`&mut T`, so hot loops do not perform reference-count operations. New numerical code should use
+the managed opaque `Tensor[T]` facade, which owns backend storage and exposes device-aware
+operations. The native tensor remains only for compatibility and low-level migration tests.
 
 ## Recommended compiler flags during development
 

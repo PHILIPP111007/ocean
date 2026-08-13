@@ -6,8 +6,8 @@
 
 Ocean is an experimental programming language and compiler for people who want the readability of
 Python with a direct path to C. Ocean lowers source code to readable C11, adds ownership and borrow
-checks before code generation, and provides contiguous `array[T]` and N-dimensional `tensor[T]`
-types for numerical workloads.
+checks before code generation, and provides a contiguous `array[T]` type plus the public
+device-aware `Tensor[T]` API for numerical workloads.
 
 ## Why Ocean?
 
@@ -43,38 +43,38 @@ def main() -> int:
 `&mut` is an exclusive mutable borrow. It does not add reference-count operations to the generated
 code and prevents conflicting access during validation.
 
-## Arrays and tensors
+## Arrays and public tensors
 
-Use `array[T]` for a one-dimensional numeric buffer and `tensor[T]` for dense N-dimensional data:
+Use `array[T]` for a one-dimensional numeric buffer. For dense numerical data, prefer the public
+device-aware `Tensor[T]` object:
 
 ```python
-var matrix: tensor[float32] = tensor.zeros(100, 100)
+import <std/tensor/tensor.oc>
+
+var matrix: Tensor[float32] = Tensor.zeros(100, 100, "cpu")
 matrix[0, 1] = 3.5
 
-var rows: int = matrix.shape[0]
-var elements: int = len(matrix)
+var rows: int = matrix.shape(0)
+var elements: size_t = matrix.size()
 matrix.fill(0.0)
-var total: float32 = matrix.sum()
-var row: tensor[float32] = matrix.row(0)
-var transposed: tensor[float32] = matrix.transpose_view()
-var result: tensor[float32] = matrix + transposed
+var total: float64 = matrix.sum()
+var transposed: Tensor[float32] = matrix.transpose()
+var result: Tensor[float32] = matrix.add(transposed)
 ```
 
-Tensor storage is contiguous and row-major. Indexing is bounds-checked by the generated runtime;
-provably safe hot loops can use a checked-once fast path. `sum`, `fill`, `copy`, `row`, `column`,
-`slice`, `transpose_view`, and 2D `matmul` are lowered to stride-aware C helpers. Views share the
-source tensor's storage and retain its owner until the view is released. Arithmetic supports
-NumPy-style trailing-axis broadcasting for compatible shapes; `transpose()` remains an explicit
-copying operation. The current benchmark multiplies two `100 × 100` matrices 1,000 times.
+Tensor storage is opaque at the public API boundary. Indexing is bounds-checked by the runtime;
+`sum`, `fill`, `copy`, `transpose`, and 2D `matmul` are exposed as methods on `Tensor[T]`.
+`transpose()` returns an independent copying tensor.
 
 ### Device-aware `Tensor[T]`
 
-The standard library adds an uppercase `Tensor[T]` object with an explicit device, while the
-lowercase `tensor[T]` remains the compiler-native CPU storage type:
+The standard library provides the public uppercase `Tensor[T]` object with an explicit device.
+The lowercase `tensor[T]` is deprecated and retained temporarily as an internal compiler/native
+compatibility type:
 
 ```text
-tensor[float32]   # dense CPU tensor
-Tensor[float32]   # device-aware standard-library facade
+Tensor[float32]   # public device-aware standard-library facade
+tensor[float32]   # deprecated native compatibility type
 ```
 
 `Tensor[T]` supports numeric element types such as `bool`, signed and unsigned integers,
@@ -102,9 +102,9 @@ var labels: Tensor[int32] = Tensor.from_list([[1, 2, 3]], "cpu")
 
 The supported devices are exactly `"cpu"` and `"gpu"`. `.to(device)` is non-mutating: it returns
 an owned tensor on the requested device and leaves the source tensor valid. `Tensor` also provides
-`zeros`, `from_tensor`, `copy`, `matmul`, `add`, `sub`, `mul`, `div`, scalar arithmetic,
-`reshape`, `transpose`, `sum`, `fill`, `shape`, `ndim`, `size`, `device`, `to_tensor`, and
-`release`.
+`zeros`, `from_list`, `copy`, `matmul`, `add`, `sub`, `mul`, `div`, scalar arithmetic,
+`reshape`, `transpose`, `sum`, `fill`, `shape`, `ndim`, `size`, `device`, and `release`.
+`from_tensor` and `to_tensor` remain only as deprecated migration bridges.
 
 `Tensor.matmul` requires compatible 2D shapes and matching devices. CPU matmul is dtype-generic.
 The GPU path currently has OpenCL kernels for `float32` and `int32`; other numeric dtypes use a
@@ -207,7 +207,8 @@ backend is available.
 | `int`, `float`, `bool` | plain value |
 | `list[T]`, `dict[K,V]`, tuples, classes | non-atomic reference counting |
 | `str` | owned C string with copied aliases |
-| `array[T]`, `tensor[T]` | unique-owned buffer |
+| `array[T]` | unique-owned buffer |
+| `tensor[T]` | deprecated compiler-native unique-owned buffer |
 | `Tensor[T]` | ARC-managed facade over CPU or GPU tensor storage |
 | `&T` / `&mut T` | lexical immutable / exclusive borrow |
 | raw pointers and direct C calls | explicit `unsafe:` boundary |

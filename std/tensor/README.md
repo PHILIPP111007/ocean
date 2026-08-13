@@ -2,8 +2,9 @@
 
 ## Purpose
 
-`Tensor` is the public, device-aware tensor object. The lower-case
-`tensor[T]` primitive is retained only as an internal/native ABI type:
+`Tensor` is the only public, device-aware tensor object. The lower-case
+`tensor[T]` primitive is deprecated and retained temporarily only as an
+internal/native ABI compatibility type:
 
 ```text
 Tensor[float32]        # public device-aware tensor
@@ -36,12 +37,12 @@ class Tensor:
     @staticmethod
     def zeros(*shape: int, device: str) -> Tensor[T]
     @staticmethod
-    def from_tensor(source: &tensor[T], device: str) -> Tensor[T]
+    def from_tensor(source: &tensor[T], device: str) -> Tensor[T]  # deprecated bridge
     @staticmethod
     def from_list(source: list, device: str) -> Tensor[T]
 
     def to(self, device: str) -> Tensor[T]
-    def to_tensor(self) -> pointer
+    def to_tensor(self) -> pointer  # deprecated bridge
     def matmul(self, other: &Tensor[T]) -> Tensor[T]
     def add(self, other: &Tensor[T]) -> Tensor[T]
     def sub(self, other: &Tensor[T]) -> Tensor[T]
@@ -99,17 +100,18 @@ model:
 The original tensor remains valid after a transfer. A future `to_inplace()` may
 be added, but it must be explicit because it changes the owned backend storage.
 
-## Interoperability with tensor[T]
+## Deprecated interoperability with tensor[T]
 
-The compiler-native tensor[T] remains the private CPU storage type. The standard
-facade provides explicit compatibility conversions:
+The compiler-native `tensor[T]` remains only as a migration compatibility type.
+The standard facade provides explicit conversions while this type is being
+removed:
 
 var cpu: tensor[int32] = [[1, 2], [3, 4]]
 var device_tensor: Tensor[int32] = Tensor.from_tensor(cpu, "cpu")
 var gpu_tensor: Tensor[int32] = device_tensor.to("gpu")
 var restored: tensor[int32] = gpu_tensor.to_tensor()
 
-from_list() is the preferred public constructor and preserves rectangular
+from_list() is the only preferred public constructor and preserves rectangular
 literal shape and numeric `T`. `from_tensor()` copies a native source into
 backend-owned storage for any rank and numeric `T`, preserving tensor views
 through their shape and strides.

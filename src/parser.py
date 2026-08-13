@@ -2066,7 +2066,7 @@ class Parser:
         * ``&mut T`` -- exclusive mutable lexical borrow;
         * ``*T`` -- raw pointer (unsafe boundary);
         * ``array[T]`` -- uniquely owned contiguous buffer;
-        * ``tensor[T]`` -- uniquely owned dense tensor literal metadata;
+        * ``tensor[T]`` -- deprecated compiler-native dense tensor metadata;
         * ``shared[T]`` -- explicit thread-shareable/shared wrapper;
         * ``T?`` -- nullable/optional type.
         """
