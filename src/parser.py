@@ -373,12 +373,8 @@ class Parser:
     # PARSE
     ###############################################################################################
 
-    def parse_code(self, code: str, file_path: str = "") -> list[dict]:
-        """Parse one Phils compilation unit into the legacy graph + typed metadata.
-
-        The legacy node names are retained so the Ocean C backend can consume old
-        and new parser output during the transition to a typed semantic IR.
-        """
+    def _parse_graph(self, code: str, file_path: str = "") -> list[dict]:
+        """Build the parser's private graph before typed lowering."""
 
         def _parse_processed_code(processed: str) -> list[dict]:
             processed = self._strip_triple_quoted_blocks(processed)
@@ -462,15 +458,10 @@ class Parser:
         return _parse_processed_code(processed_code)
 
     def parse_typed(self, code: str, file_path: str = ""):
-        """Parse source into the canonical ``TypedModule`` API.
+        """Parse source into the canonical ``TypedModule`` API."""
+        from src.typed_ir import _build_typed_module
 
-        ``parse_code`` remains available for parser-graph compatibility and
-        tooling. Compiler callers should use this method so the legacy graph
-        does not become their intermediate representation.
-        """
-        from src.typed_ir import build_typed_module
-
-        return build_typed_module(self.parse_code(code, file_path=file_path))
+        return _build_typed_module(self._parse_graph(code, file_path=file_path))
 
     def parse_line(
         self,
@@ -534,7 +525,7 @@ class Parser:
             return current_index + 1
 
         if self._pending_openmp_pragma is not None:
-            # Blank lines are skipped by parse_code and loop-body parsers.  Any
+            # Blank lines are skipped by _parse_graph and loop-body parsers.  Any
             # actual statement other than ``for`` makes the pragma invalid.
             if not re.match(r"^for\s+[A-Za-z_][A-Za-z0-9_]*\s+in\s+.+:\s*$", line):
                 pending = self._pending_openmp_pragma

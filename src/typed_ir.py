@@ -149,7 +149,7 @@ class TypedModule:
 
 
 class TypedIRBuilder:
-    """Lower parser dictionaries into typed scopes and effect-annotated nodes."""
+    """Lower the parser's private graph into typed scopes and nodes."""
 
     def __init__(self) -> None:
         self.type_parser = TypeParser()
@@ -384,9 +384,9 @@ class TypedIRBuilder:
         return [value for value in values if isinstance(value, str) and value]
 
 
-def build_typed_module(scopes: list[dict[str, Any]]) -> TypedModule:
+def _build_typed_module(scopes: list[dict[str, Any]]) -> TypedModule:
     """Build the typed module from the parser's internal graph."""
     return TypedIRBuilder().build(scopes)
 
 
-__all__ = ["IRType", "TypedNode", "TypedScope", "TypedModule", "TypedIRBuilder", "build_typed_module"]
+__all__ = ["IRType", "TypedNode", "TypedScope", "TypedModule"]

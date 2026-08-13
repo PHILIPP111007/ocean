@@ -1,7 +1,7 @@
 # Graph Report - phils_language  (2026-08-13)
 
 ## Corpus Check
-- 79 files · ~94,934 words
+- 79 files · ~94,914 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `443c8226`
+- Built from commit: `d40f270e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -229,7 +229,7 @@ Nodes (24): 10. C interop, 11. Parser, 13. `&x` vs borrow, 14. Struct, 16. Strin
 
 ### Community 29 - "TypedModule"
 Cohesion: 0.18
-Nodes (7): build_typed_module(), Typed intermediate representation for the Ocean compiler. The parser's…, Typed compilation unit with an explicit compatibility projection. Compiler…, Find a typed scope by its parser level., Iterate semantic nodes in source/scope order., Build the typed module from the parser's internal graph., TypedModule
+Nodes (7): build_typed_module(), Typed intermediate representation for the Ocean compiler. The parser's…, Typed compilation unit exchanged by compiler passes., Find a typed scope by its parser level., Iterate semantic nodes in source/scope order., Build the typed module from the parser's internal graph., TypedModule
 
 ### Community 30 - "._validate_scopes"
 Cohesion: 0.20

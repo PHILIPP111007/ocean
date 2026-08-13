@@ -6,10 +6,6 @@ from src.debug import Validator
 from src.parser import Parser
 
 
-def _parse(source: str):
-    return Parser().parse_code(source)
-
-
 def _typed(source: str):
     return Parser().parse_typed(source)
 
@@ -24,16 +20,16 @@ def main() -> int:
 
     return 0
 """
-    data = _parse(source)
-    loop = data[1]["graph"][1]
+    typed_ir = _typed(source)
+    loop = typed_ir.scopes[1].nodes[1]
 
     assert loop["openmp"]["directive"] == "parallel for"
     assert loop["openmp"]["clauses"] == [{"name": "schedule", "arguments": "static"}]
 
-    report = Validator().validate(_typed(source))
+    report = Validator().validate(typed_ir)
     assert report["errors"] == []
 
-    generated = CCodeGenerator().generate_from_typed_ir(_typed(source))
+    generated = CCodeGenerator().generate_from_typed_ir(typed_ir)
     assert "#pragma omp parallel for schedule(static)" in generated
 
 
