@@ -184,3 +184,5 @@ code.
 
 Kernel objects are created lazily on first use and cached by operation and dtype. A program using
 only CPU tensors does not initialize OpenCL, and a GPU program does not create unused kernels.
+Device operations use an in-order queue with command events; host reads wait for their own read
+event, while device-to-device copies and kernels are flushed without a global queue barrier.

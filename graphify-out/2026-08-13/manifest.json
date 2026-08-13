@@ -375,8 +375,8 @@
     "semantic_hash": ""
   },
   "std/tensor/tensor_runtime.c": {
-    "mtime": 1786643000.622826,
-    "ast_hash": "70eefca65e871dc130fcbee2be2a59c7",
+    "mtime": 1786643216.669646,
+    "ast_hash": "6b8941f292c0e0a78e5c888fca560d92",
     "semantic_hash": ""
   },
   "std/tensor/tensor_runtime.h": {
@@ -395,13 +395,13 @@
     "semantic_hash": ""
   },
   "std/tensor/README.md": {
-    "mtime": 1786643042.707376,
-    "ast_hash": "c917420fc84391892772a87bcc7a3127",
+    "mtime": 1786643240.7219594,
+    "ast_hash": "85389f0c376fb3e8c80d7be90d4eff52",
     "semantic_hash": ""
   },
   "std/tensor/OpenCL.md": {
-    "mtime": 1786643042.935379,
-    "ast_hash": "6f6d68ce55959c68dd5967bc509c2811",
+    "mtime": 1786643240.4819562,
+    "ast_hash": "18c1bbb094dd4cfbadf999de82819e25",
     "semantic_hash": ""
   },
   "src/diagnostics.py": {

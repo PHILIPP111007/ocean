@@ -425,6 +425,20 @@ static void ocean_tensor_opencl_check(cl_int status, const char *operation) {
     }
 }
 
+static void ocean_tensor_opencl_wait_event(
+    cl_event event,
+    const char *operation
+) {
+    if (!event) return;
+    ocean_tensor_opencl_check(clWaitForEvents(1, &event), operation);
+    ocean_tensor_opencl_check(clReleaseEvent(event), "clReleaseEvent");
+}
+
+static void ocean_tensor_opencl_release_event(cl_event event) {
+    if (!event) return;
+    ocean_tensor_opencl_check(clReleaseEvent(event), "clReleaseEvent");
+}
+
 static void ocean_tensor_opencl_init(void) {
     if (ocean_tensor_opencl_initialized) return;
     ocean_tensor_opencl_initialized = 1;
@@ -548,13 +562,15 @@ static void ocean_tensor_gpu_write(
 ) {
     size_t bytes = ocean_tensor_bytes(tensor);
     if (!bytes) return;
+    cl_event event = NULL;
     ocean_tensor_opencl_check(
         clEnqueueWriteBuffer(
-            ocean_tensor_opencl.queue, tensor->gpu_data, CL_TRUE,
-            0, bytes, data, 0, NULL, NULL
+            ocean_tensor_opencl.queue, tensor->gpu_data, CL_FALSE,
+            0, bytes, data, 0, NULL, &event
         ),
         "clEnqueueWriteBuffer"
     );
+    ocean_tensor_opencl_wait_event(event, "clWaitForEvents(write)");
 }
 
 static void ocean_tensor_gpu_zero(ocean_tensor_handle_t tensor) {
@@ -572,13 +588,15 @@ static void ocean_tensor_gpu_read(
 ) {
     size_t bytes = ocean_tensor_bytes(tensor);
     if (!bytes) return;
+    cl_event event = NULL;
     ocean_tensor_opencl_check(
         clEnqueueReadBuffer(
-            ocean_tensor_opencl.queue, tensor->gpu_data, CL_TRUE,
-            0, bytes, data, 0, NULL, NULL
+            ocean_tensor_opencl.queue, tensor->gpu_data, CL_FALSE,
+            0, bytes, data, 0, NULL, &event
         ),
         "clEnqueueReadBuffer"
     );
+    ocean_tensor_opencl_wait_event(event, "clWaitForEvents(read)");
 }
 #endif
 
@@ -630,16 +648,19 @@ static void ocean_tensor_opencl_copy(
     const ocean_tensor_handle_t source
 ) {
     size_t bytes = ocean_tensor_bytes(source);
+    if (!bytes) return;
+    cl_event event = NULL;
     ocean_tensor_opencl_check(
         clEnqueueCopyBuffer(
             ocean_tensor_opencl.queue, source->gpu_data, destination->gpu_data,
-            0, 0, bytes, 0, NULL, NULL
+            0, 0, bytes, 0, NULL, &event
         ),
         "clEnqueueCopyBuffer"
     );
     ocean_tensor_opencl_check(
-        clFinish(ocean_tensor_opencl.queue), "clFinish"
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
     );
+    ocean_tensor_opencl_release_event(event);
 }
 
 static void ocean_tensor_opencl_release(ocean_tensor_handle_t tensor) {
@@ -1128,16 +1149,18 @@ static void ocean_tensor_opencl_binary(
         "clSetKernelArg"
     );
     size_t global_size = left->size ? left->size : 1;
+    cl_event event = NULL;
     ocean_tensor_opencl_check(
         clEnqueueNDRangeKernel(
             ocean_tensor_opencl.queue, kernel, 1, NULL,
-            &global_size, NULL, 0, NULL, NULL
+            &global_size, NULL, 0, NULL, &event
         ),
         "clEnqueueNDRangeKernel"
     );
     ocean_tensor_opencl_check(
-        clFinish(ocean_tensor_opencl.queue), "clFinish"
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
     );
+    ocean_tensor_opencl_release_event(event);
 }
 
 static void ocean_tensor_opencl_scalar(
@@ -1179,16 +1202,18 @@ static void ocean_tensor_opencl_scalar(
         "clSetKernelArg"
     );
     size_t global_size = tensor->size ? tensor->size : 1;
+    cl_event event = NULL;
     ocean_tensor_opencl_check(
         clEnqueueNDRangeKernel(
             ocean_tensor_opencl.queue, kernel, 1, NULL,
-            &global_size, NULL, 0, NULL, NULL
+            &global_size, NULL, 0, NULL, &event
         ),
         "clEnqueueNDRangeKernel"
     );
     ocean_tensor_opencl_check(
-        clFinish(ocean_tensor_opencl.queue), "clFinish"
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
     );
+    ocean_tensor_opencl_release_event(event);
 }
 #endif
 
@@ -1795,10 +1820,11 @@ static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
         ((size_t)result_cols + tile_size - 1u) / tile_size * tile_size,
     };
     size_t local_size[2] = {tile_size, tile_size};
+    cl_event event = NULL;
     ocean_tensor_opencl_check(
         clEnqueueNDRangeKernel(
             ocean_tensor_opencl.queue, kernel, 2, NULL,
-            global_size, local_size, 0, NULL, NULL
+            global_size, local_size, 0, NULL, &event
         ),
         "clEnqueueNDRangeKernel"
     );
@@ -1807,6 +1833,7 @@ static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
     ocean_tensor_opencl_check(
         clFlush(ocean_tensor_opencl.queue), "clFlush"
     );
+    ocean_tensor_opencl_release_event(event);
     return result;
 #else
     (void)left;

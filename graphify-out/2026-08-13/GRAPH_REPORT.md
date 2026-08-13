@@ -1,16 +1,16 @@
 # Graph Report - phils_language  (2026-08-13)
 
 ## Corpus Check
-- 81 files · ~96,883 words
+- 81 files · ~97,007 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1377 nodes · 2854 edges · 77 communities (65 shown, 12 thin omitted)
+- 1379 nodes · 2863 edges · 82 communities (70 shown, 12 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 101 edges (avg confidence: 0.67)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e8ac2e6d`
+- Built from commit: `5ee14778`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -31,7 +31,7 @@
 - .calculate_indent_level
 - main.py
 - ArrayCodegenMixin
-- ._parse_line_impl
+- .extract_dependencies_from_ast
 - ListCodegenMixin
 - IndexingMixin
 - IoMixin
@@ -44,7 +44,7 @@
 - .parse_type_annotation
 - CoreMixin
 - Handoff.md
-- TypedModule
+- TypedScope
 - ._validate_scopes
 - .check_undefined_methods
 - .validate_openmp_loop
@@ -69,32 +69,37 @@
 - 12. Новый parser v0.2
 - 15. Classes
 - Handoff — Phils Language / Ocean backend
-- .validate_static_method_call
+- ._parse_line_impl
 - test_typed_ir.py
 - CCodeGenerator
 - ocean-lang
 - RuntimeError
-- TransformerLanguageModel
+- benchmark_main.py
 - parser.py
 - class_model.py
 - ClassRegistry
 - test_debug_validator.py
 - ClassModel
-- TypedExpression
+- base.py
 - .generate_all_methods
 - IRType
 - ExpressionsMixin
 - DictCodegenMixin
-- .resolved_methods
+- TypedModule
 - ImportsMixin
+- test_for_loop.py
 - TypedNode
+- test_oop.py
 - TypeSpec
+- test_array_tensor.py
+- test_while_loop.py
+- test_c_code.py
 
 ## God Nodes (most connected - your core abstractions)
 1. `Validator` - 149 edges
 2. `Parser` - 137 edges
 3. `run()` - 60 edges
-4. `ocean_tensor_fail()` - 58 edges
+4. `ocean_tensor_fail()` - 59 edges
 5. `CCodeGenerator` - 38 edges
 6. `OwnershipMixin` - 29 edges
 7. `compile_c()` - 26 edges
@@ -117,23 +122,23 @@
 ## Import Cycles
 - None detected.
 
-## Communities (77 total, 12 thin omitted)
+## Communities (82 total, 12 thin omitted)
 
 ### Community 0 - "run"
-Cohesion: 0.06
-Nodes (43): Compatibility façade for the Phils Ocean C backend v0.2. Existing callers may…, run(), generate(), test_array_lowering_and_index_mutation(), test_c_code_math(), test_c_code_pthread(), test_del(), test_dict() (+35 more)
+Cohesion: 0.15
+Nodes (19): run(), test_dict(), test_dict_get(), test_input_1(), test_input_2(), test_list_add_number_to_list_item(), test_list_append(), test_list_get_list_int() (+11 more)
 
 ### Community 1 - "OopMixin"
-Cohesion: 0.14
-Nodes (9): OopMixin, Build the canonical OOP metadata directly from parser output., Return expression addressing the root base subobject at offset zero., Yield (origin_class, field_name, field_type) from root to leaf., Generate an ARC-owned zero-initialized class instance., Initialize a zeroed field, retaining only borrowed incoming references., Initialize fields. Object memory is already zeroed by calloc., Generate constructors from the canonical class models. (+1 more)
+Cohesion: 0.16
+Nodes (8): OopMixin, Return expression addressing the root base subobject at offset zero., Yield (origin_class, field_name, field_type) from root to leaf., Generate an ARC-owned zero-initialized class instance., Initialize a zeroed field, retaining only borrowed incoming references., Initialize fields. Object memory is already zeroed by calloc., Generate constructors from the canonical class models., Generate an ARC-compatible class layout with safe single inheritance.
 
 ### Community 2 - "CallsMixin"
 Cohesion: 0.14
 Nodes (8): CallsMixin, Генерирует вызов функции, Compatibility lowering for legacy/static_method_call parser nodes. Older parser…, Генерирует вызов встроенной функции, Dispatch method lowering by semantic type instead of one giant branch., Генерирует присваивание результата встроенной функции, Генерирует вызов конструктора, Генерирует объявление с вызовом builtin функции
 
 ### Community 3 - ".validate_graph"
-Cohesion: 0.07
-Nodes (16): Валидирует граф операций, Находит родительский scope для заданного уровня, Валидирует удаление переменной, Валидирует унарную операцию, Валидирует составное присваивание, Валидирует объявление функции, Валидирует вызов функции с поддержкой AST аргументов, Валидирует один аргумент (может быть строкой или AST) (+8 more)
+Cohesion: 0.06
+Nodes (19): Валидирует граф операций, Находит родительский scope для заданного уровня, Валидирует удаление переменной, Валидирует унарную операцию, Валидирует составное присваивание, Валидирует объявление функции, Валидирует вызов функции с поддержкой AST аргументов, Валидирует один аргумент (может быть строкой или AST) (+11 more)
 
 ### Community 4 - "TypesMixin"
 Cohesion: 0.07
@@ -141,7 +146,7 @@ Nodes (22): Resolve an object receiver and its C expression. Besides local varia
 
 ### Community 5 - ".add_error"
 Cohesion: 0.08
-Nodes (22): Валидирует типы в узле, Валидирует типы в присваивании, Проверяет тип объявления по типизированному AST., Валидирует типы возвращаемых значений, Валидирует типы в условии while, Валидирует типы в условии if/elif, Валидирует типы в операциях, Валидирует объявление переменной (+14 more)
+Nodes (21): Валидирует типы в узле, Валидирует типы в присваивании, Проверяет тип объявления по типизированному AST., Валидирует типы возвращаемых значений, Валидирует типы в условии while, Валидирует типы в условии if/elif, Валидирует типы в операциях, Валидирует объявление переменной (+13 more)
 
 ### Community 6 - "OwnershipMixin"
 Cohesion: 0.10
@@ -152,32 +157,32 @@ Cohesion: 0.13
 Nodes (6): Добавляет атрибут в класс, Получает метод класса (ищет в родительских классах), Проверяет, является ли subclass наследником superclass, Добавляет класс в таблицу символов, Добавляет метод в класс, SymbolTable
 
 ### Community 8 - "Parser"
-Cohesion: 0.07
-Nodes (13): Parser, Remove standalone triple-quoted blocks while preserving line count., Парсит присваивание значения указателя переменной: x = *p, Парсит оператор break, Парсит оператор continue, Парсит оператор del (полное удаление), Определяет текущий scope на основе отступа, Проверяет, является ли имя именем класса (+5 more)
+Cohesion: 0.09
+Nodes (11): Parser, Remove standalone triple-quoted blocks while preserving line count., Определяет текущий scope на основе отступа, Build the parser's private graph before typed lowering., Парсит итерируемое выражение для for цикла, Parse source into the canonical ``TypedModule`` API., Проверяет, является ли имя именем класса, Извлекает содержимое внутри скобок, учитывая вложенность (+3 more)
 
 ### Community 9 - ".parse_expression_to_ast"
-Cohesion: 0.10
-Nodes (12): Парсит литерал кортежа, Парсит оператор return, Parse an expression into the transitional Phils AST., Универсальный парсер аргументов функции. Возвращает (positional_args,…, Проверяет, находится ли "=" внутри скобок (например, в словаре или списке), Парсит значение опции и определяет его тип, Парсит присваивание результата вызова функции: var x: type = func(args), Парсит условие для циклов и if (+4 more)
+Cohesion: 0.13
+Nodes (10): Парсит литерал кортежа, Parse an expression into the transitional Phils AST., Универсальный парсер аргументов функции. Возвращает (positional_args,…, Проверяет, находится ли "=" внутри скобок (например, в словаре или списке), Парсит значение опции и определяет его тип, Парсит условие для циклов и if, Парсит литерал списка: [1, 2, 3] или [[1, 2], [3, 4]], Парсит литерал словаря: {"key": "value", "num": 42} (+2 more)
 
 ### Community 10 - ".add_warning"
 Cohesion: 0.06
-Nodes (23): Проверяет дублирование переменных в local_variables, Валидирует таблицу символов scope'а, Валидирует отдельный символ, Проверяет, что функция имеет return если нужно, Проверяет циклы на корректность, Warn about locals unused across the complete nested graph., Проверяет, что все пути выполнения функции возвращают значение, Проверяет деление на ноль (+15 more)
+Nodes (21): Проверяет дублирование переменных в local_variables, Валидирует таблицу символов scope'а, Валидирует отдельный символ, Проверяет, что функция имеет return если нужно, Проверяет циклы на корректность, Warn about locals unused across the complete nested graph., Проверяет, что все пути выполнения функции возвращают значение, Проверяет деление на ноль (+13 more)
 
 ### Community 12 - "Validator"
-Cohesion: 0.15
-Nodes (13): Validate the parser's typed graph before C code generation. The validator is…, Строит историю операций с переменными С УЧЕТОМ ПОРЯДКА СТРОК, Collect variable references from expression ASTs only., Validator, test_openmp_collapse_allows_sequential_loop_after_collapsed_nest(), test_openmp_collapse_requires_enough_nested_loops(), test_openmp_collapse_requires_perfect_nesting(), test_openmp_collapse_two_nested_loops_is_emitted_and_accepted() (+5 more)
+Cohesion: 0.13
+Nodes (15): Validate the parser's typed graph before C code generation. The validator is…, Строит историю операций с переменными С УЧЕТОМ ПОРЯДКА СТРОК, Валидирует вызов статического метода, Находит символ класса в таблице символов, Collect variable references from expression ASTs only., Validator, test_openmp_collapse_allows_sequential_loop_after_collapsed_nest(), test_openmp_collapse_requires_enough_nested_loops() (+7 more)
 
 ### Community 13 - ".calculate_indent_level"
-Cohesion: 0.11
-Nodes (13): Parse an explicit unsafe region without changing runtime semantics. ``unsafe:``…, Parse a free function with fully nested type annotations., Находит конец блока с отступом, Парсит итерируемое выражение для for цикла, Парсит if-elif-else конструкцию - РАБОЧАЯ ВЕРСИЯ без бесконечного цикла, Парсит вложенные if внутри других блоков (while, for, других if), Parse one line and attach its source location to emitted nodes., Parse a value-semantic struct. Structs intentionally contain fields only in… (+5 more)
+Cohesion: 0.13
+Nodes (11): Parse an explicit unsafe region without changing runtime semantics. ``unsafe:``…, Parse a free function with fully nested type annotations., Находит конец блока с отступом, Парсит if-elif-else конструкцию - РАБОЧАЯ ВЕРСИЯ без бесконечного цикла, Parse one line and attach its source location to emitted nodes., Parse a value-semantic struct. Structs intentionally contain fields only in…, Парсит объявление класса, Parse a class method using the same typed parameter parser as functions. (+3 more)
 
 ### Community 14 - "main.py"
 Cohesion: 0.06
-Nodes (80): ArgumentParser, main(), measure(), Path, Benchmark the generated C program for examples/matmul.oc. The benchmark…, run_benchmark(), runtime_summary(), CompletedProcess (+72 more)
+Nodes (72): ArgumentParser, build_argument_parser(), cli(), _command(), compile_c(), compile_pipeline(), _compiler_settings(), default_output_paths() (+64 more)
 
-### Community 16 - "._parse_line_impl"
+### Community 16 - ".extract_dependencies_from_ast"
 Cohesion: 0.08
-Nodes (18): Парсит многомерное присваивание по индексу: A_data[0][0] = 10, Парсит присваивание срезу: my_list[1:3] = [20, 30], Парсит создание объекта с присваиванием: var x: Class = Class(args), Парсит вызов конструктора без присваивания: Class(args), Парсит присваивание по индексу с поддержкой многомерных массивов, Парсит составную операцию с индексом: my_list[0] += 5, Парсит присваивание атрибуту: obj.attr = value, Парсит присваивание через разыменование указателя: *p = value (+10 more)
+Nodes (14): Парсит многомерное присваивание по индексу: A_data[0][0] = 10, Парсит присваивание срезу: my_list[1:3] = [20, 30], Парсит создание объекта с присваиванием: var x: Class = Class(args), Парсит вызов конструктора без присваивания: Class(args), Парсит присваивание по индексу с поддержкой многомерных массивов, Парсит составную операцию с индексом: my_list[0] += 5, Парсит присваивание атрибуту: obj.attr = value, Парсит присваивание через разыменование указателя: *p = value (+6 more)
 
 ### Community 17 - "ListCodegenMixin"
 Cohesion: 0.16
@@ -204,8 +209,8 @@ Cohesion: 0.23
 Nodes (4): Enter a lexical ownership scope., Leave a lexical scope and deterministically release owned values., Generate a function with borrowed parameters and automatic cleanup., ScopeMixin
 
 ### Community 23 - ".get_symbol_info"
-Cohesion: 0.12
-Nodes (7): Валидирует объявление указателя, Проверяет соответствие типа возвращаемого значения, Определяет тип возвращаемого значения, Получает информацию о символе из текущего или родительских scope'ов, Проверяет выход за границы массивов/списков, Проверяет вызовы C-функций (начинающиеся с @), Пытается получить статическое значение из AST
+Cohesion: 0.11
+Nodes (8): Валидирует объявление указателя, Определяет тип возвращаемого значения, Получает информацию о символе из текущего или родительских scope'ов, Проверяет выход за границы массивов/списков, Проверяет операции со строками, Проверяет вызовы C-функций (начинающиеся с @), Пытается получить статическое значение из AST, Находит родительский узел (если есть)
 
 ### Community 24 - "HelpersMixin"
 Cohesion: 0.24
@@ -220,16 +225,16 @@ Cohesion: 0.12
 Nodes (11): Parse ``name: Type`` or ``name: Type = default``., Parse a typed variable declaration. Supported memory-oriented forms: *…, Parse ``var self.attr: Type [= value]`` with nested types., Parse ``self.attr [: Type] = value`` in a constructor., Извлекает информацию о контейнере из AST, Очищает значение от лишних пробелов, но для сложных выражений возвращает AST, Parse ``name: Type = default`` with nested generic/borrow types., Выводит тип из AST выражения (+3 more)
 
 ### Community 27 - "CoreMixin"
-Cohesion: 0.33
-Nodes (4): CoreMixin, Возвращает отступ для текущего уровня, Добавляет строку с правильным отступом, Добавляет пустую строку
+Cohesion: 0.22
+Nodes (5): CoreMixin, Reset all per-compilation mutable state., Возвращает отступ для текущего уровня, Добавляет строку с правильным отступом, Добавляет пустую строку
 
 ### Community 28 - "Handoff.md"
 Cohesion: 0.08
 Nodes (24): 10. C interop, 11. Parser, 13. `&x` vs borrow, 14. Struct, 16. Strings, 17. Bounds safety, 18. SIMD, 19. Demand-driven runtime (+16 more)
 
-### Community 29 - "TypedModule"
-Cohesion: 0.13
-Nodes (7): Typed view of one parser scope., Typed compilation unit exchanged by compiler passes., Return the typed, read-only lowering view consumed by the C backend., Find a typed scope by its parser level., Iterate semantic nodes in source/scope order., TypedModule, TypedScope
+### Community 29 - "TypedScope"
+Cohesion: 0.20
+Nodes (4): Typed view of one parser scope., Return the typed, read-only lowering view consumed by the C backend., Find a typed scope by its parser level., TypedScope
 
 ### Community 30 - "._validate_scopes"
 Cohesion: 0.17
@@ -240,8 +245,8 @@ Cohesion: 0.22
 Nodes (5): Проверяет, что все используемые методы определены в классе или его родителях, Проверяет, существует ли метод в классе или его иерархии наследования, Извлекает вызовы методов из AST, Проверяет, является ли метод встроенным для данного типа, Добавляет класс в реестр классов
 
 ### Community 32 - ".validate_openmp_loop"
-Cohesion: 0.13
-Nodes (7): Валидирует узел цикла, Return OpenMP clauses grouped by name, preserving duplicates., Whether a type is safe to create/use as a private scalar., Validate the deliberately conservative, race-aware OpenMP subset., Validate and return the perfectly nested loop chain., Validate structured OpenMP metadata before C code generation., Collect variable references from any expression AST variant.
+Cohesion: 0.15
+Nodes (6): Return OpenMP clauses grouped by name, preserving duplicates., Whether a type is safe to create/use as a private scalar., Validate the deliberately conservative, race-aware OpenMP subset., Validate and return the perfectly nested loop chain., Validate structured OpenMP metadata before C code generation., Collect variable references from any expression AST variant.
 
 ### Community 33 - "OrchestratorMixin"
 Cohesion: 0.19
@@ -253,7 +258,7 @@ Nodes (4): LogRecord, ColoredFormatter, Set up a custom logger with optional con
 
 ### Community 37 - "tensor_runtime.c"
 Cohesion: 0.09
-Nodes (87): cl_int, cl_kernel, ocean_tensor_backend_kind, ocean_tensor_backend_ops, ocean_tensor_dtype, ocean_tensor_handle_t, ocean_tensor_alloc(), ocean_tensor_alloc_zeros() (+79 more)
+Nodes (89): cl_int, cl_kernel, ocean_tensor_backend_kind, ocean_tensor_backend_ops, ocean_tensor_dtype, ocean_tensor_handle_t, ocean_tensor_opencl_kernel_key, ocean_tensor_alloc() (+81 more)
 
 ### Community 39 - "._parse_with_priorities"
 Cohesion: 0.10
@@ -264,8 +269,8 @@ Cohesion: 0.15
 Nodes (12): 1. `ocean_` C namespace, 2. Automatic ownership management, 3. Hybrid borrow checker v1, 4. Structured diagnostics, 5. Deterministic scope cleanup, 6. Ownership-aware containers, 7. Safer class lowering, Important safety boundary (+4 more)
 
 ### Community 41 - "ImportProcessor"
-Cohesion: 0.10
-Nodes (12): CImportProcessor, ImportProcessor, Path, Обрабатывает импорт и возвращает содержимое импортируемого файла, Обрабатывает все импорты в коде и вставляет содержимое файлов, Просто регистрирует C импорт без парсинга, Yield repository std directories from the active source context., Reset all per-compilation parser state. A Parser instance can safely be reused… (+4 more)
+Cohesion: 0.12
+Nodes (10): CImportProcessor, ImportProcessor, Path, Обрабатывает импорт и возвращает содержимое импортируемого файла, Обрабатывает все импорты в коде и вставляет содержимое файлов, Просто регистрирует C импорт без парсинга, Yield repository std directories from the active source context., Reset all per-compilation parser state. A Parser instance can safely be reused… (+2 more)
 
 ### Community 42 - "Any"
 Cohesion: 0.37
@@ -292,8 +297,8 @@ Cohesion: 0.33
 Nodes (6): 20. Тесты, Level 1 — AST / parser, Level 2 — C generation, Level 3 — compile, Level 4 — memory safety, Обязательные memory tests
 
 ### Community 48 - "Diagnostic"
-Cohesion: 0.13
-Nodes (8): Diagnostic, DiagnosticReport, Any, One compiler diagnostic with a stable machine-readable code., Return the human-readable form used by CLI errors., Return the compatibility representation used by old callers., Immutable typed report produced by validation., Return the legacy report shape plus the typed diagnostics.
+Cohesion: 0.09
+Nodes (16): Enum, Assign a stable category to legacy validation call sites., Diagnostic, DiagnosticReport, DiagnosticSeverity, Any, Structured compiler diagnostics. The compiler keeps diagnostics as typed values…, Diagnostic importance understood by compiler frontends. (+8 more)
 
 ### Community 49 - "21. Array — принятое устройство"
 Cohesion: 0.67
@@ -307,9 +312,13 @@ Nodes (3): 28. Статус array/tensor на момент handoff, Backend, Par
 Cohesion: 0.67
 Nodes (3): 30. Следующий рекомендуемый этап, Array, Tensor
 
+### Community 55 - "._parse_line_impl"
+Cohesion: 0.08
+Nodes (12): Парсит присваивание значения указателя переменной: x = *p, Парсит оператор break, Парсит оператор continue, Парсит оператор del (полное удаление), Возвращает область видимости для заданного уровня отступа, Парсит оператор return, Парсит составные операции присваивания, Parse the supported OpenMP loop directive into structured metadata. (+4 more)
+
 ### Community 56 - "test_typed_ir.py"
-Cohesion: 0.17
-Nodes (11): OwnershipEffect, Explicit ownership transition attached to a typed graph node., test_parser_typed_entrypoint_is_ready_for_compiler_callers(), test_removed_native_tensor_is_rejected(), test_typed_ir_exposes_ownership_transitions(), test_typed_ir_exposes_source_location_metadata(), test_typed_ir_exposes_typed_backend_views(), test_typed_ir_is_the_canonical_validator_and_codegen_api() (+3 more)
+Cohesion: 0.12
+Nodes (13): OwnershipEffect, Recursive typed view of one expression AST node., Explicit ownership transition attached to a typed graph node., TypedExpression, test_parser_typed_entrypoint_is_ready_for_compiler_callers(), test_removed_native_tensor_is_rejected(), test_typed_ir_exposes_ownership_transitions(), test_typed_ir_exposes_source_location_metadata() (+5 more)
 
 ### Community 57 - "CCodeGenerator"
 Cohesion: 0.33
@@ -319,29 +328,33 @@ Nodes (9): CCodeGenerator, Public C backend façade. The implementation is split
 Cohesion: 0.10
 Nodes (10): RuntimeError, Генерирует прямой вызов C-функции, Генерирует выражение из AST для конструктора с подстановкой параметров, Генерирует доступ к элементу сложного атрибута (self.data[index]), Lower attribute references in range bounds to their C form., Generate Python-compatible range direction and a per-iteration scope., Render validated structured OpenMP metadata as one C pragma., Return the validated collapse count for an OpenMP directive. (+2 more)
 
-### Community 61 - "TransformerLanguageModel"
-Cohesion: 0.16
-Nodes (12): device, main(), A small decoder-only Transformer language model implemented with PyTorch. This…, GPT-style causal language model built from PyTorch modules., Return an additive upper-triangular causal attention mask., Return next-token logits with shape ``(batch, sequence, vocab)``., Compute teacher-forced autoregressive cross-entropy., Greedily append tokens selected from the final position's logits. (+4 more)
+### Community 61 - "benchmark_main.py"
+Cohesion: 0.10
+Nodes (20): main(), measure(), Path, Benchmark the generated C program for examples/matmul.oc. The benchmark…, run_benchmark(), runtime_summary(), CompletedProcess, device (+12 more)
 
 ### Community 62 - "parser.py"
-Cohesion: 0.19
-Nodes (9): infer_literal_shape(), Split text only when not nested in (), [], {}, <> or strings., Recursive parser for Phils type expressions., Infer a rectangular shape from nested list literals. Returns ``None`` for…, split_top_level(), TypeParser, _build_typed_module(), Typed intermediate representation for the Ocean compiler. The parser's… (+1 more)
+Cohesion: 0.25
+Nodes (6): infer_literal_shape(), Split text only when not nested in (), [], {}, <> or strings., Recursive parser for Phils type expressions., Infer a rectangular shape from nested list literals. Returns ``None`` for…, split_top_level(), TypeParser
 
 ### Community 63 - "class_model.py"
-Cohesion: 0.29
-Nodes (9): build_class_registry(), _infer_field_type(), MethodModel, Any, Semantic class metadata shared by the OOP lowering passes. The parser graph is…, Infer only the structural type information needed for class layout., Build all class metadata directly from the parser graph and scopes., A class method declaration and its corresponding body scope. (+1 more)
+Cohesion: 0.23
+Nodes (11): build_class_registry(), _infer_field_type(), MethodModel, Any, Semantic class metadata shared by the OOP lowering passes. The parser graph is…, Infer only the structural type information needed for class layout., Build all class metadata directly from the parser graph and scopes., A class method declaration and its corresponding body scope. (+3 more)
 
 ### Community 64 - "ClassRegistry"
 Cohesion: 0.21
-Nodes (5): ClassRegistry, FieldModel, Canonical class metadata and lookup service for the C backend., A field declared directly by one class., Reset all per-compilation mutable state.
+Nodes (4): ClassRegistry, Canonical class metadata and lookup service for the C backend., Resolve methods without rebuilding parser-shaped dictionaries., Build the canonical OOP metadata directly from parser output.
 
 ### Community 65 - "test_debug_validator.py"
-Cohesion: 0.14
-Nodes (16): Enum, Assign a stable category to legacy validation call sites., DiagnosticSeverity, Structured compiler diagnostics. The compiler keeps diagnostics as typed values…, Diagnostic importance understood by compiler frontends., Location of a diagnostic in an Ocean source file., SourceLocation, str (+8 more)
+Cohesion: 0.33
+Nodes (8): test_validator_accepts_typed_borrow_and_generic_symbols(), test_validator_checks_container_and_index_types_from_ast(), test_validator_does_not_leak_symbols_between_functions(), test_validator_emits_typed_diagnostics_with_codes(), test_validator_reports_file_line_and_column(), test_validator_reports_real_source_line_for_type_error(), test_validator_returns_report_for_malformed_input(), validate()
 
 ### Community 66 - "ClassModel"
-Cohesion: 0.28
-Nodes (4): ClassModel, Complete semantic metadata for one Ocean class., Yield direct parents first while detecting inheritance cycles., Resolve a field through the single-inheritance chain.
+Cohesion: 0.24
+Nodes (6): ClassModel, FieldModel, A field declared directly by one class., Complete semantic metadata for one Ocean class., Yield direct parents first while detecting inheritance cycles., Resolve a field through the single-inheritance chain.
+
+### Community 67 - "base.py"
+Cohesion: 0.12
+Nodes (8): test_del(), test_functions_1(), test_functions_2(), test_global_var_declaration(), test_if_else_1(), test_dict(), test_methods(), test_variables()
 
 ### Community 68 - ".generate_all_methods"
 Cohesion: 0.25
@@ -355,17 +368,29 @@ Nodes (4): ExpressionsMixin, Генерирует C выражение из AST 
 Cohesion: 0.50
 Nodes (3): DictCodegenMixin, Generate an ARC-owned chained hash table., Генерирует объявление словаря
 
-### Community 72 - ".resolved_methods"
-Cohesion: 0.50
-Nodes (3): Resolve methods without rebuilding parser-shaped dictionaries., A method together with the class that provides its implementation., ResolvedMethod
+### Community 72 - "TypedModule"
+Cohesion: 0.18
+Nodes (7): Compatibility façade for the Phils Ocean C backend v0.2. Existing callers may…, _build_typed_module(), Typed intermediate representation for the Ocean compiler. The parser's…, Typed compilation unit exchanged by compiler passes., Iterate semantic nodes in source/scope order., Build the typed module from the parser's internal graph., TypedModule
 
 ### Community 74 - "ImportsMixin"
 Cohesion: 0.29
 Nodes (4): ImportsMixin, Генерирует #include директивы, Генерирует forward declarations функций, Собирает импорты и объявления функций из typed AST.
 
+### Community 75 - "test_for_loop.py"
+Cohesion: 0.40
+Nodes (4): test_for_loop_1(), test_for_loop_2(), test_for_loop_3(), test_for_loop_4()
+
 ### Community 76 - "TypedNode"
 Cohesion: 0.20
 Nodes (3): Structured OpenMP metadata attached to a loop, if present., Semantic metadata and read-only mapping view for one graph node., TypedNode
+
+### Community 77 - "test_oop.py"
+Cohesion: 0.40
+Nodes (4): disabled_test_oop_2(), test_oop_1(), test_oop_3(), test_oop_4()
+
+### Community 80 - "test_while_loop.py"
+Cohesion: 0.50
+Nodes (3): test_while_loop_1(), test_while_loop_2(), test_while_loop_3()
 
 ## Knowledge Gaps
 - **94 isolated node(s):** `ocean-lang`, `Project Structure & Module Organization`, `Build, Test, and Development Commands`, `Coding Style & Naming Conventions`, `Testing Guidelines` (+89 more)
@@ -375,12 +400,12 @@ Nodes (3): Structured OpenMP metadata attached to a loop, if present., Semantic 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Validator` connect `Validator` to `.validate_openmp_loop`, `test_debug_validator.py`, `.validate_graph`, `.add_error`, `.add_warning`, `test_memory_safety.py`, `main.py`, `Diagnostic`, `.get_symbol_info`, `.validate_static_method_call`, `._validate_scopes`, `test_typed_ir.py`, `TypedModule`, `parser.py`, `.check_undefined_methods`?**
-  _High betweenness centrality (0.259) - this node is a cross-community bridge._
-- **Why does `CCodeGenerator` connect `CCodeGenerator` to `run`, `OopMixin`, `CallsMixin`, `TypesMixin`, `OwnershipMixin`, `generator.py`, `Validator`, `main.py`, `ArrayCodegenMixin`, `ListCodegenMixin`, `IndexingMixin`, `IoMixin`, `StatementsMixin`, `ScopeMixin`, `HelpersMixin`, `TupleCodegenMixin`, `CoreMixin`, `OrchestratorMixin`, `TensorCodegenMixin`, `NamingMixin`, `test_memory_safety.py`, `test_typed_ir.py`, `ExpressionsMixin`, `DictCodegenMixin`, `ImportsMixin`?**
-  _High betweenness centrality (0.256) - this node is a cross-community bridge._
-- **Why does `Parser` connect `Parser` to `run`, `test_debug_validator.py`, `SymbolTable`, `._parse_with_priorities`, `ImportProcessor`, `.parse_expression_to_ast`, `test_memory_safety.py`, `Validator`, `.calculate_indent_level`, `main.py`, `._parse_line_impl`, `.parse_function_call`, `test_typed_ir.py`, `CCodeGenerator`, `.parse_type_annotation`, `parser.py`?**
-  _High betweenness centrality (0.229) - this node is a cross-community bridge._
+- **Why does `CCodeGenerator` connect `CCodeGenerator` to `run`, `OopMixin`, `CallsMixin`, `TypesMixin`, `OwnershipMixin`, `generator.py`, `Validator`, `main.py`, `ArrayCodegenMixin`, `ListCodegenMixin`, `IndexingMixin`, `IoMixin`, `StatementsMixin`, `ScopeMixin`, `HelpersMixin`, `TupleCodegenMixin`, `CoreMixin`, `OrchestratorMixin`, `TensorCodegenMixin`, `NamingMixin`, `test_memory_safety.py`, `test_typed_ir.py`, `benchmark_main.py`, `ExpressionsMixin`, `DictCodegenMixin`, `TypedModule`, `ImportsMixin`, `test_array_tensor.py`?**
+  _High betweenness centrality (0.258) - this node is a cross-community bridge._
+- **Why does `Validator` connect `Validator` to `.validate_openmp_loop`, `test_debug_validator.py`, `.validate_graph`, `.add_error`, `TypedModule`, `.add_warning`, `test_memory_safety.py`, `main.py`, `Diagnostic`, `.get_symbol_info`, `test_typed_ir.py`, `benchmark_main.py`, `._validate_scopes`, `.check_undefined_methods`?**
+  _High betweenness centrality (0.258) - this node is a cross-community bridge._
+- **Why does `Parser` connect `Parser` to `run`, `SymbolTable`, `.parse_expression_to_ast`, `Validator`, `.calculate_indent_level`, `main.py`, `.extract_dependencies_from_ast`, `.parse_function_call`, `.parse_type_annotation`, `._parse_with_priorities`, `ImportProcessor`, `test_memory_safety.py`, `._parse_line_impl`, `test_typed_ir.py`, `CCodeGenerator`, `benchmark_main.py`, `parser.py`, `test_debug_validator.py`, `base.py`, `test_array_tensor.py`?**
+  _High betweenness centrality (0.233) - this node is a cross-community bridge._
 - **Are the 5 inferred relationships involving `Validator` (e.g. with `Diagnostic` and `DiagnosticReport`) actually correct?**
   _`Validator` has 5 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 2 inferred relationships involving `Parser` (e.g. with `SymbolTable` and `TypeParser`) actually correct?**
@@ -388,4 +413,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `ocean-lang`, `Project Structure & Module Organization`, `Build, Test, and Development Commands` to the rest of the system?**
   _94 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `run` be split into smaller, more focused modules?**
-  _Cohesion score 0.06001984126984127 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.14855072463768115 - nodes in this community are weakly interconnected._

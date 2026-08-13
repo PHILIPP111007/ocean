@@ -47,8 +47,9 @@ Before production use, the wrapper must also:
 - keep bounds checks in the kernel;
 - check every OpenCL return code;
 - cache kernels by operation and dtype instead of creating one for every call;
-- use blocking transfers where host data is requested and an in-order queue
-  with `clFlush` for asynchronous matmul dispatch;
+- use nonblocking transfers with an event wait only when host data is requested;
+- submit device copies and kernels with events, then use `clFlush` without a
+  global queue `clFinish`;
 - release buffers, kernels, programs, queues, and contexts on every failure path.
 
 ## Backend selection
