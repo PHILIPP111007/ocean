@@ -375,8 +375,8 @@
     "semantic_hash": ""
   },
   "std/tensor/tensor_runtime.c": {
-    "mtime": 1786621045.0817473,
-    "ast_hash": "66dea216f54c03800512a4d4b6cc1428",
+    "mtime": 1786630113.3355415,
+    "ast_hash": "59c4f895487b57b818e7e78f43ccaf2d",
     "semantic_hash": ""
   },
   "std/tensor/tensor_runtime.h": {
@@ -400,8 +400,8 @@
     "semantic_hash": ""
   },
   "std/tensor/OpenCL.md": {
-    "mtime": 1786575434.512116,
-    "ast_hash": "3e9630085fe78f3deedbac0829f2a7a9",
+    "mtime": 1786630036.63856,
+    "ast_hash": "287a18c39124d6e20f88bef295827006",
     "semantic_hash": ""
   }
 }

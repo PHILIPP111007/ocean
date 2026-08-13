@@ -1,16 +1,16 @@
 # Graph Report - phils_language  (2026-08-13)
 
 ## Corpus Check
-- 79 files · ~93,151 words
+- 79 files · ~93,415 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1287 nodes · 2654 edges · 80 communities (66 shown, 14 thin omitted)
+- 1287 nodes · 2654 edges · 79 communities (66 shown, 13 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 92 edges (avg confidence: 0.68)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `99e00921`
+- Built from commit: `43c7fc08`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -20,14 +20,14 @@
 - RuntimeError
 - .validate_scope
 - TypesMixin
-- .validate_graph
+- .add_error
 - OwnershipMixin
 - SymbolTable
 - Parser
 - .parse_expression_to_ast
 - .check_undefined_methods
 - generator.py
-- .add_error
+- .get_type_from_ast
 - .calculate_indent_level
 - main.py
 - ArrayCodegenMixin
@@ -46,7 +46,6 @@
 - Handoff.md
 - build_typed_ir
 - .get_symbol_info
-- .validate_static_method_call
 - .generate_builtin_function_call
 - OrchestratorMixin
 - ColoredFormatter
@@ -120,7 +119,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (80 total, 14 thin omitted)
+## Communities (79 total, 13 thin omitted)
 
 ### Community 0 - "run"
 Cohesion: 0.06
@@ -136,15 +135,15 @@ Nodes (10): RuntimeError, CallsMixin, Compatibility lowering for legacy/static_m
 
 ### Community 3 - ".validate_scope"
 Cohesion: 0.06
-Nodes (24): Проверяет дублирование переменных в local_variables, Валидирует таблицу символов scope'а, Валидирует отдельный символ, Проверяет, что функция имеет return если нужно, Проверяет циклы на корректность, Warn about locals unused across the complete nested graph., Проверяет, что все пути выполнения функции возвращают значение, Проверяет деление на ноль (+16 more)
+Nodes (23): Проверяет дублирование переменных в local_variables, Валидирует таблицу символов scope'а, Валидирует отдельный символ, Проверяет, что функция имеет return если нужно, Проверяет циклы на корректность, Warn about locals unused across the complete nested graph., Проверяет, что все пути выполнения функции возвращают значение, Проверяет деление на ноль (+15 more)
 
 ### Community 4 - "TypesMixin"
 Cohesion: 0.07
 Nodes (22): Resolve an object receiver and its C expression. Besides local variables and…, Resolve a class field, including fields inherited through ``base``. Derived…, Map a Phils type to C, including zero-cost borrows ``&T``/``&mut T``., Определяет, является ли тип классом, Получает имя текущего класса из контекста, Определяет, является ли выражение строкой, Проверяет, является ли выражение None, Извлекает типы ключа и значения из dict[K, V] (+14 more)
 
-### Community 5 - ".validate_graph"
-Cohesion: 0.07
-Nodes (16): Валидирует граф операций, Находит родительский scope для заданного уровня, Валидирует удаление переменной, Валидирует унарную операцию, Валидирует составное присваивание, Валидирует объявление функции, Валидирует вызов функции с поддержкой AST аргументов, Валидирует один аргумент (может быть строкой или AST) (+8 more)
+### Community 5 - ".add_error"
+Cohesion: 0.06
+Nodes (24): Валидирует граф операций, Находит родительский scope для заданного уровня, Валидирует объявление переменной, Валидирует выражение (правая часть присваивания или инициализации), Валидирует удаление переменной, Валидирует унарную операцию, Валидирует составное присваивание, Валидирует объявление функции (+16 more)
 
 ### Community 6 - "OwnershipMixin"
 Cohesion: 0.10
@@ -170,9 +169,9 @@ Nodes (5): Проверяет, что все используемые метод
 Cohesion: 0.17
 Nodes (5): DictCodegenMixin, Generate an ARC-owned chained hash table., Генерирует объявление словаря, # TODO: рекурсивный анализ для определения типа атрибута, # TODO: анализировать возвращаемый тип функции
 
-### Community 12 - ".add_error"
-Cohesion: 0.08
-Nodes (22): Валидирует типы в узле, Валидирует типы в присваивании, Проверяет тип объявления по типизированному AST., Валидирует типы возвращаемых значений, Валидирует типы в условии while, Валидирует типы в условии if/elif, Валидирует типы в операциях, Валидирует объявление переменной (+14 more)
+### Community 12 - ".get_type_from_ast"
+Cohesion: 0.09
+Nodes (17): Валидирует типы в узле, Валидирует типы в присваивании, Проверяет тип объявления по типизированному AST., Валидирует типы возвращаемых значений, Валидирует типы в условии while, Валидирует типы в условии if/elif, Валидирует типы в операциях, Валидирует оператор return (+9 more)
 
 ### Community 13 - ".calculate_indent_level"
 Cohesion: 0.12
@@ -211,8 +210,8 @@ Cohesion: 0.23
 Nodes (4): Enter a lexical ownership scope., Leave a lexical scope and deterministically release owned values., Generate a function with borrowed parameters and automatic cleanup., ScopeMixin
 
 ### Community 23 - "JSONValidator"
-Cohesion: 0.18
-Nodes (5): JSONValidator, Validate the parser's typed graph before C code generation. The validator is…, Строит историю операций с переменными С УЧЕТОМ ПОРЯДКА СТРОК, Reject raw pointers and direct C FFI unless explicitly marked unsafe., Collect variable references from expression ASTs only.
+Cohesion: 0.17
+Nodes (6): JSONValidator, Validate the parser's typed graph before C code generation. The validator is…, Строит историю операций с переменными С УЧЕТОМ ПОРЯДКА СТРОК, Валидирует вызов статического метода, Находит символ класса в таблице символов, Collect variable references from expression ASTs only.
 
 ### Community 24 - "HelpersMixin"
 Cohesion: 0.24
@@ -239,8 +238,8 @@ Cohesion: 0.18
 Nodes (18): Compatibility façade for the Phils Ocean C backend v0.2. Existing callers may…, build_typed_ir(), Typed intermediate representation for the Ocean compiler. The parser's…, Convenience entry point used by the compiler pipeline and tests., _parse(), test_openmp_collapse_allows_sequential_loop_after_collapsed_nest(), test_openmp_collapse_requires_enough_nested_loops(), test_openmp_collapse_requires_perfect_nesting() (+10 more)
 
 ### Community 30 - ".get_symbol_info"
-Cohesion: 0.13
-Nodes (6): Валидирует объявление указателя, Проверяет соответствие типа возвращаемого значения, Определяет тип возвращаемого значения, Получает информацию о символе из текущего или родительских scope'ов, Проверяет выход за границы массивов/списков, Пытается получить статическое значение из AST
+Cohesion: 0.15
+Nodes (5): Валидирует объявление указателя, Получает информацию о символе из текущего или родительских scope'ов, Проверяет выход за границы массивов/списков, Проверяет вызовы C-функций (начинающиеся с @), Пытается получить статическое значение из AST
 
 ### Community 33 - "OrchestratorMixin"
 Cohesion: 0.17
@@ -377,12 +376,12 @@ Nodes (8): Find a typed scope by its parser level., Iterate semantic nodes in so
 ## Knowledge Gaps
 - **93 isolated node(s):** `ocean-lang`, `Project Structure & Module Organization`, `Build, Test, and Development Commands`, `Coding Style & Naming Conventions`, `Testing Guidelines` (+88 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **13 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `JSONValidator` connect `JSONValidator` to `.validate_scope`, `.validate_graph`, `benchmark_main.py`, `.check_undefined_methods`, `test_debug_validator.py`, `.add_error`, `test_memory_safety.py`, `main.py`, `TypedModule`, `.validate_openmp_loop`, `._validate_scopes`, `build_typed_ir`, `.get_symbol_info`, `.validate_static_method_call`?**
+- **Why does `JSONValidator` connect `JSONValidator` to `.validate_scope`, `.add_error`, `benchmark_main.py`, `.check_undefined_methods`, `test_debug_validator.py`, `.get_type_from_ast`, `test_memory_safety.py`, `main.py`, `TypedModule`, `.validate_openmp_loop`, `._validate_scopes`, `build_typed_ir`, `.get_symbol_info`?**
   _High betweenness centrality (0.297) - this node is a cross-community bridge._
 - **Why does `Parser` connect `Parser` to `run`, `.__init__`, `SymbolTable`, `benchmark_main.py`, `.parse_complex_expression`, `.parse_expression_to_ast`, `test_debug_validator.py`, `test_memory_safety.py`, `.calculate_indent_level`, `main.py`, `.parse_object_method_call_node`, `._parse_line_impl`, `.parse_function_call`, `.parse_type_annotation`, `build_typed_ir`, `parser.py`?**
   _High betweenness centrality (0.271) - this node is a cross-community bridge._
