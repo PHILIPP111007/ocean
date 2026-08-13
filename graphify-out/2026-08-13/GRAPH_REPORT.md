@@ -1,11 +1,11 @@
 # Graph Report - phils_language  (2026-08-13)
 
 ## Corpus Check
-- 79 files · ~94,056 words
+- 79 files · ~94,073 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1293 nodes · 2673 edges · 78 communities (67 shown, 11 thin omitted)
+- 1293 nodes · 2673 edges · 78 communities (66 shown, 12 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 93 edges (avg confidence: 0.68)
 - Token cost: 0 input · 0 output
 
@@ -47,7 +47,7 @@
 - build_typed_ir
 - .get_symbol_info
 - .validate_graph
-- ._resolve_import_path
+- parser.py
 - OrchestratorMixin
 - ColoredFormatter
 - TensorCodegenMixin
@@ -70,7 +70,7 @@
 - 15. Classes
 - Handoff — Phils Language / Ocean backend
 - .validate_openmp_loop
-- parser.py
+- ImportProcessor
 - ._validate_scopes
 - ocean-lang
 - RuntimeError
@@ -78,7 +78,7 @@
 - TypeParser
 - class_model.py
 - ClassRegistry
-- CImportProcessor
+- .__init__
 - ClassModel
 - .validate_function_return_type
 - .generate_all_methods
@@ -118,7 +118,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (78 total, 11 thin omitted)
+## Communities (78 total, 12 thin omitted)
 
 ### Community 0 - "run"
 Cohesion: 0.07
@@ -308,9 +308,9 @@ Nodes (3): 30. Следующий рекомендуемый этап, Array, Te
 Cohesion: 0.13
 Nodes (7): Валидирует узел цикла, Return OpenMP clauses grouped by name, preserving duplicates., Whether a type is safe to create/use as a private scalar., Validate the deliberately conservative, race-aware OpenMP subset., Validate and return the perfectly nested loop chain., Validate structured OpenMP metadata before C code generation., Collect variable references from any expression AST variant.
 
-### Community 56 - "parser.py"
-Cohesion: 0.22
-Nodes (5): ImportProcessor, Обрабатывает импорт и возвращает содержимое импортируемого файла, Обрабатывает все импорты в коде и вставляет содержимое файлов, test_import(), test_relative_and_standard_imports()
+### Community 56 - "ImportProcessor"
+Cohesion: 0.20
+Nodes (7): ImportProcessor, Path, Обрабатывает импорт и возвращает содержимое импортируемого файла, Обрабатывает все импорты в коде и вставляет содержимое файлов, Yield repository std directories from the active source context., test_import(), test_relative_and_standard_imports()
 
 ### Community 57 - "._validate_scopes"
 Cohesion: 0.18
@@ -335,10 +335,6 @@ Nodes (9): build_class_registry(), _infer_field_type(), MethodModel, Any, Semant
 ### Community 64 - "ClassRegistry"
 Cohesion: 0.21
 Nodes (5): ClassRegistry, FieldModel, Canonical class metadata and lookup service for the C backend., A field declared directly by one class., Reset all per-compilation mutable state.
-
-### Community 65 - "CImportProcessor"
-Cohesion: 0.22
-Nodes (4): CImportProcessor, Просто регистрирует C импорт без парсинга, Reset all per-compilation parser state. A Parser instance can safely be reused…, Parse one Phils compilation unit into the legacy graph + typed metadata. The…
 
 ### Community 66 - "ClassModel"
 Cohesion: 0.28
@@ -379,14 +375,14 @@ Nodes (8): Find a typed scope by its parser level., Iterate semantic nodes in so
 ## Knowledge Gaps
 - **93 isolated node(s):** `ocean-lang`, `Project Structure & Module Organization`, `Build, Test, and Development Commands`, `Coding Style & Naming Conventions`, `Testing Guidelines` (+88 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **11 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **12 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `JSONValidator` connect `JSONValidator` to `.validate_scope`, `.validate_function_return_type`, `.find_symbol_in_scope`, `.check_undefined_methods`, `test_debug_validator.py`, `.add_error`, `test_memory_safety.py`, `main.py`, `TypedModule`, `build_typed_ir`, `.get_symbol_info`, `.validate_openmp_loop`, `._validate_scopes`, `benchmark_main.py`, `TypeParser`, `.validate_graph`?**
   _High betweenness centrality (0.287) - this node is a cross-community bridge._
-- **Why does `Parser` connect `Parser` to `run`, `CImportProcessor`, `SymbolTable`, `.parse_complex_expression`, `.parse_expression_to_ast`, `test_array_tensor.py`, `test_debug_validator.py`, `test_memory_safety.py`, `.calculate_indent_level`, `main.py`, `._parse_line_impl`, `.extract_dependencies_from_ast`, `build_typed_ir`, `.parse_function_call`, `parser.py`, `.parse_type_annotation`, `benchmark_main.py`, `TypeParser`?**
+- **Why does `Parser` connect `Parser` to `parser.py`, `.__init__`, `run`, `SymbolTable`, `.parse_complex_expression`, `.parse_expression_to_ast`, `test_array_tensor.py`, `test_debug_validator.py`, `test_memory_safety.py`, `.calculate_indent_level`, `main.py`, `._parse_line_impl`, `.extract_dependencies_from_ast`, `build_typed_ir`, `.parse_function_call`, `.parse_type_annotation`, `benchmark_main.py`, `TypeParser`?**
   _High betweenness centrality (0.260) - this node is a cross-community bridge._
 - **Why does `CCodeGenerator` connect `CCodeGenerator` to `run`, `OopMixin`, `CallsMixin`, `TypesMixin`, `OwnershipMixin`, `Parser`, `generator.py`, `main.py`, `ArrayCodegenMixin`, `ListCodegenMixin`, `IndexingMixin`, `IoMixin`, `StatementsMixin`, `ScopeMixin`, `HelpersMixin`, `TupleCodegenMixin`, `CoreMixin`, `build_typed_ir`, `OrchestratorMixin`, `TensorCodegenMixin`, `NamingMixin`, `test_memory_safety.py`, `benchmark_main.py`, `compiler.py`, `ExpressionsMixin`, `test_array_tensor.py`?**
   _High betweenness centrality (0.257) - this node is a cross-community bridge._
