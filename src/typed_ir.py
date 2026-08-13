@@ -121,12 +121,7 @@ class TypedScope(Mapping[str, Any]):
 
 @dataclass(frozen=True)
 class TypedModule:
-    """Typed compilation unit with an explicit compatibility projection.
-
-    Compiler passes should exchange ``TypedModule`` instances.  The raw parser
-    scopes are retained only for diagnostics/compatibility projections; the C
-    emitter consumes the typed scope/node views returned by ``backend_scopes``.
-    """
+    """Typed compilation unit exchanged by compiler passes."""
 
     scopes: tuple[TypedScope, ...]
 

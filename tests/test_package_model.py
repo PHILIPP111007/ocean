@@ -47,6 +47,7 @@ def test_package_build_command_generates_isolated_artifacts(tmp_path):
     _, _, c_path, binary = parse_cli_paths(args)
     assert c_path.is_file()
     assert binary.is_file()
+    assert not (package.root / "build" / "debug" / "built_demo.parsed.json").exists()
 
 
 def test_legacy_source_argument_still_defaults_to_single_file_paths(tmp_path):
