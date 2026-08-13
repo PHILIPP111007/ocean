@@ -196,14 +196,27 @@ static const char *ocean_tensor_matmul_kernel_source =
     "__kernel void ocean_tensor_matmul("
     "__global const float *a, __global const float *b, __global float *c, "
     "const int rows_a, const int cols_a, const int cols_b) {"
-    "int row = (int)get_global_id(0);"
-    "int col = (int)get_global_id(1);"
-    "if (row < rows_a && col < cols_b) {"
+    "int local_row = (int)get_local_id(0);"
+    "int local_col = (int)get_local_id(1);"
+    "int row = (int)get_group_id(0) * 8 + local_row;"
+    "int col = (int)get_group_id(1) * 8 + local_col;"
+    "__local float tile_a[8][8];"
+    "__local float tile_b[8][8];"
     "float sum = 0.0f;"
-    "for (int k = 0; k < cols_a; ++k)"
-    "sum += a[row * cols_a + k] * b[k * cols_b + col];"
-    "c[row * cols_b + col] = sum;"
+    "int tile_count = (cols_a + 7) / 8;"
+    "for (int tile = 0; tile < tile_count; ++tile) {"
+    "int a_col = tile * 8 + local_col;"
+    "int b_row = tile * 8 + local_row;"
+    "tile_a[local_row][local_col] = "
+    "row < rows_a && a_col < cols_a ? a[row * cols_a + a_col] : 0.0f;"
+    "tile_b[local_row][local_col] = "
+    "b_row < cols_a && col < cols_b ? b[b_row * cols_b + col] : 0.0f;"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "for (int k = 0; k < 8; ++k)"
+    "sum += tile_a[local_row][k] * tile_b[k][local_col];"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
     "}"
+    "if (row < rows_a && col < cols_b) c[row * cols_b + col] = sum;"
     "}"
     "__kernel void ocean_tensor_binary("
     "__global const float *a, __global const float *b, __global float *out, "
@@ -232,14 +245,27 @@ static const char *ocean_tensor_matmul_kernel_source =
     "__kernel void ocean_tensor_matmul_int32("
     "__global const int *a, __global const int *b, __global int *c, "
     "const int rows_a, const int cols_a, const int cols_b) {"
-    "int row = (int)get_global_id(0);"
-    "int col = (int)get_global_id(1);"
-    "if (row < rows_a && col < cols_b) {"
+    "int local_row = (int)get_local_id(0);"
+    "int local_col = (int)get_local_id(1);"
+    "int row = (int)get_group_id(0) * 8 + local_row;"
+    "int col = (int)get_group_id(1) * 8 + local_col;"
+    "__local int tile_a[8][8];"
+    "__local int tile_b[8][8];"
     "int sum = 0;"
-    "for (int k = 0; k < cols_a; ++k)"
-    "sum += a[row * cols_a + k] * b[k * cols_b + col];"
-    "c[row * cols_b + col] = sum;"
+    "int tile_count = (cols_a + 7) / 8;"
+    "for (int tile = 0; tile < tile_count; ++tile) {"
+    "int a_col = tile * 8 + local_col;"
+    "int b_row = tile * 8 + local_row;"
+    "tile_a[local_row][local_col] = "
+    "row < rows_a && a_col < cols_a ? a[row * cols_a + a_col] : 0;"
+    "tile_b[local_row][local_col] = "
+    "b_row < cols_a && col < cols_b ? b[b_row * cols_b + col] : 0;"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "for (int k = 0; k < 8; ++k)"
+    "sum += tile_a[local_row][k] * tile_b[k][local_col];"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
     "}"
+    "if (row < rows_a && col < cols_b) c[row * cols_b + col] = sum;"
     "}"
     "__kernel void ocean_tensor_binary_int32("
     "__global const int *a, __global const int *b, __global int *out, "
@@ -1428,7 +1454,7 @@ ocean_tensor_handle_t ocean_tensor_matmul(
 
     size_t shape[2] = {left->shape[0], right->shape[1]};
     ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
-        shape, 2, OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_GPU
+        shape, 2, left->dtype, OCEAN_TENSOR_GPU
     );
     ocean_tensor_gpu_alloc(result);
     if (left->shape[0] == 0 || right->shape[1] == 0) {
@@ -1463,11 +1489,12 @@ ocean_tensor_handle_t ocean_tensor_matmul(
     ocean_tensor_opencl_check(
         clSetKernelArg(kernel, 5, sizeof(int), &result_cols), "clSetKernelArg"
     );
+    const size_t tile_size = 8u;
     size_t global_size[2] = {
-        ((size_t)rows + 7u) / 8u * 8u,
-        ((size_t)result_cols + 7u) / 8u * 8u,
+        ((size_t)rows + tile_size - 1u) / tile_size * tile_size,
+        ((size_t)result_cols + tile_size - 1u) / tile_size * tile_size,
     };
-    size_t local_size[2] = {8u, 8u};
+    size_t local_size[2] = {tile_size, tile_size};
     ocean_tensor_opencl_check(
         clEnqueueNDRangeKernel(
             ocean_tensor_opencl.queue, kernel, 2, NULL,
@@ -1475,8 +1502,10 @@ ocean_tensor_handle_t ocean_tensor_matmul(
         ),
         "clEnqueueNDRangeKernel"
     );
+    /* The queue is in-order.  Consumers (including a blocking download)
+       provide the dependency, so avoid synchronizing the host here. */
     ocean_tensor_opencl_check(
-        clFinish(ocean_tensor_opencl.queue), "clFinish"
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
     );
     return result;
 #else

@@ -4,10 +4,12 @@ The first GPU backend uses the existing OpenCL design. The concrete runtime is
 `std/tensor/tensor_runtime.c`; the compiler links it automatically when the
 generated C includes `std/tensor/tensor_runtime.h`.
 
-- `matmul_gpu.cl` contains one work-item per output element;
+- `matmul_gpu.cl` contains the tiled matmul design: each 8x8 work-group
+  cooperatively loads input tiles into `__local` memory;
 - the host wrapper creates or reuses `cl_kernel`, uploads `A`, accepts a device
   buffer for `B`, launches a 2D NDRange, and downloads `C`;
-- local workgroup size starts at `8 x 8`.
+- local workgroup size is `8 x 8`; partial tiles are zero-padded, so matrix
+  dimensions do not need to be multiples of eight.
 
 ## Runtime objects
 
@@ -34,6 +36,10 @@ Batch/layer offsets must be represented explicitly as a byte or element stride.
 The old `k * COLS_B * layer_index + col` expression is not a general batch
 layout and must not be reused as the public Tensor ABI.
 
+The current kernels reuse an 8x8 tile from both inputs through local memory.
+This reduces global-memory traffic and keeps the inner traversal coalesced
+while preserving the ordinary row-major result for arbitrary matrix sizes.
+
 Before production use, the wrapper must also:
 
 - validate dimensions and dtype;
@@ -41,7 +47,8 @@ Before production use, the wrapper must also:
 - keep bounds checks in the kernel;
 - check every OpenCL return code;
 - cache kernels instead of creating one for every matmul;
-- use events or a documented blocking policy for transfers;
+- use blocking transfers where host data is requested and an in-order queue
+  with `clFlush` for asynchronous matmul dispatch;
 - release buffers, kernels, programs, queues, and contexts on every failure path.
 
 ## Backend selection
