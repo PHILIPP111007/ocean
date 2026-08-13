@@ -18,6 +18,10 @@ types for numerical workloads.
   C/POSIX APIs through an explicit `unsafe:` boundary.
 - **Numerical foundations** — dense arrays and row-major tensors with shape metadata, strides, and
   bounds-checked indexing.
+- **Standard-library backends** — a device-aware `Tensor[T]` facade can dispatch between CPU and
+  OpenCL-backed GPU storage.
+- **Parallel loops** — selected `range` loops lower to OpenMP, including nested loops with
+  `collapse(n)`.
 - **Inspectable output** — the compiler emits C you can read, compile, profile, and debug.
 
 ## A small example
@@ -63,6 +67,120 @@ source tensor's storage and retain its owner until the view is released. Arithme
 NumPy-style trailing-axis broadcasting for compatible shapes; `transpose()` remains an explicit
 copying operation. The current benchmark multiplies two `100 × 100` matrices 1,000 times.
 
+### Device-aware `Tensor[T]`
+
+The standard library adds an uppercase `Tensor[T]` object with an explicit device, while the
+lowercase `tensor[T]` remains the compiler-native CPU storage type:
+
+```text
+tensor[float32]   # dense CPU tensor
+Tensor[float32]   # device-aware standard-library facade
+```
+
+`Tensor[T]` supports numeric element types such as `bool`, signed and unsigned integers,
+`size_t`, `intptr_t`, `uintptr_t`, `float16`, `float32`, and `float64`. Reference types such as
+`str` are rejected. Without a type argument, `Tensor` uses `float32`.
+
+The initial API supports arbitrary tensor rank for allocation and transfer:
+
+```python
+import <std/tensor/tensor.oc>
+
+var native: tensor[float32] = [[1.0, 2.0], [3.0, 4.0]]
+var cpu: Tensor[float32] = Tensor[float32].from_tensor(native, "cpu")
+var gpu: Tensor[float32] = cpu.to("gpu")
+var result_gpu: Tensor[float32] = gpu.matmul(gpu)
+var result_cpu: Tensor[float32] = result_gpu.to("cpu")
+var restored: tensor[float32] = result_cpu.to_tensor()
+```
+
+The supported devices are exactly `"cpu"` and `"gpu"`. `.to(device)` is non-mutating: it returns
+an owned tensor on the requested device and leaves the source tensor valid. `Tensor` also provides
+`zeros`, `from_tensor`, `copy`, `matmul`, `shape`, `ndim`, `size`, `device`, `to_tensor`, and
+`release`.
+
+`Tensor.matmul` requires compatible 2D shapes and matching devices. CPU matmul is dtype-generic.
+The GPU path currently uses an OpenCL `float32` kernel; other numeric dtypes use a correct CPU
+fallback until specialized GPU kernels are added. The operation does not transpose the right-hand
+matrix implicitly.
+
+The public facade owns an opaque runtime handle. Ocean code does not access `cl_mem`, OpenCL
+contexts, queues, or backend-specific pointers directly. See [std/tensor/README.md](std/tensor/README.md)
+and [std/gpu/opencl.md](std/gpu/opencl.md) for the API and backend design.
+
+## Imports and the standard library
+
+Imports have two explicit forms:
+
+```python
+import "./examples/matmul.oc"       # relative to the importing source file
+import <std/tensor/tensor.oc>        # from the repository standard library
+```
+
+Quoted imports are resolved relative to the importing file. Angle-bracket imports beginning with
+`std/` are resolved from `./std/`. Standard-library C runtimes referenced by generated code are
+discovered and compiled automatically.
+
+## OpenMP parallel loops
+
+Ocean can lower a restricted, ownership-safe subset of `range` loops to OpenMP:
+
+```python
+#pragma omp parallel for collapse(2) schedule(static)
+for i in range(rows):
+    for j in range(columns):
+        output[i, j] = left[i, j] + right[i, j]
+```
+
+Nested loops must be perfectly nested when using `collapse(n)`. Supported clauses include
+`schedule`, `collapse`, `reduction`, `private`, `firstprivate`, `lastprivate`, `shared`, `default`,
+`nowait`, and `ordered`. The compiler adds `-fopenmp` automatically when generated C contains an
+OpenMP pragma; it can also be supplied explicitly:
+
+```bash
+python main.py examples/matmul.oc --cflag=-fopenmp --run
+```
+
+The current parallel-loop subset requires constant non-zero integer steps and `range(...)` loops.
+Managed objects such as lists, dictionaries, strings, and classes, as well as function calls,
+`break`, `continue`, and unsupported nested-loop forms are rejected because the current ownership
+runtime is thread-confined. More examples and validation rules are documented in
+[docs/OpenMP.md](docs/OpenMP.md).
+
+## OpenCL GPU build
+
+The Tensor runtime uses OpenCL through an unsafe C implementation in
+`std/tensor/tensor_runtime.c`. When the generated C references this runtime, the compiler discovers
+and compiles the standard-library C source automatically. If `pkg-config` can find an `OpenCL`
+package, its include, library, and linker flags are added automatically as well.
+
+For a custom OpenCL installation, pass the include directory containing `CL/cl.h`, the library
+directory containing `libOpenCL.so`, and the feature macro explicitly:
+
+```bash
+python main.py run examples/your_tensor_program.oc \
+    --cflags "-I/opt/opencl/include -L/opt/opencl/lib -lOpenCL -DOCEAN_TENSOR_ENABLE_OPENCL"
+```
+
+For example, if the header is `/opt/opencl/include/CL/cl.h`, the correct include flag is
+`-I/opt/opencl/include`, not the `CL` directory itself. The equivalent package configuration is:
+
+```toml
+[build]
+compiler = "gcc"
+cflags = [
+    "-std=c11",
+    "-I/opt/opencl/include",
+    "-L/opt/opencl/lib",
+    "-lOpenCL",
+    "-DOCEAN_TENSOR_ENABLE_OPENCL",
+]
+```
+
+The GPU backend requires an OpenCL platform and device at runtime. A CPU-only machine can still
+use `Tensor[T]` on `"cpu"`; requesting `"gpu"` fails with a runtime error when no usable OpenCL
+backend is available.
+
 ## Memory model
 
 | Ocean type | Runtime model |
@@ -71,6 +189,7 @@ copying operation. The current benchmark multiplies two `100 × 100` matrices 1,
 | `list[T]`, `dict[K,V]`, tuples, classes | non-atomic reference counting |
 | `str` | owned C string with copied aliases |
 | `array[T]`, `tensor[T]` | unique-owned buffer |
+| `Tensor[T]` | ARC-managed facade over CPU or GPU tensor storage |
 | `&T` / `&mut T` | lexical immutable / exclusive borrow |
 | raw pointers and direct C calls | explicit `unsafe:` boundary |
 
@@ -178,6 +297,20 @@ The package metadata is defined in `pyproject.toml`. The compiler is currently d
 experimental package; uploading to PyPI should be done only after choosing the final project name
 and configuring a PyPI token.
 
+## Object-oriented ML example
+
+Classes, constructors, fields, methods, and single-inheritance-compatible object layouts are
+lowered to ARC-managed C objects. The repository contains equivalent small decoder-only Transformer
+language-model examples:
+
+- [examples/transformer_pytorch.py](examples/transformer_pytorch.py) — PyTorch implementation.
+- [examples/transformer_ocean.oc](examples/transformer_ocean.oc) — the same model structure using
+  Ocean classes and methods.
+
+The Ocean version uses ordinary OOP syntax and can call C math/POSIX functionality only through an
+explicit `unsafe:` boundary. Generated C is available for inspection with `--c-output` or the
+legacy `examples/*.generated.c` workflow.
+
 For strict manual C checks:
 
 ```bash
@@ -205,6 +338,8 @@ Ocean source → Parser → typed JSON graph → JSONValidator → CCodeGenerato
 - `src/compiler.py` — public `CCodeGenerator` compatibility API.
 - `tests/` — pytest regression and generated-C tests.
 - `docs/` — memory model and backend design notes.
+- `graphify-out/` — generated code-navigation graph, reports, and analysis cache. Refresh it with
+  `graphify update .` after source changes.
 
 ## Honest project status
 
