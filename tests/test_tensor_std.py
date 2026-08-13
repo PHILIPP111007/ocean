@@ -125,6 +125,51 @@ def main() -> int:
     ]
 
 
+def test_standard_tensor_float32_matmul_uses_correct_row_major_result(tmp_path):
+    source = tmp_path / "tensor_matmul_float32.oc"
+    source.write_text(
+        """
+import <std/tensor/tensor.oc>
+
+def main() -> int:
+    var left: Tensor[float32] = Tensor.from_list([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], "cpu")
+    var right: Tensor[float32] = Tensor.from_list([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]], "cpu")
+    var result: Tensor[float32] = left.matmul(right)
+    print(result.get(0, 0))
+    print(result.get(0, 1))
+    print(result.get(1, 0))
+    print(result.get(1, 1))
+    return 0
+""",
+        encoding="utf-8",
+    )
+    json_path = tmp_path / "tensor_matmul_float32.json"
+    c_path = tmp_path / "tensor_matmul_float32.generated.c"
+    binary_path = tmp_path / "tensor_matmul_float32"
+
+    compile_pipeline(
+        str(Path(__file__).resolve().parents[1]),
+        source,
+        json_path,
+        c_path,
+        quiet=True,
+    )
+    compile_c(c_path, binary_path)
+    result = subprocess.run(
+        [str(binary_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "58.000000",
+        "64.000000",
+        "139.000000",
+        "154.000000",
+    ]
+
+
 def test_standard_tensor_constructor_uses_function_return_dtype(tmp_path):
     source = tmp_path / "tensor_return.oc"
     source.write_text(

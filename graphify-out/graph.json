@@ -1742,8 +1742,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_dictcodegenmixin",
-      "community": 48,
-      "community_name": "DictCodegenMixin",
+      "community": 11,
+      "community_name": "generator.py",
       "norm_label": "dictcodegenmixin"
     },
     {
@@ -1754,8 +1754,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_dictcodegenmixin_generate_dict_struct",
-      "community": 48,
-      "community_name": "DictCodegenMixin",
+      "community": 11,
+      "community_name": "generator.py",
       "norm_label": ".generate_dict_struct()"
     },
     {
@@ -1766,8 +1766,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_dictcodegenmixin_generate_dict_declaration",
-      "community": 48,
-      "community_name": "DictCodegenMixin",
+      "community": 11,
+      "community_name": "generator.py",
       "norm_label": "._generate_dict_declaration()"
     },
     {
@@ -1777,8 +1777,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_rationale_11",
-      "community": 48,
-      "community_name": "DictCodegenMixin",
+      "community": 11,
+      "community_name": "generator.py",
       "norm_label": "generate an arc-owned chained hash table."
     },
     {
@@ -1788,8 +1788,8 @@
       "source_location": "L255",
       "_origin": "ast",
       "id": "src_codegen_dict_codegen_rationale_255",
-      "community": 48,
-      "community_name": "DictCodegenMixin",
+      "community": 11,
+      "community_name": "generator.py",
       "norm_label": "\u0433\u0435\u043d\u0435\u0440\u0438\u0440\u0443\u0435\u0442 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0441\u043b\u043e\u0432\u0430\u0440\u044f"
     },
     {
@@ -1928,7 +1928,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_codegen_generator_ccodegenerator",
-      "community": 67,
+      "community": 74,
       "community_name": "CCodeGenerator",
       "norm_label": "ccodegenerator"
     },
@@ -1939,7 +1939,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "src_codegen_generator_rationale_45",
-      "community": 67,
+      "community": 74,
       "community_name": "CCodeGenerator",
       "norm_label": "public c backend facade. the implementation is split by responsibility into..."
     },
@@ -2103,7 +2103,7 @@
       "_origin": "ast",
       "id": "src_codegen_imports_importsmixin",
       "community": 74,
-      "community_name": "ImportsMixin",
+      "community_name": "CCodeGenerator",
       "norm_label": "importsmixin"
     },
     {
@@ -2115,7 +2115,7 @@
       "_origin": "ast",
       "id": "src_codegen_imports_importsmixin_generate_c_imports",
       "community": 74,
-      "community_name": "ImportsMixin",
+      "community_name": "CCodeGenerator",
       "norm_label": ".generate_c_imports()"
     },
     {
@@ -2127,7 +2127,7 @@
       "_origin": "ast",
       "id": "src_codegen_imports_importsmixin_generate_forward_declarations",
       "community": 74,
-      "community_name": "ImportsMixin",
+      "community_name": "CCodeGenerator",
       "norm_label": ".generate_forward_declarations()"
     },
     {
@@ -2139,7 +2139,7 @@
       "_origin": "ast",
       "id": "src_codegen_imports_importsmixin_collect_imports_and_declarations",
       "community": 74,
-      "community_name": "ImportsMixin",
+      "community_name": "CCodeGenerator",
       "norm_label": ".collect_imports_and_declarations()"
     },
     {
@@ -2150,7 +2150,7 @@
       "_origin": "ast",
       "id": "src_codegen_imports_rationale_11",
       "community": 74,
-      "community_name": "ImportsMixin",
+      "community_name": "CCodeGenerator",
       "norm_label": "\u0433\u0435\u043d\u0435\u0440\u0438\u0440\u0443\u0435\u0442 #include \u0434\u0438\u0440\u0435\u043a\u0442\u0438\u0432\u044b"
     },
     {
@@ -2161,7 +2161,7 @@
       "_origin": "ast",
       "id": "src_codegen_imports_rationale_34",
       "community": 74,
-      "community_name": "ImportsMixin",
+      "community_name": "CCodeGenerator",
       "norm_label": "\u0433\u0435\u043d\u0435\u0440\u0438\u0440\u0443\u0435\u0442 forward declarations \u0444\u0443\u043d\u043a\u0446\u0438\u0438"
     },
     {
@@ -2172,7 +2172,7 @@
       "_origin": "ast",
       "id": "src_codegen_imports_rationale_53",
       "community": 74,
-      "community_name": "ImportsMixin",
+      "community_name": "CCodeGenerator",
       "norm_label": "\u0441\u043e\u0431\u0438\u0440\u0430\u0435\u0442 \u0438\u043c\u043f\u043e\u0440\u0442\u044b \u0438 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u0444\u0443\u043d\u043a\u0446\u0438\u0438 \u0438\u0437 json"
     },
     {
@@ -5217,8 +5217,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_get_variable_state",
-      "community": 23,
-      "community_name": "JSONValidator",
+      "community": 5,
+      "community_name": ".validate_graph",
       "norm_label": ".get_variable_state()"
     },
     {
@@ -5230,7 +5230,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_is_variable_deleted",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".is_variable_deleted()"
     },
     {
@@ -5241,7 +5241,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_get_last_variable_action",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": ".get_last_variable_action()"
     },
@@ -5253,7 +5253,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_add_error",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": ".add_error()"
     },
@@ -5566,7 +5566,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_graph",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_graph()"
     },
     {
@@ -5578,7 +5578,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_node_types",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_node_types()"
     },
     {
@@ -5590,7 +5590,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_assignment_types",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_assignment_types()"
     },
     {
@@ -5602,7 +5602,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_declaration_types",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_declaration_types()"
     },
     {
@@ -5614,7 +5614,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_return_types",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_return_types()"
     },
     {
@@ -5626,7 +5626,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_while_condition_types",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_while_condition_types()"
     },
     {
@@ -5638,7 +5638,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_if_condition_types",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_if_condition_types()"
     },
     {
@@ -5650,7 +5650,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_operation_types",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_operation_types()"
     },
     {
@@ -5662,7 +5662,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_get_parent_scope",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".get_parent_scope()"
     },
     {
@@ -5673,7 +5673,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_declaration",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": ".validate_declaration()"
     },
@@ -5685,7 +5685,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_expression",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": ".validate_expression()"
     },
@@ -5698,7 +5698,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_delete",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_delete()"
     },
     {
@@ -5710,7 +5710,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_unary_operation",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_unary_operation()"
     },
     {
@@ -5722,7 +5722,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_augmented_assignment",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_augmented_assignment()"
     },
     {
@@ -5734,7 +5734,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_function_declaration",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_function_declaration()"
     },
     {
@@ -5746,7 +5746,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_function_call",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_function_call()"
     },
     {
@@ -5758,7 +5758,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_argument",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "._validate_argument()"
     },
     {
@@ -5770,7 +5770,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_extract_dependencies_from_ast",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "._extract_dependencies_from_ast()"
     },
     {
@@ -5782,7 +5782,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_print",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_print()"
     },
     {
@@ -5818,7 +5818,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_str_call",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_str_call()"
     },
     {
@@ -5830,7 +5830,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_bool_call",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_bool_call()"
     },
     {
@@ -5842,7 +5842,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_range_call",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_range_call()"
     },
     {
@@ -5853,7 +5853,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_return",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": ".validate_return()"
     },
@@ -5866,7 +5866,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_loop_node",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_loop_node()"
     },
     {
@@ -6022,7 +6022,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_dereference_write",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_dereference_write()"
     },
     {
@@ -6034,7 +6034,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_get_type_from_ast",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".get_type_from_ast()"
     },
     {
@@ -6045,7 +6045,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_assignment",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": ".validate_assignment()"
     },
@@ -6057,8 +6057,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_function_return_type",
-      "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community": 30,
+      "community_name": ".get_symbol_info",
       "norm_label": ".validate_function_return_type()"
     },
     {
@@ -6069,8 +6069,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_determine_return_type",
-      "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community": 30,
+      "community_name": ".get_symbol_info",
       "norm_label": ".determine_return_type()"
     },
     {
@@ -6082,7 +6082,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_type_compatibility",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_type_compatibility()"
     },
     {
@@ -6094,7 +6094,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_type_operations",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_type_operations()"
     },
     {
@@ -6106,7 +6106,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_ast_types",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".validate_ast_types()"
     },
     {
@@ -6118,7 +6118,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_can_operate_between_types",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".can_operate_between_types()"
     },
     {
@@ -6190,7 +6190,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_get_scope_by_level",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".get_scope_by_level()"
     },
     {
@@ -6202,7 +6202,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_guess_type_from_value",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".guess_type_from_value()"
     },
     {
@@ -6214,7 +6214,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_are_types_compatible",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": ".are_types_compatible()"
     },
     {
@@ -6226,7 +6226,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_find_symbol_in_scope",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".find_symbol_in_scope()"
     },
     {
@@ -6250,7 +6250,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_method_call",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_method_call()"
     },
     {
@@ -6286,7 +6286,7 @@
       "_origin": "ast",
       "id": "src_debug_jsonvalidator_validate_builtin_function_call",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": ".validate_builtin_function_call()"
     },
     {
@@ -6613,8 +6613,8 @@
       "source_location": "L350",
       "_origin": "ast",
       "id": "src_debug_rationale_350",
-      "community": 23,
-      "community_name": "JSONValidator",
+      "community": 5,
+      "community_name": ".validate_graph",
       "norm_label": "\u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442 \u0442\u0435\u043a\u0443\u0449\u0435\u0435 \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438"
     },
     {
@@ -6625,7 +6625,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_355",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0443\u0434\u0430\u043b\u0435\u043d\u0430 \u043b\u0438 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u0430\u044f"
     },
     {
@@ -6635,7 +6635,7 @@
       "source_location": "L360",
       "_origin": "ast",
       "id": "src_debug_rationale_360",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": "\u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442 \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u0435\u0435 \u0434\u0435\u0438\u0441\u0442\u0432\u0438\u0435 \u0441 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438"
     },
@@ -6646,7 +6646,7 @@
       "source_location": "L374",
       "_origin": "ast",
       "id": "src_debug_rationale_374",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": "\u0434\u043e\u0431\u0430\u0432\u043b\u044f\u0435\u0442 \u043e\u0448\u0438\u0431\u043a\u0443 \u0441 \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u0435\u0438 \u043e \u0441\u0442\u0440\u043e\u043a\u0435"
     },
@@ -6746,7 +6746,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1105",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0433\u0440\u0430\u0444 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438"
     },
     {
@@ -6757,7 +6757,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1430",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0442\u0438\u043f\u044b \u0432 \u0443\u0437\u043b\u0435"
     },
     {
@@ -6768,7 +6768,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1458",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0442\u0438\u043f\u044b \u0432 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0438"
     },
     {
@@ -6779,7 +6779,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1488",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0442\u0438\u043f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u043f\u043e \u0442\u0438\u043f\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u043e\u043c\u0443 ast."
     },
     {
@@ -6790,7 +6790,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1511",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0442\u0438\u043f\u044b \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u043c\u044b\u0445 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0438"
     },
     {
@@ -6801,7 +6801,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1539",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0442\u0438\u043f\u044b \u0432 \u0443\u0441\u043b\u043e\u0432\u0438\u0438 while"
     },
     {
@@ -6812,7 +6812,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1561",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0442\u0438\u043f\u044b \u0432 \u0443\u0441\u043b\u043e\u0432\u0438\u0438 if/elif"
     },
     {
@@ -6823,7 +6823,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1587",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0442\u0438\u043f\u044b \u0432 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u044f\u0445"
     },
     {
@@ -6834,7 +6834,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1633",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u0440\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u0441\u043a\u0438\u0438 scope \u0434\u043b\u044f \u0437\u0430\u0434\u0430\u043d\u043d\u043e\u0433\u043e \u0443\u0440\u043e\u0432\u043d\u044f"
     },
     {
@@ -6844,7 +6844,7 @@
       "source_location": "L1648",
       "_origin": "ast",
       "id": "src_debug_rationale_1648",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438"
     },
@@ -6855,7 +6855,7 @@
       "source_location": "L1695",
       "_origin": "ast",
       "id": "src_debug_rationale_1695",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 (\u043f\u0440\u0430\u0432\u0430\u044f \u0447\u0430\u0441\u0442\u044c \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u044f \u0438\u043b\u0438 \u0438\u043d\u0438\u0446\u0438\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u0438)"
     },
@@ -6867,7 +6867,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1828",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438"
     },
     {
@@ -6878,7 +6878,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1863",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0443\u043d\u0430\u0440\u043d\u0443\u044e \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u044e"
     },
     {
@@ -6889,7 +6889,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1883",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0441\u043e\u0441\u0442\u0430\u0432\u043d\u043e\u0435 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435"
     },
     {
@@ -6900,7 +6900,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1922",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0444\u0443\u043d\u043a\u0446\u0438\u0438"
     },
     {
@@ -6911,7 +6911,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_1964",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0432\u044b\u0437\u043e\u0432 \u0444\u0443\u043d\u043a\u0446\u0438\u0438 \u0441 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u043e\u0438 ast \u0430\u0440\u0433\u0443\u043c\u0435\u043d\u0442\u043e\u0432"
     },
     {
@@ -6922,7 +6922,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_2006",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u043e\u0434\u0438\u043d \u0430\u0440\u0433\u0443\u043c\u0435\u043d\u0442 (\u043c\u043e\u0436\u0435\u0442 \u0431\u044b\u0442\u044c \u0441\u0442\u0440\u043e\u043a\u043e\u0438 \u0438\u043b\u0438 ast)"
     },
     {
@@ -6933,7 +6933,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_2068",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0438\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u0442 \u0437\u0430\u0432\u0438\u0441\u0438\u043c\u043e\u0441\u0442\u0438 (\u0438\u043c\u0435\u043d\u0430 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u044b\u0445) \u0438\u0437 ast"
     },
     {
@@ -6944,7 +6944,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_2175",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0432\u044b\u0437\u043e\u0432 \u0444\u0443\u043d\u043a\u0446\u0438\u0438 print"
     },
     {
@@ -6977,7 +6977,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_2294",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0432\u044b\u0437\u043e\u0432 str()"
     },
     {
@@ -6988,7 +6988,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_2319",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0432\u044b\u0437\u043e\u0432 bool()"
     },
     {
@@ -6999,7 +6999,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_2344",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0432\u044b\u0437\u043e\u0432 range()"
     },
     {
@@ -7009,7 +7009,7 @@
       "source_location": "L2380",
       "_origin": "ast",
       "id": "src_debug_rationale_2380",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 return"
     },
@@ -7021,7 +7021,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_2453",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0443\u0437\u0435\u043b \u0446\u0438\u043a\u043b\u0430"
     },
     {
@@ -7120,7 +7120,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_2988",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0437\u0430\u043f\u0438\u0441\u044c \u0447\u0435\u0440\u0435\u0437 \u0443\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c (*p = \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435)"
     },
     {
@@ -7131,7 +7131,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_3036",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u043e\u043f\u0440\u0435\u0434\u0435\u043b\u044f\u0435\u0442 \u0442\u0438\u043f \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f \u0438\u0437 ast"
     },
     {
@@ -7141,7 +7141,7 @@
       "source_location": "L3140",
       "_origin": "ast",
       "id": "src_debug_rationale_3140",
-      "community": 5,
+      "community": 12,
       "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435"
     },
@@ -7152,8 +7152,8 @@
       "source_location": "L3219",
       "_origin": "ast",
       "id": "src_debug_rationale_3219",
-      "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community": 30,
+      "community_name": ".get_symbol_info",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435 \u0442\u0438\u043f\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u043c\u043e\u0433\u043e \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f"
     },
     {
@@ -7163,8 +7163,8 @@
       "source_location": "L3265",
       "_origin": "ast",
       "id": "src_debug_rationale_3265",
-      "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community": 30,
+      "community_name": ".get_symbol_info",
       "norm_label": "\u043e\u043f\u0440\u0435\u0434\u0435\u043b\u044f\u0435\u0442 \u0442\u0438\u043f \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u043c\u043e\u0433\u043e \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f"
     },
     {
@@ -7175,7 +7175,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_3331",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0441\u043e\u0432\u043c\u0435\u0441\u0442\u0438\u043c\u043e\u0441\u0442\u044c \u0442\u0438\u043f\u043e\u0432 \u043f\u0440\u0438 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0438"
     },
     {
@@ -7186,7 +7186,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_3430",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438 \u0441 \u0442\u0438\u043f\u0430\u043c\u0438"
     },
     {
@@ -7197,7 +7197,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_3436",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u0440\u0435\u043a\u0443\u0440\u0441\u0438\u0432\u043d\u043e \u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0442\u0438\u043f\u044b \u0432 ast"
     },
     {
@@ -7208,7 +7208,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_3486",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u043c\u043e\u0436\u043d\u043e \u043b\u0438 \u0432\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u044e \u043c\u0435\u0436\u0434\u0443 \u0434\u0432\u0443\u043c\u044f \u0442\u0438\u043f\u0430\u043c\u0438"
     },
     {
@@ -7274,7 +7274,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_3795",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 scope \u043f\u043e \u0443\u0440\u043e\u0432\u043d\u044e"
     },
     {
@@ -7285,7 +7285,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_3802",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u043f\u044b\u0442\u0430\u0435\u0442\u0441\u044f \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0438\u0442\u044c \u0442\u0438\u043f \u043f\u043e \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044e"
     },
     {
@@ -7296,7 +7296,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_3872",
       "community": 12,
-      "community_name": ".get_type_from_ast",
+      "community_name": ".add_error",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0441\u043e\u0432\u043c\u0435\u0441\u0442\u0438\u043c\u043e\u0441\u0442\u044c \u0442\u0438\u043f\u043e\u0432"
     },
     {
@@ -7307,7 +7307,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_3945",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0438\u0449\u0435\u0442 \u0441\u0438\u043c\u0432\u043e\u043b \u0432 \u0442\u0435\u043a\u0443\u0449\u0435\u043c \u0438\u043b\u0438 \u0440\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u0441\u043a\u0438\u0445 scope'\u0430\u0445"
     },
     {
@@ -7329,7 +7329,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_4020",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0432\u044b\u0437\u043e\u0432 \u043c\u0435\u0442\u043e\u0434\u0430 \u043e\u0431\u044a\u0435\u043a\u0442\u0430"
     },
     {
@@ -7362,7 +7362,7 @@
       "_origin": "ast",
       "id": "src_debug_rationale_4069",
       "community": 5,
-      "community_name": ".add_error",
+      "community_name": ".validate_graph",
       "norm_label": "\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u0443\u0435\u0442 \u0432\u044b\u0437\u043e\u0432 \u0432\u0441\u0442\u0440\u043e\u0435\u043d\u043d\u043e\u0438 \u0444\u0443\u043d\u043a\u0446\u0438\u0438"
     },
     {
@@ -7614,8 +7614,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_modules_imports",
-      "community": 65,
-      "community_name": "modules/imports.py",
+      "community": 62,
+      "community_name": "parser.py",
       "norm_label": "modules/imports.py"
     },
     {
@@ -7627,8 +7627,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_modules_imports_cimportprocessor",
-      "community": 65,
-      "community_name": "modules/imports.py",
+      "community": 62,
+      "community_name": "parser.py",
       "norm_label": "cimportprocessor"
     },
     {
@@ -7639,8 +7639,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_modules_imports_cimportprocessor_init",
-      "community": 65,
-      "community_name": "modules/imports.py",
+      "community": 62,
+      "community_name": "parser.py",
       "norm_label": ".__init__()"
     },
     {
@@ -7651,8 +7651,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_modules_imports_cimportprocessor_resolve_cimport",
-      "community": 65,
-      "community_name": "modules/imports.py",
+      "community": 62,
+      "community_name": "parser.py",
       "norm_label": ".resolve_cimport()"
     },
     {
@@ -7770,8 +7770,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "src_modules_imports_rationale_15",
-      "community": 65,
-      "community_name": "modules/imports.py",
+      "community": 62,
+      "community_name": "parser.py",
       "norm_label": "\u043f\u0440\u043e\u0441\u0442\u043e \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u0443\u0435\u0442 c \u0438\u043c\u043f\u043e\u0440\u0442 \u0431\u0435\u0437 \u043f\u0430\u0440\u0441\u0438\u043d\u0433\u0430"
     },
     {
@@ -8143,8 +8143,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "valueerror",
-      "community": 61,
-      "community_name": "TransformerLanguageModel",
+      "community": 14,
+      "community_name": "main.py",
       "norm_label": "valueerror"
     },
     {
@@ -8448,7 +8448,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_init",
       "community": 65,
-      "community_name": "modules/imports.py",
+      "community_name": ".__init__",
       "norm_label": ".__init__()"
     },
     {
@@ -8460,7 +8460,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_reset_state",
       "community": 65,
-      "community_name": "modules/imports.py",
+      "community_name": ".__init__",
       "norm_label": ".reset_state()"
     },
     {
@@ -8603,8 +8603,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_get_current_scope_for_indent",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": ".get_current_scope_for_indent()"
     },
     {
@@ -8676,7 +8676,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_code",
       "community": 65,
-      "community_name": "modules/imports.py",
+      "community_name": ".__init__",
       "norm_label": ".parse_code()"
     },
     {
@@ -8867,8 +8867,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_break",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_break()"
     },
     {
@@ -8879,8 +8879,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_continue",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_continue()"
     },
     {
@@ -8903,8 +8903,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_const",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 39,
+      "community_name": ".parse_complex_expression",
       "norm_label": ".parse_const()"
     },
     {
@@ -8927,8 +8927,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_delete",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_delete()"
     },
     {
@@ -8939,8 +8939,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_return",
-      "community": 9,
-      "community_name": ".parse_expression_to_ast",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_return()"
     },
     {
@@ -8963,8 +8963,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_with_priorities",
-      "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "._parse_with_priorities()"
     },
     {
@@ -8975,8 +8975,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_operator_level",
-      "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "._parse_operator_level()"
     },
     {
@@ -8987,8 +8987,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_unary_operators",
-      "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "._parse_unary_operators()"
     },
     {
@@ -8999,8 +8999,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_is_valid_operator_at",
-      "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "._is_valid_operator_at()"
     },
     {
@@ -9011,8 +9011,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_chained_index_access",
-      "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "._parse_chained_index_access()"
     },
     {
@@ -9023,8 +9023,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_assignment",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": ".parse_assignment()"
     },
     {
@@ -9035,8 +9035,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_augmented_assignment",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": ".parse_augmented_assignment()"
     },
     {
@@ -9048,7 +9048,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_complex_expression",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": ".parse_complex_expression()"
     },
     {
@@ -9107,8 +9107,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_function_call_assignment",
-      "community": 9,
-      "community_name": ".parse_expression_to_ast",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_function_call_assignment()"
     },
     {
@@ -9143,8 +9143,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_openmp_pragma",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_openmp_pragma()"
     },
     {
@@ -9263,8 +9263,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_nested_if",
-      "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_nested_if()"
     },
     {
@@ -9335,8 +9335,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_object_method_call_node",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": ".parse_object_method_call_node()"
     },
     {
@@ -9420,7 +9420,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_is_fully_parenthesized",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": ".is_fully_parenthesized()"
     },
     {
@@ -9432,7 +9432,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_find_lowest_priority_operator",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": ".find_lowest_priority_operator()"
     },
     {
@@ -9444,7 +9444,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_is_identifier_char",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": ".is_identifier_char()"
     },
     {
@@ -9456,7 +9456,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_find_operator_outside_parentheses",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": ".find_operator_outside_parentheses()"
     },
     {
@@ -9468,7 +9468,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_contains_operator",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": ".contains_operator()"
     },
     {
@@ -9491,8 +9491,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_build_operations_from_ast",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": ".build_operations_from_ast()"
     },
     {
@@ -9503,8 +9503,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_find_symbol_recursive",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": ".find_symbol_recursive()"
     },
     {
@@ -9515,8 +9515,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_clean_value",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 39,
+      "community_name": ".parse_complex_expression",
       "norm_label": ".clean_value()"
     },
     {
@@ -9599,8 +9599,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_resolve_method_info",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": ".resolve_method_info()"
     },
     {
@@ -9623,7 +9623,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_35",
       "community": 65,
-      "community_name": "modules/imports.py",
+      "community_name": ".__init__",
       "norm_label": "reset all per-compilation parser state. a parser instance can safely be reused..."
     },
     {
@@ -9688,8 +9688,8 @@
       "source_location": "L238",
       "_origin": "ast",
       "id": "src_parser_rationale_238",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": "\u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 \u043e\u0431\u043b\u0430\u0441\u0442\u044c \u0432\u0438\u0434\u0438\u043c\u043e\u0441\u0442\u0438 \u0434\u043b\u044f \u0437\u0430\u0434\u0430\u043d\u043d\u043e\u0433\u043e \u0443\u0440\u043e\u0432\u043d\u044f \u043e\u0442\u0441\u0442\u0443\u043f\u0430"
     },
     {
@@ -9722,7 +9722,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_377",
       "community": 65,
-      "community_name": "modules/imports.py",
+      "community_name": ".__init__",
       "norm_label": "parse one phils compilation unit into the legacy graph + typed metadata. the..."
     },
     {
@@ -9897,8 +9897,8 @@
       "source_location": "L1876",
       "_origin": "ast",
       "id": "src_parser_rationale_1876",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 break"
     },
     {
@@ -9908,8 +9908,8 @@
       "source_location": "L1887",
       "_origin": "ast",
       "id": "src_parser_rationale_1887",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 continue"
     },
     {
@@ -9941,8 +9941,8 @@
       "source_location": "L2356",
       "_origin": "ast",
       "id": "src_parser_rationale_2356",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 del (\u043f\u043e\u043b\u043d\u043e\u0435 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u0435)"
     },
     {
@@ -9952,8 +9952,8 @@
       "source_location": "L2391",
       "_origin": "ast",
       "id": "src_parser_rationale_2391",
-      "community": 9,
-      "community_name": ".parse_expression_to_ast",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 return"
     },
     {
@@ -9974,8 +9974,8 @@
       "source_location": "L2506",
       "_origin": "ast",
       "id": "src_parser_rationale_2506",
-      "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0441 \u0443\u0447\u0435\u0442\u043e\u043c \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u043e\u0432 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u043e\u0432 python"
     },
     {
@@ -9985,8 +9985,8 @@
       "source_location": "L2754",
       "_origin": "ast",
       "id": "src_parser_rationale_2754",
-      "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u043d\u0430 \u0442\u0435\u043a\u0443\u0449\u0435\u043c \u0443\u0440\u043e\u0432\u043d\u0435 \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u0430 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u043e\u0432"
     },
     {
@@ -9996,8 +9996,8 @@
       "source_location": "L2790",
       "_origin": "ast",
       "id": "src_parser_rationale_2790",
-      "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0443\u043d\u0430\u0440\u043d\u044b\u0435 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u044b"
     },
     {
@@ -10007,8 +10007,8 @@
       "source_location": "L2843",
       "_origin": "ast",
       "id": "src_parser_rationale_2843",
-      "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0447\u0442\u043e \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 \u0432 \u0434\u0430\u043d\u043d\u043e\u0438 \u043f\u043e\u0437\u0438\u0446\u0438\u0438 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u0432\u0430\u043b\u0438\u0434\u043d\u044b\u043c \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u043e\u043c"
     },
     {
@@ -10018,8 +10018,8 @@
       "source_location": "L2890",
       "_origin": "ast",
       "id": "src_parser_rationale_2890",
-      "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community": 9,
+      "community_name": ".parse_expression_to_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0446\u0435\u043f\u043e\u0447\u043a\u0438 \u0438\u043d\u0434\u0435\u043a\u0441\u0430\u0446\u0438\u0438 \u0442\u0438\u043f\u0430 a[0][1][2]"
     },
     {
@@ -10029,8 +10029,8 @@
       "source_location": "L3248",
       "_origin": "ast",
       "id": "src_parser_rationale_3248",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0441\u043e\u0441\u0442\u0430\u0432\u043d\u044b\u0435 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u044f"
     },
     {
@@ -10041,7 +10041,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_3347",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": "\u0440\u0430\u0437\u0431\u0438\u0440\u0430\u0435\u0442 \u0441\u043b\u043e\u0436\u043d\u044b\u0435 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u044f \u0441 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u0438\u043c\u0438 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0430\u043c\u0438 \u0438 \u0441\u043a\u043e\u0431\u043a\u0430\u043c\u0438"
     },
     {
@@ -10095,8 +10095,8 @@
       "source_location": "L3695",
       "_origin": "ast",
       "id": "src_parser_rationale_3695",
-      "community": 9,
-      "community_name": ".parse_expression_to_ast",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430 \u0432\u044b\u0437\u043e\u0432\u0430 \u0444\u0443\u043d\u043a\u0446\u0438\u0438: var x: type = func(args)"
     },
     {
@@ -10128,8 +10128,8 @@
       "source_location": "L3826",
       "_origin": "ast",
       "id": "src_parser_rationale_3826",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": "parse the supported openmp loop directive into structured metadata."
     },
     {
@@ -10194,8 +10194,8 @@
       "source_location": "L4718",
       "_origin": "ast",
       "id": "src_parser_rationale_4718",
-      "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community": 16,
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0435 if \u0432\u043d\u0443\u0442\u0440\u0438 \u0434\u0440\u0443\u0433\u0438\u0445 \u0431\u043b\u043e\u043a\u043e\u0432 (while, for, \u0434\u0440\u0443\u0433\u0438\u0445 if)"
     },
     {
@@ -10260,8 +10260,8 @@
       "source_location": "L5167",
       "_origin": "ast",
       "id": "src_parser_rationale_5167",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u044b\u0437\u043e\u0432 \u043c\u0435\u0442\u043e\u0434\u0430 \u043e\u0431\u044a\u0435\u043a\u0442\u0430 \u0441 \u0443\u0447\u0435\u0442\u043e\u043c \u043d\u0430\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f"
     },
     {
@@ -10338,7 +10338,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5712",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u043f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e \u043b\u0438 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0437\u0430\u043a\u043b\u044e\u0447\u0435\u043d\u043e \u0432 \u0441\u043a\u043e\u0431\u043a\u0438"
     },
     {
@@ -10349,7 +10349,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5730",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u043e\u043c \u0432\u043d\u0435 \u0441\u043a\u043e\u0431\u043e\u043a"
     },
     {
@@ -10360,7 +10360,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5765",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043b\u0438 \u0441\u0438\u043c\u0432\u043e\u043b \u0447\u0430\u0441\u0442\u044c\u044e \u0438\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0442\u043e\u0440\u0430"
     },
     {
@@ -10371,7 +10371,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5769",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u043f\u043e\u0437\u0438\u0446\u0438\u044e \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0430 \u0432\u043d\u0435 \u0441\u043a\u043e\u0431\u043e\u043a, \u0441\u0442\u0440\u043e\u043a \u0438 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0435\u0432"
     },
     {
@@ -10382,7 +10382,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5835",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": ".parse_complex_expression",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043b\u0438 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u043a\u0430\u043a\u043e\u0438-\u043b\u0438\u0431\u043e \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440"
     },
     {
@@ -10403,8 +10403,8 @@
       "source_location": "L5886",
       "_origin": "ast",
       "id": "src_parser_rationale_5886",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": "\u0441\u0442\u0440\u043e\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438 \u0438\u0437 ast \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u044f"
     },
     {
@@ -10414,8 +10414,8 @@
       "source_location": "L5964",
       "_origin": "ast",
       "id": "src_parser_rationale_5964",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": "\u0440\u0435\u043a\u0443\u0440\u0441\u0438\u0432\u043d\u043e \u0438\u0449\u0435\u0442 \u0441\u0438\u043c\u0432\u043e\u043b \u0432 \u0442\u0435\u043a\u0443\u0449\u0435\u043c \u0438 \u0440\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u0441\u043a\u0438\u0445 scope'\u0430\u0445"
     },
     {
@@ -10425,8 +10425,8 @@
       "source_location": "L5992",
       "_origin": "ast",
       "id": "src_parser_rationale_5992",
-      "community": 26,
-      "community_name": ".parse_type_annotation",
+      "community": 39,
+      "community_name": ".parse_complex_expression",
       "norm_label": "\u043e\u0447\u0438\u0449\u0430\u0435\u0442 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u043e\u0442 \u043b\u0438\u0448\u043d\u0438\u0445 \u043f\u0440\u043e\u0431\u0435\u043b\u043e\u0432, \u043d\u043e \u0434\u043b\u044f \u0441\u043b\u043e\u0436\u043d\u044b\u0445 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0438 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 ast"
     },
     {
@@ -10502,8 +10502,8 @@
       "source_location": "L6314",
       "_origin": "ast",
       "id": "src_parser_rationale_6314",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 48,
+      "community_name": ".parse_object_method_call_node",
       "norm_label": "\u0440\u0430\u0437\u0440\u0435\u0448\u0430\u0435\u0442 \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044e \u043e \u043c\u0435\u0442\u043e\u0434\u0435 \u0441 \u0443\u0447\u0435\u0442\u043e\u043c \u043d\u0430\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f"
     },
     {
@@ -10966,7 +10966,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_typedscope",
       "community": 78,
-      "community_name": "TypedScope",
+      "community_name": "TypedModule",
       "norm_label": "typedscope"
     },
     {
@@ -10978,8 +10978,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_typed_ir_typedmodule",
-      "community": 29,
-      "community_name": "build_typed_ir",
+      "community": 78,
+      "community_name": "TypedModule",
       "norm_label": "typedmodule"
     },
     {
@@ -10990,8 +10990,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_typed_ir_typedmodule_raw_scopes",
-      "community": 42,
-      "community_name": "TypedIRBuilder",
+      "community": 78,
+      "community_name": "TypedModule",
       "norm_label": ".raw_scopes()"
     },
     {
@@ -11003,7 +11003,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_typedmodule_scope",
       "community": 78,
-      "community_name": "TypedScope",
+      "community_name": "TypedModule",
       "norm_label": ".scope()"
     },
     {
@@ -11014,8 +11014,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_typed_ir_typedmodule_iter_nodes",
-      "community": 29,
-      "community_name": "build_typed_ir",
+      "community": 78,
+      "community_name": "TypedModule",
       "norm_label": ".iter_nodes()"
     },
     {
@@ -11026,8 +11026,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_typed_ir_typedmodule_to_legacy_json",
-      "community": 42,
-      "community_name": "TypedIRBuilder",
+      "community": 78,
+      "community_name": "TypedModule",
       "norm_label": ".to_legacy_json()"
     },
     {
@@ -11038,8 +11038,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_typed_ir_typedmodule_len",
-      "community": 29,
-      "community_name": "build_typed_ir",
+      "community": 78,
+      "community_name": "TypedModule",
       "norm_label": ".__len__()"
     },
     {
@@ -11050,8 +11050,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_typed_ir_typedmodule_iter",
-      "community": 29,
-      "community_name": "build_typed_ir",
+      "community": 78,
+      "community_name": "TypedModule",
       "norm_label": ".__iter__()"
     },
     {
@@ -11227,7 +11227,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_rationale_79",
       "community": 78,
-      "community_name": "TypedScope",
+      "community_name": "TypedModule",
       "norm_label": "typed view of one parser scope."
     },
     {
@@ -11237,8 +11237,8 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "src_typed_ir_rationale_88",
-      "community": 29,
-      "community_name": "build_typed_ir",
+      "community": 78,
+      "community_name": "TypedModule",
       "norm_label": "typed compilation unit with an explicit compatibility projection. compiler..."
     },
     {
@@ -11248,8 +11248,8 @@
       "source_location": "L99",
       "_origin": "ast",
       "id": "src_typed_ir_rationale_99",
-      "community": 42,
-      "community_name": "TypedIRBuilder",
+      "community": 78,
+      "community_name": "TypedModule",
       "norm_label": "return immutable-pass input for legacy lowering code. the returned dictionaries..."
     },
     {
@@ -11260,7 +11260,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_rationale_107",
       "community": 78,
-      "community_name": "TypedScope",
+      "community_name": "TypedModule",
       "norm_label": "find a typed scope by its parser level."
     },
     {
@@ -11270,8 +11270,8 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "src_typed_ir_rationale_114",
-      "community": 29,
-      "community_name": "build_typed_ir",
+      "community": 78,
+      "community_name": "TypedModule",
       "norm_label": "iterate semantic nodes in source/scope order."
     },
     {
@@ -11281,8 +11281,8 @@
       "source_location": "L119",
       "_origin": "ast",
       "id": "src_typed_ir_rationale_119",
-      "community": 42,
-      "community_name": "TypedIRBuilder",
+      "community": 78,
+      "community_name": "TypedModule",
       "norm_label": "return the compatibility graph used by legacy callers."
     },
     {
@@ -11954,7 +11954,7 @@
       "label": "ocean_tensor_matmul()",
       "file_type": "code",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1335",
+      "source_location": "L1394",
       "_callable": true,
       "_origin": "ast",
       "id": "std_tensor_tensor_runtime_ocean_tensor_matmul",
@@ -11966,7 +11966,7 @@
       "label": "ocean_tensor_shape()",
       "file_type": "code",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1429",
+      "source_location": "L1488",
       "_callable": true,
       "_origin": "ast",
       "id": "std_tensor_tensor_runtime_ocean_tensor_shape",
@@ -11978,7 +11978,7 @@
       "label": "ocean_tensor_ndim()",
       "file_type": "code",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1438",
+      "source_location": "L1497",
       "_callable": true,
       "_origin": "ast",
       "id": "std_tensor_tensor_runtime_ocean_tensor_ndim",
@@ -11990,7 +11990,7 @@
       "label": "ocean_tensor_size()",
       "file_type": "code",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1443",
+      "source_location": "L1502",
       "_callable": true,
       "_origin": "ast",
       "id": "std_tensor_tensor_runtime_ocean_tensor_size",
@@ -12002,7 +12002,7 @@
       "label": "ocean_tensor_device()",
       "file_type": "code",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1448",
+      "source_location": "L1507",
       "_callable": true,
       "_origin": "ast",
       "id": "std_tensor_tensor_runtime_ocean_tensor_device",
@@ -12014,7 +12014,7 @@
       "label": "ocean_tensor_release()",
       "file_type": "code",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1457",
+      "source_location": "L1516",
       "_callable": true,
       "_origin": "ast",
       "id": "std_tensor_tensor_runtime_ocean_tensor_release",
@@ -13039,8 +13039,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_oop_advanced",
-      "community": 67,
-      "community_name": "CCodeGenerator",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_oop_advanced.py"
     },
     {
@@ -13051,8 +13051,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_oop_advanced_compile_and_run",
-      "community": 67,
-      "community_name": "CCodeGenerator",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "compile_and_run()"
     },
     {
@@ -13063,8 +13063,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_oop_advanced_test_oop_constructor_method_mutation_and_composition",
-      "community": 67,
-      "community_name": "CCodeGenerator",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_oop_constructor_method_mutation_and_composition()"
     },
     {
@@ -13075,8 +13075,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_oop_advanced_test_oop_metadata_has_one_canonical_class_model",
-      "community": 67,
-      "community_name": "CCodeGenerator",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_oop_metadata_has_one_canonical_class_model()"
     },
     {
@@ -13087,8 +13087,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_oop_advanced_test_oop_default_constructor_without_init",
-      "community": 67,
-      "community_name": "CCodeGenerator",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_oop_default_constructor_without_init()"
     },
     {
@@ -13099,8 +13099,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_oop_advanced_test_oop_inherited_field_access_uses_embedded_base_layout",
-      "community": 67,
-      "community_name": "CCodeGenerator",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_oop_inherited_field_access_uses_embedded_base_layout()"
     },
     {
@@ -13111,8 +13111,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_oop_advanced_test_oop_rejects_multiple_inheritance",
-      "community": 67,
-      "community_name": "CCodeGenerator",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_oop_rejects_multiple_inheritance()"
     },
     {
@@ -13123,8 +13123,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_oop_advanced_test_oop_rejects_inheritance_cycles",
-      "community": 67,
-      "community_name": "CCodeGenerator",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_oop_rejects_inheritance_cycles()"
     },
     {
@@ -13424,10 +13424,22 @@
       "norm_label": "test_standard_tensor_operations_and_metadata()"
     },
     {
-      "label": "test_standard_tensor_constructor_uses_function_return_dtype()",
+      "label": "test_standard_tensor_float32_matmul_uses_correct_row_major_result()",
       "file_type": "code",
       "source_file": "tests/test_tensor_std.py",
       "source_location": "L128",
+      "_callable": true,
+      "_origin": "ast",
+      "id": "tests_test_tensor_std_test_standard_tensor_float32_matmul_uses_correct_row_major_result",
+      "community": 14,
+      "community_name": "main.py",
+      "norm_label": "test_standard_tensor_float32_matmul_uses_correct_row_major_result()"
+    },
+    {
+      "label": "test_standard_tensor_constructor_uses_function_return_dtype()",
+      "file_type": "code",
+      "source_file": "tests/test_tensor_std.py",
+      "source_location": "L173",
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_tensor_std_test_standard_tensor_constructor_uses_function_return_dtype",
@@ -13439,7 +13451,7 @@
       "label": "test_standard_tensor_multidimensional_augmented_index_assignment()",
       "file_type": "code",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L166",
+      "source_location": "L211",
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_tensor_std_test_standard_tensor_multidimensional_augmented_index_assignment",
@@ -13451,7 +13463,7 @@
       "label": "test_standard_tensor_row_column_and_slice_operations()",
       "file_type": "code",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L205",
+      "source_location": "L250",
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_tensor_std_test_standard_tensor_row_column_and_slice_operations",
@@ -13846,7 +13858,7 @@
       "label": "Compiler pipeline",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L296",
+      "source_location": "L297",
       "_origin": "ast",
       "id": "readme_compiler_pipeline",
       "community": 45,
@@ -13857,7 +13869,7 @@
       "label": "Honest project status",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L313",
+      "source_location": "L314",
       "_origin": "ast",
       "id": "readme_honest_project_status",
       "community": 45,
@@ -13868,7 +13880,7 @@
       "label": "Contributing",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L321",
+      "source_location": "L322",
       "_origin": "ast",
       "id": "readme_contributing",
       "community": 45,
@@ -16510,7 +16522,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L155",
+      "source_location": "L200",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_tensor_std_test_standard_tensor_constructor_uses_function_return_dtype",
@@ -16534,7 +16546,19 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L194",
+      "source_location": "L157",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_tensor_std_test_standard_tensor_float32_matmul_uses_correct_row_major_result",
+      "target": "main_compile_c",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_tensor_std.py",
+      "source_location": "L239",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_tensor_std_test_standard_tensor_multidimensional_augmented_index_assignment",
@@ -16558,7 +16582,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L242",
+      "source_location": "L287",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_tensor_std_test_standard_tensor_row_column_and_slice_operations",
@@ -16713,7 +16737,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L148",
+      "source_location": "L193",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_tensor_std_test_standard_tensor_constructor_uses_function_return_dtype",
@@ -16737,7 +16761,19 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L184",
+      "source_location": "L150",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_tensor_std_test_standard_tensor_float32_matmul_uses_correct_row_major_result",
+      "target": "main_compile_pipeline",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_tensor_std.py",
+      "source_location": "L229",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_tensor_std_test_standard_tensor_multidimensional_augmented_index_assignment",
@@ -16761,7 +16797,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L235",
+      "source_location": "L280",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_tensor_std_test_standard_tensor_row_column_and_slice_operations",
@@ -38883,7 +38919,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1448",
+      "source_location": "L1507",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_c_std_tensor_tensor_runtime",
@@ -39048,7 +39084,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1335",
+      "source_location": "L1394",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_c_std_tensor_tensor_runtime",
@@ -39070,7 +39106,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1438",
+      "source_location": "L1497",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_c_std_tensor_tensor_runtime",
@@ -39169,7 +39205,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1457",
+      "source_location": "L1516",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_c_std_tensor_tensor_runtime",
@@ -39279,7 +39315,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1429",
+      "source_location": "L1488",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_c_std_tensor_tensor_runtime",
@@ -39290,7 +39326,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1443",
+      "source_location": "L1502",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_c_std_tensor_tensor_runtime",
@@ -39475,7 +39511,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1449",
+      "source_location": "L1508",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_device",
@@ -39583,7 +39619,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1339",
+      "source_location": "L1398",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_matmul",
@@ -39595,7 +39631,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1439",
+      "source_location": "L1498",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_ndim",
@@ -39763,7 +39799,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1430",
+      "source_location": "L1489",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_shape",
@@ -39775,7 +39811,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1444",
+      "source_location": "L1503",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_size",
@@ -40230,7 +40266,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1448",
+      "source_location": "L1507",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -40350,7 +40386,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1335",
+      "source_location": "L1394",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -40374,7 +40410,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1438",
+      "source_location": "L1497",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -40422,7 +40458,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1457",
+      "source_location": "L1516",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -40542,7 +40578,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1429",
+      "source_location": "L1488",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -40554,7 +40590,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1443",
+      "source_location": "L1502",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -40735,7 +40771,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1371",
+      "source_location": "L1430",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_matmul",
@@ -40903,7 +40939,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1389",
+      "source_location": "L1448",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_matmul",
@@ -40999,7 +41035,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1374",
+      "source_location": "L1433",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_matmul",
@@ -41251,7 +41287,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1360",
+      "source_location": "L1419",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_matmul",
@@ -41407,7 +41443,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1324",
+      "source_location": "L1383",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_matmul_cpu",
@@ -41467,7 +41503,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1327",
+      "source_location": "L1386",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_matmul_cpu",
@@ -41875,7 +41911,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1353",
+      "source_location": "L1412",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_matmul",
@@ -41887,7 +41923,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "std/tensor/tensor_runtime.c",
-      "source_location": "L1364",
+      "source_location": "L1423",
       "weight": 1.0,
       "_origin": "ast",
       "source": "std_tensor_tensor_runtime_ocean_tensor_matmul",
@@ -44088,7 +44124,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L128",
+      "source_location": "L173",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_tensor_std",
@@ -44110,7 +44146,18 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L166",
+      "source_location": "L128",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_tensor_std",
+      "target": "tests_test_tensor_std_test_standard_tensor_float32_matmul_uses_correct_row_major_result",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_tensor_std.py",
+      "source_location": "L211",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_tensor_std",
@@ -44132,7 +44179,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_tensor_std.py",
-      "source_location": "L205",
+      "source_location": "L250",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_tensor_std",
@@ -44385,7 +44432,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L296",
+      "source_location": "L297",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
@@ -44396,7 +44443,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L321",
+      "source_location": "L322",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
@@ -44407,7 +44454,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L313",
+      "source_location": "L314",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_ocean",
@@ -45494,5 +45541,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "b76d7120d77e62f50352fab20b485bd95db0deb6"
+  "built_at_commit": "99e00921d44d53575a67c245e947f1d23ac62c33"
 }

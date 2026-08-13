@@ -1315,6 +1315,65 @@ static ocean_tensor_handle_t ocean_tensor_matmul_cpu(
     ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
         shape, 2, left->dtype, OCEAN_TENSOR_CPU
     );
+
+    /*
+     * The normal Tensor constructors produce contiguous row-major storage.
+     * Keep this hot path independent of the generic scalar accessors: those
+     * accessors intentionally support every dtype, but converting every
+     * element through long double dominates small and medium CPU matmuls.
+     * The i-k-j order also streams through rows of B and C instead of reading
+     * B one cache-unfriendly column at a time.
+     */
+    bool left_contiguous = left->strides[1] == 1 &&
+        left->strides[0] == left->shape[1];
+    bool right_contiguous = right->strides[1] == 1 &&
+        right->strides[0] == right->shape[1];
+    if (left_contiguous && right_contiguous) {
+        size_t rows = left->shape[0];
+        size_t inner = left->shape[1];
+        size_t cols = right->shape[1];
+
+        if (left->dtype == OCEAN_TENSOR_FLOAT32) {
+            const float *restrict left_data =
+                (const float *)left->cpu_data;
+            const float *restrict right_data =
+                (const float *)right->cpu_data;
+            float *restrict result_data = (float *)result->cpu_data;
+            for (size_t row = 0; row < rows; ++row) {
+                float *result_row = result_data + row * cols;
+                const float *left_row = left_data + row * inner;
+                for (size_t k = 0; k < inner; ++k) {
+                    float left_value = left_row[k];
+                    const float *right_row = right_data + k * cols;
+                    for (size_t col = 0; col < cols; ++col) {
+                        result_row[col] += left_value * right_row[col];
+                    }
+                }
+            }
+            return result;
+        }
+
+        if (left->dtype == OCEAN_TENSOR_FLOAT64) {
+            const double *restrict left_data =
+                (const double *)left->cpu_data;
+            const double *restrict right_data =
+                (const double *)right->cpu_data;
+            double *restrict result_data = (double *)result->cpu_data;
+            for (size_t row = 0; row < rows; ++row) {
+                double *result_row = result_data + row * cols;
+                const double *left_row = left_data + row * inner;
+                for (size_t k = 0; k < inner; ++k) {
+                    double left_value = left_row[k];
+                    const double *right_row = right_data + k * cols;
+                    for (size_t col = 0; col < cols; ++col) {
+                        result_row[col] += left_value * right_row[col];
+                    }
+                }
+            }
+            return result;
+        }
+    }
+
     for (size_t row = 0; row < left->shape[0]; ++row) {
         for (size_t col = 0; col < right->shape[1]; ++col) {
             long double sum = 0.0L;

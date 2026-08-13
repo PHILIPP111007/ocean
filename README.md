@@ -289,9 +289,10 @@ gcc -std=c11 -Wall -Wextra -Wpedantic \
 
 ## Performance snapshot
 
-On the development machine, the current `examples/matmul.oc` benchmark runs in roughly **3 seconds
-without compiler optimization** and **under 1 second with `-O3`**. These numbers are hardware- and
-compiler-dependent; the benchmark is the source of truth for comparisons.
+On the development machine, the current `examples/matmul.oc` benchmark runs in roughly **5 seconds
+without compiler optimization** and **under 1 second with `-O3`**. CPU `float32`/`float64` matmul
+uses a contiguous row-major fast path; other dtypes and layouts retain a generic fallback. These
+numbers are hardware- and compiler-dependent; the benchmark is the source of truth for comparisons.
 
 ## Compiler pipeline
 
