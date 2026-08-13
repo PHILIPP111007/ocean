@@ -3337,67 +3337,6 @@ class Parser:
 
         return True
 
-    def parse_expression(self, expression: str, target_var: str, scope: dict):
-        """Парсит сложные выражения с несколькими операциями"""
-        # Упрощенная версия - поддерживает только одну операцию
-        # Для полной поддержки нужно реализовать парсер выражений с учетом приоритета
-
-        operators = [
-            ("**", "POWER", 10),
-            ("*", "MULTIPLY", 9),
-            ("/", "DIVIDE", 9),
-            ("//", "INTEGER_DIVIDE", 9),
-            ("%", "MODULO", 9),
-            ("+", "ADD", 8),
-            ("-", "SUBTRACT", 8),
-            ("<<", "LEFT_SHIFT", 7),
-            (">>", "RIGHT_SHIFT", 7),
-            ("&", "BITWISE_AND", 6),
-            ("^", "BITWISE_XOR", 5),
-            ("|", "BITWISE_OR", 4),
-        ]
-
-        # Ищем оператор с наивысшим приоритетом
-        for op_symbol, op_type, priority in operators:
-            if op_symbol in expression:
-                parts = expression.split(
-                    op_symbol, 1
-                )  # Разделяем только по первому вхождению
-                if len(parts) == 2:
-                    left, right = parts[0].strip(), parts[1].strip()
-
-                    operations = [
-                        {
-                            "type": "BINARY_OPERATION",
-                            "target": target_var,
-                            "operator": op_type,
-                            "operator_symbol": op_symbol,
-                            "left": left,
-                            "right": right,
-                        }
-                    ]
-
-                    dependencies = []
-                    if left.isalpha() and left not in KEYS and left not in DATA_TYPES:
-                        dependencies.append(left)
-                    if (
-                        right.isalpha()
-                        and right not in KEYS
-                        and right not in DATA_TYPES
-                    ):
-                        dependencies.append(right)
-
-                    return operations, dependencies
-
-        # Если операций нет - простое присваивание
-        return [
-            {
-                "type": "ASSIGN",
-                "target": target_var,
-                "value": self.clean_value(expression),
-            }
-        ], []
-
     def parse_complex_expression(
         self,
         target: str,
@@ -5222,44 +5161,6 @@ class Parser:
             }
         )
         return True
-
-    def parse_object_creation(self, expression: str) -> dict:
-        """Парсит создание объекта: ClassName(arg1, arg2, ...)"""
-        pattern = r"([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)"
-        match = re.match(pattern, expression)
-
-        if not match:
-            return {"type": "unknown", "value": expression}
-
-        class_name, args_str = match.groups()
-
-        # Парсим аргументы
-        args = []
-        if args_str.strip():
-            args = self.parse_function_arguments_to_ast(args_str)
-
-        return {"type": "constructor_call", "class_name": class_name, "arguments": args}
-
-    def parse_static_method_call(self, expression: str) -> dict:
-        """Парсит вызов статического метода: ClassName.method(args)"""
-        pattern = r"([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)"
-        match = re.match(pattern, expression)
-
-        if not match:
-            return {"type": "unknown", "value": expression}
-
-        class_name, method_name, args_str = match.groups()
-
-        args = []
-        if args_str.strip():
-            args = self.parse_function_arguments_to_ast(args_str)
-
-        return {
-            "type": "static_method_call",
-            "class_name": class_name,
-            "method": method_name,
-            "arguments": args,
-        }
 
     def parse_object_method_call_node(
         self, line: str, scope: dict, obj_name: str, method_name: str, args_str: str
