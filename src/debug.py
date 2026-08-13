@@ -1807,108 +1807,6 @@ class JSONValidator:
                     node_idx,
                 )
 
-    def _legacy_validate_assignment(
-        self, node: Dict, node_idx: int, scope_idx: int, symbol_table: Dict, level: int
-    ):
-        """Валидирует присваивание"""
-        symbols = node.get("symbols", [])
-        dependencies = node.get("dependencies", [])
-        operations = node.get("operations", [])
-        content = node.get("content", "")
-
-        # 1. Проверяем левую часть (целевую переменную)
-        for symbol in symbols:
-            symbol_info = self.get_symbol_info(symbol, level)
-            logger.debug(
-                f"  Проверка переменной '{symbol}': symbol_info={symbol_info is not None}"
-            )
-
-            if not symbol_info:
-                self.add_error(
-                    f"присваиваемая переменная '{symbol}' не объявлена",
-                    scope_idx,
-                    node_idx,
-                )
-            else:
-                # Проверяем, не была ли переменная удалена
-                logger.debug(
-                    f"    Состояние переменной '{symbol}': {self.get_variable_state(symbol, level)}"
-                )
-                logger.debug(
-                    f"    Удалена ли: {self.is_variable_deleted(symbol, level)}"
-                )
-
-                if self.is_variable_deleted(symbol, level):
-                    # Получаем историю переменной
-                    key = (level, symbol)
-                    if key in self.variable_history:
-                        logger.debug(f"    История переменной {symbol}:")
-                        for action in self.variable_history[key]:
-                            logger.debug(
-                                f"      Действие: {action['action']}, content: {action.get('content', '')}"
-                            )
-
-                    # Проверяем, была ли после удаления переинициализация
-                    last_action = self.get_last_variable_action(symbol, level)
-                    if last_action and last_action["action"] == "delete":
-                        # Ищем объявления после удаления
-                        found_redeclaration = False
-                        for action in self.variable_history.get(key, []):
-                            if (
-                                action["action"] == "declare"
-                                and action["timestamp"] > last_action["timestamp"]
-                            ):
-                                found_redeclaration = True
-                                break
-
-                        if not found_redeclaration:
-                            self.add_error(
-                                f"переменная '{symbol}' была удалена и требует переинициализации",
-                                scope_idx,
-                                node_idx,
-                            )
-                elif symbol_info.get("key") == "const":
-                    self.add_error(
-                        f"попытка присваивания константе '{symbol}'",
-                        scope_idx,
-                        node_idx,
-                    )
-
-        # 2. Проверяем правую часть выражения
-        # Извлекаем правую часть из content
-        if symbols and content:
-            target_var = symbols[0]
-            # Вырезаем правую часть после "="
-            if "=" in content:
-                expression = content.split("=", 1)[1].strip()
-                logger.debug(f"  Выражение в правой части: '{expression}'")
-
-                # Проверяем вызовы функций в правой части
-                self.validate_expression(expression, scope_idx, node_idx, level)
-
-                # Проверяем совместимость типов
-                self.validate_type_compatibility(
-                    target_var, expression, scope_idx, node_idx, level
-                )
-
-        # 3. Проверяем зависимости (используемые переменные)
-        for dep in dependencies:
-            logger.debug(f"  Проверка зависимости '{dep}'")
-            found = self.find_symbol_in_scope(dep, level)
-            logger.debug(f"    Найдена в scope: {found}")
-
-            if not found:
-                self.add_error(
-                    f"используемая переменная '{dep}' не объявлена", scope_idx, node_idx
-                )
-            elif self.is_variable_deleted(dep, level):
-                logger.debug(
-                    f"    Переменная '{dep}' удалена: {self.is_variable_deleted(dep, level)}"
-                )
-                self.add_error(
-                    f"используемая переменная '{dep}' была удалена", scope_idx, node_idx
-                )
-
     def validate_delete(
         self, node: Dict, node_idx: int, scope_idx: int, symbol_table: Dict, level: int
     ):
@@ -2255,59 +2153,6 @@ class JSONValidator:
 
         traverse(ast)
         return dependencies
-
-    def _legacy_validate_builtin_function_call(
-        self, node: Dict, node_idx: int, scope_idx: int, symbol_table: Dict, level: int
-    ):
-        """Валидирует вызов встроенной функции"""
-        func_name = node.get("function")
-        arguments = node.get("arguments", [])
-        dependencies = node.get("dependencies", [])
-
-        if func_name not in self.builtin_functions:
-            self.add_error(
-                f"встроенная функция '{func_name}' не поддерживается",
-                scope_idx,
-                node_idx,
-            )
-            return
-
-        # ... остальная валидация ...
-
-        # Проверяем зависимости (переменные в аргументах)
-        for dep in dependencies:
-            if not self.find_symbol_in_scope(dep, level):
-                self.add_error(
-                    f"переменная '{dep}' в аргументе функции '{func_name}' не объявлена",
-                    scope_idx,
-                    node_idx,
-                )
-            elif self.is_variable_deleted(dep, level):
-                # Но нужно проверить, не было ли использование раньше удаления
-                node_id = f"{scope_idx}.{node_idx}"
-                current_timestamp = None
-                for action in self.variable_history.get((level, dep), []):
-                    if action.get("node_id") == node_id:
-                        current_timestamp = action.get("timestamp")
-                        break
-
-                if current_timestamp is not None:
-                    # Ищем удаление после этого использования
-                    found_delete_after = False
-                    for action in self.variable_history.get((level, dep), []):
-                        if (
-                            action["action"] == "delete"
-                            and action["timestamp"] > current_timestamp
-                        ):
-                            found_delete_after = True
-                            break
-
-                    if not found_delete_after:
-                        self.add_error(
-                            f"переменная '{dep}' в аргументе функции '{func_name}' была удалена",
-                            scope_idx,
-                            node_idx,
-                        )
 
     def validate_print(
         self, node: Dict, node_idx: int, scope_idx: int, symbol_table: Dict, level: int
@@ -3766,36 +3611,6 @@ class JSONValidator:
                     scope_idx,
                     None,
                 )
-
-    def _legacy_collect_vars_from_ast(self, ast: Dict, used_vars: set):
-        """Собирает переменные из AST"""
-        if not isinstance(ast, dict):
-            return
-
-        node_type = ast.get("type")
-
-        if node_type == "variable":
-            var_name = ast.get("value")
-            if (
-                var_name
-                and var_name.isalpha()
-                and var_name not in ["True", "False", "None"]
-            ):
-                used_vars.add(var_name)
-
-        elif node_type == "binary_operation":
-            self._collect_vars_from_ast(ast.get("left"), used_vars)
-            self._collect_vars_from_ast(ast.get("right"), used_vars)
-
-        elif node_type == "unary_operation":
-            self._collect_vars_from_ast(ast.get("operand"), used_vars)
-
-        elif node_type == "function_call":
-            func_name = ast.get("function", "")
-            # Игнорируем функции с @
-            if not func_name.startswith("@"):
-                for arg in ast.get("arguments", []):
-                    self._collect_vars_from_ast(arg, used_vars)
 
     def validate_return_paths(self, scope: Dict, scope_idx: int):
         """Проверяет, что все пути выполнения функции возвращают значение"""
