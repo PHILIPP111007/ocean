@@ -4,8 +4,8 @@ from src.compiler import CCodeGenerator
 
 
 def generate(source: str) -> str:
-    data = Parser(base_path=base_path).parse_code(source)
-    return CCodeGenerator().generate_from_json(data)
+    typed_ir = Parser(base_path=base_path).parse_typed(source)
+    return CCodeGenerator().generate_from_typed_ir(typed_ir)
 
 
 def test_array_lowering_and_index_mutation():

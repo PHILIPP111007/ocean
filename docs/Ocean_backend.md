@@ -5,9 +5,9 @@ The public Python API remains:
 
 ```python
 from src.codegen import CCodeGenerator
-from src.typed_ir import build_typed_ir
+from src.parser import Parser
 
-typed_module = build_typed_ir(ast)
+typed_module = Parser().parse_typed(source)
 c_code = CCodeGenerator().generate_from_typed_ir(typed_module)
 ```
 

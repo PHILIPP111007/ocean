@@ -16,7 +16,11 @@ class OrchestratorMixin:
         return self._generate_from_typed_scopes(typed_ir.backend_scopes())
 
     def generate_from_json(self, json_data: List[Dict]) -> str:
-        """Compatibility entry point for callers with parser JSON."""
+        """Deprecated compatibility entry point for parser-graph callers.
+
+        Internal compiler paths must call :meth:`generate_from_typed_ir`.
+        This adapter remains temporarily so downstream users can migrate.
+        """
         return self.generate_from_typed_ir(build_typed_ir(json_data))
 
     def _generate_from_typed_scopes(self, json_data: List[Mapping]) -> str:

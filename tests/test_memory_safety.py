@@ -6,8 +6,8 @@ from src.parser import Parser
 
 
 def compile_ocean(source: str) -> str:
-    data = Parser().parse_code(source)
-    return CCodeGenerator().generate_from_json(data)
+    typed_ir = Parser().parse_typed(source)
+    return CCodeGenerator().generate_from_typed_ir(typed_ir)
 
 
 def validate_ocean(source: str) -> dict:
@@ -28,7 +28,7 @@ def main() -> int:
     assert not report["is_valid"]
     assert any("unsafe" in error["message"] for error in report["errors"])
     with pytest.raises(RuntimeError, match="unsafe"):
-        CCodeGenerator().generate_from_json(data)
+        CCodeGenerator().generate_from_typed_ir(Parser().parse_typed(source))
 
 
 def test_raw_pointer_requires_unsafe_block():

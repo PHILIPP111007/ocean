@@ -7,8 +7,8 @@ from src.parser import Parser
 
 
 def compile_and_run(source: str, tmp_path) -> str:
-    data = Parser().parse_code(source)
-    c_code = CCodeGenerator().generate_from_json(data)
+    typed_ir = Parser().parse_typed(source)
+    c_code = CCodeGenerator().generate_from_typed_ir(typed_ir)
     c_file = tmp_path / "program.c"
     executable = tmp_path / "program"
     c_file.write_text(c_code, encoding="utf-8")
@@ -68,7 +68,7 @@ def main() -> int:
 """
 
     generator = CCodeGenerator()
-    generator.generate_from_json(Parser().parse_code(source))
+    generator.generate_from_typed_ir(Parser().parse_typed(source))
 
     box = generator.class_registry.get("Box")
     assert box.bases == []
@@ -110,8 +110,8 @@ def main() -> int:
     return 0
 """
 
-    data = Parser().parse_code(source)
-    c_code = CCodeGenerator().generate_from_json(data)
+    typed_ir = Parser().parse_typed(source)
+    c_code = CCodeGenerator().generate_from_typed_ir(typed_ir)
     assert "self->base.value" in c_code
     c_file = tmp_path / "inherited.c"
     executable = tmp_path / "inherited"
@@ -137,7 +137,7 @@ class Invalid(Left, Right):
 """
 
     with pytest.raises(RuntimeError, match="multiple inheritance"):
-        CCodeGenerator().generate_from_json(Parser().parse_code(source))
+        CCodeGenerator().generate_from_typed_ir(Parser().parse_typed(source))
 
 
 def test_oop_rejects_inheritance_cycles():
@@ -150,4 +150,4 @@ class Right(Left):
 """
 
     with pytest.raises(RuntimeError, match="inheritance cycle"):
-        CCodeGenerator().generate_from_json(Parser().parse_code(source))
+        CCodeGenerator().generate_from_typed_ir(Parser().parse_typed(source))

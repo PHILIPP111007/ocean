@@ -1,5 +1,5 @@
 from src.parser import Parser
-from src.typed_ir import TypedNode, TypedScope, build_typed_ir
+from src.typed_ir import TypedModule, TypedNode, TypedScope, build_typed_ir
 from src.codegen import CCodeGenerator
 from src.debug import JSONValidator
 
@@ -22,6 +22,15 @@ def main() -> int:
     assert borrow.reads == ("values",)
     assert write.effect == "write"
     assert write.writes == ("values",)
+
+
+def test_parser_typed_entrypoint_is_ready_for_compiler_callers():
+    module = Parser().parse_typed(
+        "def main() -> int:\n    return 0\n"
+    )
+
+    assert isinstance(module, TypedModule)
+    assert any(scope.raw.get("type") == "function" for scope in module.scopes)
 
 
 def test_typed_ir_keeps_codegen_compatibility_format():

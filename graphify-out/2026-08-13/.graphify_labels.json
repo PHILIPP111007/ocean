@@ -83,5 +83,5 @@
   "81": "test_while_loop.py",
   "82": "test_functions.py",
   "83": "test_print.py",
-  "84": ".raw_scopes"
+  "84": ".to_legacy_json"
 }

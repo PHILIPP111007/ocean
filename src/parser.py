@@ -462,6 +462,17 @@ class Parser:
         processed_code = self.import_processor.process_imports(code, file_path)
         return _parse_processed_code(processed_code)
 
+    def parse_typed(self, code: str, file_path: str = ""):
+        """Parse source into the canonical ``TypedModule`` API.
+
+        ``parse_code`` remains available for parser-graph compatibility and
+        tooling. Compiler callers should use this method so the legacy graph
+        does not become their intermediate representation.
+        """
+        from src.typed_ir import build_typed_ir
+
+        return build_typed_ir(self.parse_code(code, file_path=file_path))
+
     def parse_line(
         self,
         line: str,

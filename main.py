@@ -24,7 +24,6 @@ from src.package_model import (
     profile_flags,
 )
 from src.parser import Parser
-from src.typed_ir import build_typed_ir
 
 
 DEFAULT_CFLAGS = ["-std=c11"]
@@ -274,16 +273,17 @@ def compile_pipeline(base_path: str | Path, p_path: str | Path, json_path: str |
 
     if not quiet:
         print("\n=========== PARSER ===========")
-    data = Parser(base_path=str(base_path)).parse_code(code, file_path=str(source_path))
+    typed_ir = Parser(base_path=str(base_path)).parse_typed(
+        code, file_path=str(source_path)
+    )
     _ensure_parent(json_output_path)
     json_output_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False, default=str),
+        json.dumps(typed_ir.to_legacy_json(), indent=2, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
 
     if not quiet:
         print("\n=========== DEBUGGER ===========")
-    typed_ir = build_typed_ir(data)
     result_validation = JSONValidator().validate_typed_ir(typed_ir)
     if not quiet:
         print("\nРезультат валидации:")
