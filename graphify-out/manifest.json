@@ -1,7 +1,7 @@
 {
   "main.py": {
-    "mtime": 1786642267.7691867,
-    "ast_hash": "0dc48516e65b5619ddd83d1b09296b32",
+    "mtime": 1786650886.5080204,
+    "ast_hash": "5c98e22499cb16221be8a68429654529",
     "semantic_hash": ""
   },
   "src/__init__.py": {
@@ -260,8 +260,8 @@
     "semantic_hash": ""
   },
   "docs/Handoff.md": {
-    "mtime": 1786641403.8980536,
-    "ast_hash": "eedbe951297715476248346ca0359ec3",
+    "mtime": 1786647605.905893,
+    "ast_hash": "2c0f43c1cde39e31be29dda91a190097",
     "semantic_hash": ""
   },
   "docs/MEMORY_MODEL.md": {
@@ -275,8 +275,8 @@
     "semantic_hash": ""
   },
   "src/codegen/tensor_codegen.py": {
-    "mtime": 1786644520.6264987,
-    "ast_hash": "96ce00f9bee16d015402bf26bfeb377c",
+    "mtime": 1786650886.7520232,
+    "ast_hash": "c8126a0bd578dc0e9e47d46476e0c3e3",
     "semantic_hash": ""
   },
   "tests/test_array_tensor.py": {
@@ -375,13 +375,13 @@
     "semantic_hash": ""
   },
   "std/tensor/tensor_runtime.c": {
-    "mtime": 1786646259.504582,
-    "ast_hash": "cc1e8ed75f2862940f9c4f425f2688a8",
+    "mtime": 1786653136.7441804,
+    "ast_hash": "9507f22ad4d019feeeb873d7d3384245",
     "semantic_hash": ""
   },
   "std/tensor/tensor_runtime.h": {
-    "mtime": 1786646259.2885792,
-    "ast_hash": "ec22aeae1b2891445bc5c92750c8f98f",
+    "mtime": 1786650957.344828,
+    "ast_hash": "d60a1a70fe25402587fd66b71a777c46",
     "semantic_hash": ""
   },
   "tests/test_tensor_std.py": {
@@ -415,8 +415,8 @@
     "semantic_hash": ""
   },
   "std/io/file_runtime.c": {
-    "mtime": 1786644400.1130116,
-    "ast_hash": "b4ad3a4db33b89df096e0714a6f66373",
+    "mtime": 1786650887.5120318,
+    "ast_hash": "071a4c2f4efff33d377a152dd4399615",
     "semantic_hash": ""
   },
   "std/io/file_runtime.h": {
@@ -437,11 +437,6 @@
   "std/io/README.md": {
     "mtime": 1786644898.2152016,
     "ast_hash": "96082e96b75f3d818f9762a504d286ee",
-    "semantic_hash": ""
-  },
-  "examples/load_npy.generated.c": {
-    "mtime": 1786646264.572647,
-    "ast_hash": "60824bb608fd20fb8b8276d2f065c700",
     "semantic_hash": ""
   }
 }
