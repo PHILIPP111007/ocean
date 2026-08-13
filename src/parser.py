@@ -704,14 +704,14 @@ class Parser:
 
         # Паттерн: my_list[0] += 5
         augmented_index_pattern = (
-            r"^([a-zA-Z_][a-zA-Z0-9_]*)\[(\d+)\]\s*(\+=|-=|\*=|/=|//=|%=)\s*(.+)$"
+            r"^([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]\s*(\+=|-=|\*=|/=|//=|%=)\s*(.+)$"
         )
         augmented_index_match = re.match(augmented_index_pattern, line_content)
 
         if augmented_index_match:
             var_name, index_str, operator, value = augmented_index_match.groups()
             parsed = self.parse_augmented_index_assignment(
-                line_content, scope, var_name, int(index_str), operator, value
+                line_content, scope, var_name, index_str, operator, value
             )
             return current_index + 1
 
@@ -736,7 +736,7 @@ class Parser:
 
         # Составные операции с индексами: my_list[0] += 5
         augmented_index_pattern = (
-            r"^([a-zA-Z_][a-zA-Z0-9_]*)\[(\d+)\]\s*(\+=|-=|\*=|/=|//=|%=)\s*(.+)$"
+            r"^([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]\s*(\+=|-=|\*=|/=|//=|%=)\s*(.+)$"
         )
         augmented_index_match = re.match(augmented_index_pattern, line)
 
@@ -1463,11 +1463,18 @@ class Parser:
         line: str,
         scope: dict,
         var_name: str,
-        index: int,
+        index: str,
         operator: str,
         value: str,
     ) -> bool:
         """Парсит составную операцию с индексом: my_list[0] += 5"""
+        # Parse one or more indices. ``a[0, 1]`` is represented explicitly so
+        # the backend can perform a single read-modify-write operation.
+        index_asts = self.parse_function_arguments_to_ast(index)
+        if not index_asts:
+            logger.debug(f"Error: Некорректный индекс: '{index}'")
+            return False
+
         # Парсим значение
         value_ast = self.parse_expression_to_ast(value)
 
@@ -1493,7 +1500,8 @@ class Parser:
             {
                 "type": "AUGMENTED_INDEX_ASSIGN",
                 "variable": var_name,
-                "index": {"type": "literal", "value": index, "data_type": "int"},
+                "index": index_asts[0],
+                "indices": index_asts,
                 "operator": op_type,
                 "operator_symbol": operator,
                 "value": value_ast,
@@ -1510,7 +1518,8 @@ class Parser:
                 "node": "augmented_index_assignment",
                 "content": line,
                 "variable": var_name,
-                "index": {"type": "literal", "value": index, "data_type": "int"},
+                "index": index_asts[0],
+                "indices": index_asts,
                 "operator": operator,
                 "value": value_ast,
                 "operations": operations,

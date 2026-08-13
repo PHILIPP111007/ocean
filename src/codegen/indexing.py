@@ -394,13 +394,39 @@ class IndexingMixin:
         if isinstance(variable, str) and not variable.startswith("self."):
             self.assert_can_mutate(variable)
         index_ast = node.get("index", {})
+        indices_ast = node.get("indices") or [index_ast]
         operator = node.get("operator", "")
         value_ast = node.get("value", {})
 
-        index_expr = self.generate_expression(index_ast)
+        index_exprs = [self.generate_expression(index) for index in indices_ast]
+        index_expr = index_exprs[0]
         value_expr = self.generate_expression(value_ast)
 
         var_info = self.get_variable_info(variable)
+
+        target_type = var_info.get("py_type", "") if var_info else ""
+        if not target_type and isinstance(variable, str) and variable.startswith("self."):
+            current_class = self._get_current_class()
+            field = self.class_registry.field(current_class, variable[5:]) if current_class else None
+            target_type = field.py_type if field else ""
+
+        if self.is_device_tensor_type(target_type) or self.is_tensor_type(target_type):
+            if self.is_device_tensor_type(target_type):
+                target_expr = variable
+                if variable.startswith("self."):
+                    target_expr = f"self->{variable[5:]}"
+                current_expr = f"Tensor_get({target_expr}, {', '.join(index_exprs)})"
+            else:
+                target_expr = variable
+                current_expr = self._tensor_index_call(
+                    target_expr, target_type, index_exprs
+                )
+            op_symbol = operator.replace("=", "")
+            updated_expr = f"({current_expr} {op_symbol} {value_expr})"
+            self.generate_tensor_index_assignment(
+                target_expr, target_type, indices_ast, updated_expr
+            )
+            return
 
         if var_info and var_info.get("py_type", "").startswith("list["):
             struct_name = self.generate_list_struct_name(var_info["py_type"])

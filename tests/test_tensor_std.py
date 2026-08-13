@@ -171,3 +171,39 @@ def main() -> int:
     )
 
     assert result.stdout.splitlines() == ["2"]
+
+
+def test_standard_tensor_multidimensional_augmented_index_assignment(tmp_path):
+    source = tmp_path / "tensor_augmented_index.oc"
+    source.write_text(
+        """
+import <std/tensor/tensor.oc>
+
+def main() -> int:
+    var value: Tensor[float32] = Tensor.from_list([[1.0, 3.0]], "cpu")
+    value[0, 1] *= 2
+    print(value[0, 1])
+    return 0
+""",
+        encoding="utf-8",
+    )
+    json_path = tmp_path / "tensor_augmented_index.json"
+    c_path = tmp_path / "tensor_augmented_index.generated.c"
+    binary_path = tmp_path / "tensor_augmented_index"
+
+    compile_pipeline(
+        str(Path(__file__).resolve().parents[1]),
+        source,
+        json_path,
+        c_path,
+        quiet=True,
+    )
+    compile_c(c_path, binary_path)
+    result = subprocess.run(
+        [str(binary_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == ["6.000000"]
