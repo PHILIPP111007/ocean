@@ -1,7 +1,7 @@
 # Graph Report - phils_language  (2026-08-13)
 
 ## Corpus Check
-- 79 files · ~95,183 words
+- 79 files · ~95,223 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e3a1d623`
+- Built from commit: `17d9bde9`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -96,7 +96,7 @@
 - test_while_loop.py
 - test_functions.py
 - test_print.py
-- .raw_scopes
+- .to_legacy_json
 
 ## God Nodes (most connected - your core abstractions)
 1. `JSONValidator` - 143 edges
@@ -269,7 +269,7 @@ Nodes (11): 1. `ocean_` C namespace, 2. Automatic ownership management, 3. Hybri
 
 ### Community 42 - "Any"
 Cohesion: 0.35
-Nodes (4): Any, Return the compatibility graph used by legacy callers., Lower parser dictionaries into typed scopes and effect-annotated nodes., TypedIRBuilder
+Nodes (4): Any, Return a lossless compatibility projection of parser scopes. The returned…, Lower parser dictionaries into typed scopes and effect-annotated nodes., TypedIRBuilder
 
 ### Community 43 - "test_memory_safety.py"
 Cohesion: 0.27
@@ -373,7 +373,7 @@ Nodes (16): main(), measure(), Path, Benchmark the generated C program for examp
 
 ### Community 76 - "TypedNode"
 Cohesion: 0.20
-Nodes (3): Semantic metadata for one legacy graph node., Structured OpenMP metadata attached to a loop, if present., TypedNode
+Nodes (3): Semantic metadata and read-only mapping view for one graph node., Structured OpenMP metadata attached to a loop, if present., TypedNode
 
 ### Community 77 - ".resolved_methods"
 Cohesion: 0.50
