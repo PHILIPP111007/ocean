@@ -1,4 +1,5 @@
 #include "std/tensor/tensor_runtime.h"
+#include "std/tensor/tensor_backend.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -27,7 +28,7 @@ typedef enum ocean_tensor_dtype {
 } ocean_tensor_dtype;
 
 struct ocean_tensor_handle {
-    int device;
+    ocean_tensor_backend_kind device;
     ocean_tensor_dtype dtype;
     size_t item_size;
     size_t ndim;
@@ -40,10 +41,20 @@ struct ocean_tensor_handle {
 #endif
 };
 
-enum {
-    OCEAN_TENSOR_CPU = 0,
-    OCEAN_TENSOR_GPU = 1,
-};
+#define OCEAN_TENSOR_CPU OCEAN_TENSOR_BACKEND_CPU
+#define OCEAN_TENSOR_GPU OCEAN_TENSOR_BACKEND_OPENCL
+
+static const ocean_tensor_backend_ops *ocean_tensor_backend_for_device(
+    ocean_tensor_backend_kind device
+);
+static ocean_tensor_handle_t ocean_tensor_matmul_cpu(
+    ocean_tensor_handle_t left,
+    ocean_tensor_handle_t right
+);
+static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
+    ocean_tensor_handle_t left,
+    ocean_tensor_handle_t right
+);
 
 static ocean_tensor_handle_t ocean_tensor_restore_device(
     const ocean_tensor_handle_t source,
@@ -205,13 +216,10 @@ static ocean_tensor_handle_t ocean_tensor_alloc_zeros(
     int device
 ) {
     ocean_tensor_handle_t tensor = ocean_tensor_alloc(shape, ndim, dtype, device);
-    size_t bytes = ocean_tensor_bytes(tensor);
-    if (device == OCEAN_TENSOR_CPU) {
-        tensor->cpu_data = bytes ? calloc(1, bytes) : NULL;
-        if (bytes && !tensor->cpu_data) {
-            ocean_tensor_fail("out of memory allocating CPU Tensor");
-        }
-    }
+    const ocean_tensor_backend_ops *backend =
+        ocean_tensor_backend_for_device((ocean_tensor_backend_kind)device);
+    backend->allocate(tensor);
+    backend->zero(tensor);
     return tensor;
 }
 
@@ -514,6 +522,160 @@ static void ocean_tensor_gpu_read(
 }
 #endif
 
+static void ocean_tensor_cpu_allocate(ocean_tensor_handle_t tensor) {
+    size_t bytes = ocean_tensor_bytes(tensor);
+    tensor->cpu_data = bytes ? malloc(bytes) : NULL;
+    if (bytes && !tensor->cpu_data) {
+        ocean_tensor_fail("out of memory allocating CPU Tensor");
+    }
+}
+
+static void ocean_tensor_cpu_zero(ocean_tensor_handle_t tensor) {
+    size_t bytes = ocean_tensor_bytes(tensor);
+    if (bytes) memset(tensor->cpu_data, 0, bytes);
+}
+
+static void ocean_tensor_cpu_copy(
+    ocean_tensor_handle_t destination,
+    const ocean_tensor_handle_t source
+) {
+    size_t bytes = ocean_tensor_bytes(source);
+    if (bytes) memcpy(destination->cpu_data, source->cpu_data, bytes);
+}
+
+static void ocean_tensor_cpu_read(
+    const ocean_tensor_handle_t tensor,
+    void *host_data
+) {
+    size_t bytes = ocean_tensor_bytes(tensor);
+    if (bytes) memcpy(host_data, tensor->cpu_data, bytes);
+}
+
+static void ocean_tensor_cpu_write(
+    ocean_tensor_handle_t tensor,
+    const void *host_data
+) {
+    size_t bytes = ocean_tensor_bytes(tensor);
+    if (bytes) memcpy(tensor->cpu_data, host_data, bytes);
+}
+
+static void ocean_tensor_cpu_release(ocean_tensor_handle_t tensor) {
+    free(tensor->cpu_data);
+    tensor->cpu_data = NULL;
+}
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+static void ocean_tensor_opencl_copy(
+    ocean_tensor_handle_t destination,
+    const ocean_tensor_handle_t source
+) {
+    size_t bytes = ocean_tensor_bytes(source);
+    ocean_tensor_opencl_check(
+        clEnqueueCopyBuffer(
+            ocean_tensor_opencl.queue, source->gpu_data, destination->gpu_data,
+            0, 0, bytes, 0, NULL, NULL
+        ),
+        "clEnqueueCopyBuffer"
+    );
+    ocean_tensor_opencl_check(
+        clFinish(ocean_tensor_opencl.queue), "clFinish"
+    );
+}
+
+static void ocean_tensor_opencl_release(ocean_tensor_handle_t tensor) {
+    if (tensor->gpu_data) {
+        clReleaseMemObject(tensor->gpu_data);
+        tensor->gpu_data = NULL;
+    }
+}
+#else
+static void ocean_tensor_gpu_unavailable(ocean_tensor_handle_t tensor) {
+    (void)tensor;
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+}
+
+static void ocean_tensor_gpu_copy_unavailable(
+    ocean_tensor_handle_t destination,
+    const ocean_tensor_handle_t source
+) {
+    (void)destination;
+    (void)source;
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+}
+
+static void ocean_tensor_gpu_read_unavailable(
+    const ocean_tensor_handle_t tensor,
+    void *host_data
+) {
+    (void)tensor;
+    (void)host_data;
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+}
+
+static void ocean_tensor_gpu_write_unavailable(
+    ocean_tensor_handle_t tensor,
+    const void *host_data
+) {
+    (void)tensor;
+    (void)host_data;
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+}
+
+static void ocean_tensor_gpu_release_unavailable(ocean_tensor_handle_t tensor) {
+    (void)tensor;
+}
+#endif
+
+static const ocean_tensor_backend_ops ocean_tensor_cpu_backend = {
+    .kind = OCEAN_TENSOR_BACKEND_CPU,
+    .name = "cpu",
+    .compiled = true,
+    .allocate = ocean_tensor_cpu_allocate,
+    .zero = ocean_tensor_cpu_zero,
+    .copy = ocean_tensor_cpu_copy,
+    .read = ocean_tensor_cpu_read,
+    .write = ocean_tensor_cpu_write,
+    .release = ocean_tensor_cpu_release,
+    .matmul = ocean_tensor_matmul_cpu,
+};
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+static const ocean_tensor_backend_ops ocean_tensor_opencl_backend = {
+    .kind = OCEAN_TENSOR_BACKEND_OPENCL,
+    .name = "opencl",
+    .compiled = true,
+    .allocate = ocean_tensor_gpu_alloc,
+    .zero = ocean_tensor_gpu_zero,
+    .copy = ocean_tensor_opencl_copy,
+    .read = ocean_tensor_gpu_read,
+    .write = ocean_tensor_gpu_write,
+    .release = ocean_tensor_opencl_release,
+    .matmul = ocean_tensor_matmul_opencl,
+};
+#else
+static const ocean_tensor_backend_ops ocean_tensor_opencl_backend = {
+    .kind = OCEAN_TENSOR_BACKEND_OPENCL,
+    .name = "opencl",
+    .compiled = false,
+    .allocate = ocean_tensor_gpu_unavailable,
+    .zero = ocean_tensor_gpu_unavailable,
+    .copy = ocean_tensor_gpu_copy_unavailable,
+    .read = ocean_tensor_gpu_read_unavailable,
+    .write = ocean_tensor_gpu_write_unavailable,
+    .release = ocean_tensor_gpu_release_unavailable,
+    .matmul = ocean_tensor_matmul_opencl,
+};
+#endif
+
+static const ocean_tensor_backend_ops *ocean_tensor_backend_for_device(
+    ocean_tensor_backend_kind device
+) {
+    if (device == OCEAN_TENSOR_BACKEND_CPU) return &ocean_tensor_cpu_backend;
+    if (device == OCEAN_TENSOR_BACKEND_OPENCL) return &ocean_tensor_opencl_backend;
+    ocean_tensor_fail("invalid Tensor backend device");
+    return &ocean_tensor_cpu_backend;
+}
+
 ocean_tensor_handle_t ocean_tensor_zeros_nd(
     const size_t *shape,
     size_t ndim,
@@ -524,16 +686,6 @@ ocean_tensor_handle_t ocean_tensor_zeros_nd(
         shape, ndim, ocean_tensor_parse_dtype(dtype),
         ocean_tensor_parse_device(device)
     );
-#ifdef OCEAN_TENSOR_ENABLE_OPENCL
-    if (tensor->device == OCEAN_TENSOR_GPU) {
-        ocean_tensor_gpu_alloc(tensor);
-        ocean_tensor_gpu_zero(tensor);
-    }
-#else
-    if (tensor->device == OCEAN_TENSOR_GPU) {
-        ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
-    }
-#endif
     return tensor;
 }
 
@@ -547,16 +699,6 @@ ocean_tensor_handle_t ocean_tensor_zeros(
     ocean_tensor_handle_t tensor =
         ocean_tensor_alloc_zeros(shape, 2, OCEAN_TENSOR_FLOAT32,
                                  ocean_tensor_parse_device(device));
-#ifdef OCEAN_TENSOR_ENABLE_OPENCL
-    if (tensor->device == OCEAN_TENSOR_GPU) {
-        ocean_tensor_gpu_alloc(tensor);
-        ocean_tensor_gpu_zero(tensor);
-    }
-#else
-    if (tensor->device == OCEAN_TENSOR_GPU) {
-        ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
-    }
-#endif
     return tensor;
 }
 
@@ -607,34 +749,11 @@ ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor) {
     ocean_tensor_handle_t result = ocean_tensor_alloc(
         tensor->shape, tensor->ndim, tensor->dtype, tensor->device
     );
-    size_t bytes = ocean_tensor_bytes(tensor);
-    if (tensor->device == OCEAN_TENSOR_CPU) {
-        result->cpu_data = bytes ? malloc(bytes) : NULL;
-        if (bytes && !result->cpu_data) ocean_tensor_fail("out of memory copying Tensor");
-        if (bytes) memcpy(result->cpu_data, tensor->cpu_data, bytes);
-        return result;
-    }
-
-#ifdef OCEAN_TENSOR_ENABLE_OPENCL
-    ocean_tensor_gpu_alloc(result);
-    ocean_tensor_opencl_check(
-        clEnqueueCopyBuffer(
-            ocean_tensor_opencl.queue, tensor->gpu_data, result->gpu_data,
-            0, 0, bytes, 0, NULL, NULL
-        ),
-        "clEnqueueCopyBuffer"
-    );
-    ocean_tensor_opencl_check(
-        clFinish(ocean_tensor_opencl.queue), "clFinish"
-    );
+    const ocean_tensor_backend_ops *backend =
+        ocean_tensor_backend_for_device(tensor->device);
+    backend->allocate(result);
+    backend->copy(result, tensor);
     return result;
-#else
-    free(result->shape);
-    free(result->strides);
-    free(result);
-    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
-    return NULL;
-#endif
 }
 
 ocean_tensor_handle_t ocean_tensor_to(
@@ -643,34 +762,24 @@ ocean_tensor_handle_t ocean_tensor_to(
 ) {
     if (!tensor) ocean_tensor_fail("cannot move a null Tensor");
     int target = ocean_tensor_parse_device(device);
-    if (target == tensor->device) return ocean_tensor_copy(tensor);
-
-    if (target == OCEAN_TENSOR_CPU) {
-#ifdef OCEAN_TENSOR_ENABLE_OPENCL
-        ocean_tensor_handle_t result = ocean_tensor_alloc(
-            tensor->shape, tensor->ndim, tensor->dtype, target
-        );
-        size_t bytes = ocean_tensor_bytes(tensor);
-        result->cpu_data = bytes ? malloc(bytes) : NULL;
-        if (bytes && !result->cpu_data) ocean_tensor_fail("out of memory downloading Tensor");
-        ocean_tensor_gpu_read(tensor, result->cpu_data);
-        return result;
-#else
-        ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
-#endif
+    if ((ocean_tensor_backend_kind)target == tensor->device) {
+        return ocean_tensor_copy(tensor);
     }
 
-#ifdef OCEAN_TENSOR_ENABLE_OPENCL
     ocean_tensor_handle_t result = ocean_tensor_alloc(
         tensor->shape, tensor->ndim, tensor->dtype, target
     );
-    ocean_tensor_gpu_alloc(result);
-    ocean_tensor_gpu_write(result, tensor->cpu_data);
+    const ocean_tensor_backend_ops *source_backend =
+        ocean_tensor_backend_for_device(tensor->device);
+    const ocean_tensor_backend_ops *target_backend =
+        ocean_tensor_backend_for_device((ocean_tensor_backend_kind)target);
+    target_backend->allocate(result);
+    if (target == OCEAN_TENSOR_CPU) {
+        source_backend->read(tensor, result->cpu_data);
+    } else {
+        target_backend->write(result, tensor->cpu_data);
+    }
     return result;
-#else
-    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
-#endif
-    return NULL;
 }
 
 static float ocean_tensor_half_to_float(uint16_t value) {
@@ -1029,7 +1138,6 @@ ocean_tensor_handle_t ocean_tensor_binary(
         ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
             left->shape, left->ndim, left->dtype, OCEAN_TENSOR_GPU
         );
-        ocean_tensor_gpu_alloc(result);
         cl_kernel kernel = left->dtype == OCEAN_TENSOR_INT32
             ? ocean_tensor_opencl.binary_int32_kernel
             : ocean_tensor_opencl.binary_kernel;
@@ -1066,7 +1174,6 @@ ocean_tensor_handle_t ocean_tensor_scalar(
         ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
             tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_GPU
         );
-        ocean_tensor_gpu_alloc(result);
         cl_kernel kernel = tensor->dtype == OCEAN_TENSOR_INT32
             ? ocean_tensor_opencl.scalar_int32_kernel
             : ocean_tensor_opencl.scalar_kernel;
@@ -1527,27 +1634,10 @@ static ocean_tensor_handle_t ocean_tensor_matmul_cpu(
     return result;
 }
 
-ocean_tensor_handle_t ocean_tensor_matmul(
+static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right
 ) {
-    if (!left || !right) ocean_tensor_fail("matmul does not accept null Tensors");
-    if (left->ndim != 2 || right->ndim != 2) {
-        ocean_tensor_fail("matmul currently expects 2D Tensors");
-    }
-    if (left->shape[1] != right->shape[0]) {
-        ocean_tensor_fail("matmul shape mismatch");
-    }
-    if (left->dtype != right->dtype) {
-        ocean_tensor_fail("matmul requires matching Tensor dtypes");
-    }
-    if (left->device != right->device) {
-        ocean_tensor_fail("matmul requires Tensors on the same device");
-    }
-    if (left->device == OCEAN_TENSOR_CPU) {
-        return ocean_tensor_matmul_cpu(left, right);
-    }
-
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (left->dtype != OCEAN_TENSOR_FLOAT32 && left->dtype != OCEAN_TENSOR_INT32) {
         /* Preserve GPU semantics for dtypes without a specialized kernel
@@ -1566,7 +1656,6 @@ ocean_tensor_handle_t ocean_tensor_matmul(
     ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
         shape, 2, left->dtype, OCEAN_TENSOR_GPU
     );
-    ocean_tensor_gpu_alloc(result);
     if (left->shape[0] == 0 || right->shape[1] == 0) {
         return result;
     }
@@ -1619,9 +1708,31 @@ ocean_tensor_handle_t ocean_tensor_matmul(
     );
     return result;
 #else
+    (void)left;
+    (void)right;
     ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
     return NULL;
 #endif
+}
+
+ocean_tensor_handle_t ocean_tensor_matmul(
+    ocean_tensor_handle_t left,
+    ocean_tensor_handle_t right
+) {
+    if (!left || !right) ocean_tensor_fail("matmul does not accept null Tensors");
+    if (left->ndim != 2 || right->ndim != 2) {
+        ocean_tensor_fail("matmul currently expects 2D Tensors");
+    }
+    if (left->shape[1] != right->shape[0]) {
+        ocean_tensor_fail("matmul shape mismatch");
+    }
+    if (left->dtype != right->dtype) {
+        ocean_tensor_fail("matmul requires matching Tensor dtypes");
+    }
+    if (left->device != right->device) {
+        ocean_tensor_fail("matmul requires Tensors on the same device");
+    }
+    return ocean_tensor_backend_for_device(left->device)->matmul(left, right);
 }
 
 int ocean_tensor_shape(ocean_tensor_handle_t tensor, int axis) {
@@ -1654,11 +1765,8 @@ char *ocean_tensor_device(ocean_tensor_handle_t tensor) {
 
 void ocean_tensor_release(ocean_tensor_handle_t tensor) {
     if (!tensor) return;
-    free(tensor->cpu_data);
+    ocean_tensor_backend_for_device(tensor->device)->release(tensor);
     free(tensor->shape);
     free(tensor->strides);
-#ifdef OCEAN_TENSOR_ENABLE_OPENCL
-    if (tensor->gpu_data) clReleaseMemObject(tensor->gpu_data);
-#endif
     free(tensor);
 }

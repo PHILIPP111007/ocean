@@ -64,6 +64,12 @@ This dispatch should be implemented in the standard runtime, not by emitting
 raw OpenCL code into every user function. The Ocean compiler only needs to
 recognize the standard `Tensor` methods and link the required backend runtime.
 
+The runtime uses `tensor_backend.h` as the internal dispatch contract. CPU and
+OpenCL provide the same storage lifecycle operations and a `matmul` entry
+point. OpenCL remains optional at compile time: without
+`OCEAN_TENSOR_ENABLE_OPENCL`, selecting `"gpu"` produces the explicit runtime
+error instead of silently falling back to CPU.
+
 ## Safety boundary
 
 OpenCL FFI remains `unsafe` inside the runtime implementation. User code only

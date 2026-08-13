@@ -659,8 +659,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_init",
-      "community": 57,
-      "community_name": "CCodeGenerator",
+      "community": 48,
+      "community_name": "compiler.py",
       "norm_label": "src/__init__.py"
     },
     {
@@ -682,7 +682,7 @@
       "_origin": "ast",
       "id": "src_codegen_array_codegen",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "array_codegen.py"
     },
     {
@@ -1262,8 +1262,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_codegen_class_model_resolvedmethod",
-      "community": 77,
-      "community_name": ".resolved_methods",
+      "community": 63,
+      "community_name": "class_model.py",
       "norm_label": "resolvedmethod"
     },
     {
@@ -1444,8 +1444,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_codegen_class_model_classregistry_resolved_methods",
-      "community": 77,
-      "community_name": ".resolved_methods",
+      "community": 64,
+      "community_name": "ClassRegistry",
       "norm_label": ".resolved_methods()"
     },
     {
@@ -1536,8 +1536,8 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "src_codegen_class_model_rationale_50",
-      "community": 77,
-      "community_name": ".resolved_methods",
+      "community": 63,
+      "community_name": "class_model.py",
       "norm_label": "a method together with the class that provides its implementation."
     },
     {
@@ -1591,8 +1591,8 @@
       "source_location": "L139",
       "_origin": "ast",
       "id": "src_codegen_class_model_rationale_139",
-      "community": 77,
-      "community_name": ".resolved_methods",
+      "community": 64,
+      "community_name": "ClassRegistry",
       "norm_label": "resolve methods without rebuilding parser-shaped dictionaries."
     },
     {
@@ -5122,8 +5122,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_compiler",
-      "community": 57,
-      "community_name": "CCodeGenerator",
+      "community": 48,
+      "community_name": "compiler.py",
       "norm_label": "compiler.py"
     },
     {
@@ -5133,8 +5133,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_compiler_rationale_1",
-      "community": 57,
-      "community_name": "CCodeGenerator",
+      "community": 48,
+      "community_name": "compiler.py",
       "norm_label": "compatibility facade for the phils ocean c backend v0.2. existing callers may..."
     },
     {
@@ -5144,8 +5144,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_debug",
-      "community": 62,
-      "community_name": "parser.py",
+      "community": 65,
+      "community_name": "debug.py",
       "norm_label": "debug.py"
     },
     {
@@ -5241,8 +5241,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_get_variable_state",
-      "community": 12,
-      "community_name": "Validator",
+      "community": 3,
+      "community_name": ".add_error",
       "norm_label": ".get_variable_state()"
     },
     {
@@ -5265,8 +5265,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_get_last_variable_action",
-      "community": 12,
-      "community_name": "Validator",
+      "community": 3,
+      "community_name": ".add_error",
       "norm_label": ".get_last_variable_action()"
     },
     {
@@ -5697,8 +5697,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_get_parent_scope",
-      "community": 12,
-      "community_name": "Validator",
+      "community": 3,
+      "community_name": ".add_error",
       "norm_label": ".get_parent_scope()"
     },
     {
@@ -6338,10 +6338,22 @@
       "norm_label": ".get_report()"
     },
     {
+      "label": ".get_diagnostic_report()",
+      "file_type": "code",
+      "source_file": "src/debug.py",
+      "source_location": "L4186",
+      "_callable": true,
+      "_origin": "ast",
+      "id": "src_debug_validator_get_diagnostic_report",
+      "community": 30,
+      "community_name": "._validate_scopes",
+      "norm_label": ".get_diagnostic_report()"
+    },
+    {
       "label": ".validate_inheritance_hierarchy()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4187",
+      "source_location": "L4190",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_validate_inheritance_hierarchy",
@@ -6353,7 +6365,7 @@
       "label": ".check_method_resolution_order()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4289",
+      "source_location": "L4292",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_check_method_resolution_order",
@@ -6365,7 +6377,7 @@
       "label": ".validate_thread_functions()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4359",
+      "source_location": "L4362",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_validate_thread_functions",
@@ -6377,7 +6389,7 @@
       "label": ".check_unused_parameters()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4407",
+      "source_location": "L4410",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_check_unused_parameters",
@@ -6389,7 +6401,7 @@
       "label": ".validate_pointer_usage()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4474",
+      "source_location": "L4477",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_validate_pointer_usage",
@@ -6401,7 +6413,7 @@
       "label": ".validate_array_bounds()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4546",
+      "source_location": "L4549",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_validate_array_bounds",
@@ -6413,7 +6425,7 @@
       "label": ".validate_string_operations()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4621",
+      "source_location": "L4624",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_validate_string_operations",
@@ -6425,7 +6437,7 @@
       "label": ".validate_c_function_calls()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4675",
+      "source_location": "L4678",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_validate_c_function_calls",
@@ -6437,7 +6449,7 @@
       "label": ".check_missing_declarations()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4742",
+      "source_location": "L4745",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_check_missing_declarations",
@@ -6449,7 +6461,7 @@
       "label": "._collect_vars_from_ast()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4769",
+      "source_location": "L4772",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_collect_vars_from_ast",
@@ -6461,7 +6473,7 @@
       "label": "._get_static_value_from_ast()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4812",
+      "source_location": "L4815",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_get_static_value_from_ast",
@@ -6473,7 +6485,7 @@
       "label": "._find_parent_node()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4833",
+      "source_location": "L4836",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_find_parent_node",
@@ -6485,7 +6497,7 @@
       "label": "._validate_class_method_calls()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4844",
+      "source_location": "L4847",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_validate_class_method_calls",
@@ -6497,7 +6509,7 @@
       "label": "._collect_function_metrics()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4890",
+      "source_location": "L4893",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_collect_function_metrics",
@@ -6509,7 +6521,7 @@
       "label": ".check_undefined_methods()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L4934",
+      "source_location": "L4937",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_check_undefined_methods",
@@ -6521,7 +6533,7 @@
       "label": "._method_exists_in_class_hierarchy()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L5041",
+      "source_location": "L5044",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_method_exists_in_class_hierarchy",
@@ -6533,7 +6545,7 @@
       "label": "._extract_method_calls_from_ast()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L5105",
+      "source_location": "L5108",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_extract_method_calls_from_ast",
@@ -6545,7 +6557,7 @@
       "label": "._is_builtin_method_for_type()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L5177",
+      "source_location": "L5180",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_is_builtin_method_for_type",
@@ -6557,7 +6569,7 @@
       "label": "._add_class_to_registry()",
       "file_type": "code",
       "source_file": "src/debug.py",
-      "source_location": "L5246",
+      "source_location": "L5249",
       "_callable": true,
       "_origin": "ast",
       "id": "src_debug_validator_add_class_to_registry",
@@ -6638,8 +6650,8 @@
       "source_location": "L353",
       "_origin": "ast",
       "id": "src_debug_rationale_353",
-      "community": 12,
-      "community_name": "Validator",
+      "community": 3,
+      "community_name": ".add_error",
       "norm_label": "\u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442 \u0442\u0435\u043a\u0443\u0449\u0435\u0435 \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438"
     },
     {
@@ -6660,8 +6672,8 @@
       "source_location": "L363",
       "_origin": "ast",
       "id": "src_debug_rationale_363",
-      "community": 12,
-      "community_name": "Validator",
+      "community": 3,
+      "community_name": ".add_error",
       "norm_label": "\u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442 \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u0435\u0435 \u0434\u0435\u0438\u0441\u0442\u0432\u0438\u0435 \u0441 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438"
     },
     {
@@ -6869,8 +6881,8 @@
       "source_location": "L1736",
       "_origin": "ast",
       "id": "src_debug_rationale_1736",
-      "community": 12,
-      "community_name": "Validator",
+      "community": 3,
+      "community_name": ".add_error",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u0440\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u0441\u043a\u0438\u0438 scope \u0434\u043b\u044f \u0437\u0430\u0434\u0430\u043d\u043d\u043e\u0433\u043e \u0443\u0440\u043e\u0432\u043d\u044f"
     },
     {
@@ -7413,12 +7425,23 @@
       "norm_label": "\u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 \u043e\u0442\u0447\u0435\u0442 \u043e \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435"
     },
     {
+      "label": "Return the canonical typed report without compatibility projections.",
+      "file_type": "rationale",
+      "source_file": "src/debug.py",
+      "source_location": "L4187",
+      "_origin": "ast",
+      "id": "src_debug_rationale_4187",
+      "community": 30,
+      "community_name": "._validate_scopes",
+      "norm_label": "return the canonical typed report without compatibility projections."
+    },
+    {
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043d\u043e\u0441\u0442\u044c \u0438\u0435\u0440\u0430\u0440\u0445\u0438\u0438 \u043d\u0430\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f \u043a\u043b\u0430\u0441\u0441\u043e\u0432",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4188",
+      "source_location": "L4191",
       "_origin": "ast",
-      "id": "src_debug_rationale_4188",
+      "id": "src_debug_rationale_4191",
       "community": 10,
       "community_name": ".add_warning",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043d\u043e\u0441\u0442\u044c \u0438\u0435\u0440\u0430\u0440\u0445\u0438\u0438 \u043d\u0430\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f \u043a\u043b\u0430\u0441\u0441\u043e\u0432"
@@ -7427,9 +7450,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043f\u043e\u0440\u044f\u0434\u043e\u043a \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u044f \u043c\u0435\u0442\u043e\u0434\u043e\u0432 (MRO)",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4290",
+      "source_location": "L4293",
       "_origin": "ast",
-      "id": "src_debug_rationale_4290",
+      "id": "src_debug_rationale_4293",
       "community": 10,
       "community_name": ".add_warning",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043f\u043e\u0440\u044f\u0434\u043e\u043a \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u044f \u043c\u0435\u0442\u043e\u0434\u043e\u0432 (mro)"
@@ -7438,9 +7461,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0444\u0443\u043d\u043a\u0446\u0438\u0438 \u0434\u043b\u044f \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u0438\u044f \u0432 \u043f\u043e\u0442\u043e\u043a\u0430\u0445",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4360",
+      "source_location": "L4363",
       "_origin": "ast",
-      "id": "src_debug_rationale_4360",
+      "id": "src_debug_rationale_4363",
       "community": 10,
       "community_name": ".add_warning",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0444\u0443\u043d\u043a\u0446\u0438\u0438 \u0434\u043b\u044f \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u0438\u044f \u0432 \u043f\u043e\u0442\u043e\u043a\u0430\u0445"
@@ -7449,9 +7472,9 @@
       "label": "\u041d\u0430\u0445\u043e\u0434\u0438\u0442 \u043d\u0435\u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c\u044b\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u0444\u0443\u043d\u043a\u0446\u0438\u0439 \u0438 \u043c\u0435\u0442\u043e\u0434\u043e\u0432",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4408",
+      "source_location": "L4411",
       "_origin": "ast",
-      "id": "src_debug_rationale_4408",
+      "id": "src_debug_rationale_4411",
       "community": 10,
       "community_name": ".add_warning",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u043d\u0435\u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c\u044b\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u0444\u0443\u043d\u043a\u0446\u0438\u0438 \u0438 \u043c\u0435\u0442\u043e\u0434\u043e\u0432"
@@ -7460,9 +7483,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043d\u043e\u0435 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u0438\u0435 \u0443\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u0435\u0439",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4477",
+      "source_location": "L4480",
       "_origin": "ast",
-      "id": "src_debug_rationale_4477",
+      "id": "src_debug_rationale_4480",
       "community": 23,
       "community_name": ".get_symbol_info",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043d\u043e\u0435 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u0438\u0435 \u0443\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u0435\u0438"
@@ -7471,9 +7494,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0432\u044b\u0445\u043e\u0434 \u0437\u0430 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u043c\u0430\u0441\u0441\u0438\u0432\u043e\u0432/\u0441\u043f\u0438\u0441\u043a\u043e\u0432",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4549",
+      "source_location": "L4552",
       "_origin": "ast",
-      "id": "src_debug_rationale_4549",
+      "id": "src_debug_rationale_4552",
       "community": 23,
       "community_name": ".get_symbol_info",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0432\u044b\u0445\u043e\u0434 \u0437\u0430 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u043c\u0430\u0441\u0441\u0438\u0432\u043e\u0432/\u0441\u043f\u0438\u0441\u043a\u043e\u0432"
@@ -7482,9 +7505,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438 \u0441\u043e \u0441\u0442\u0440\u043e\u043a\u0430\u043c\u0438",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4624",
+      "source_location": "L4627",
       "_origin": "ast",
-      "id": "src_debug_rationale_4624",
+      "id": "src_debug_rationale_4627",
       "community": 23,
       "community_name": ".get_symbol_info",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438 \u0441\u043e \u0441\u0442\u0440\u043e\u043a\u0430\u043c\u0438"
@@ -7493,9 +7516,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0432\u044b\u0437\u043e\u0432\u044b C-\u0444\u0443\u043d\u043a\u0446\u0438\u0439 (\u043d\u0430\u0447\u0438\u043d\u0430\u044e\u0449\u0438\u0435\u0441\u044f \u0441 @)",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4678",
+      "source_location": "L4681",
       "_origin": "ast",
-      "id": "src_debug_rationale_4678",
+      "id": "src_debug_rationale_4681",
       "community": 23,
       "community_name": ".get_symbol_info",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0432\u044b\u0437\u043e\u0432\u044b c-\u0444\u0443\u043d\u043a\u0446\u0438\u0438 (\u043d\u0430\u0447\u0438\u043d\u0430\u044e\u0449\u0438\u0435\u0441\u044f \u0441 @)"
@@ -7504,9 +7527,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4743",
+      "source_location": "L4746",
       "_origin": "ast",
-      "id": "src_debug_rationale_4743",
+      "id": "src_debug_rationale_4746",
       "community": 10,
       "community_name": ".add_warning",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f"
@@ -7515,9 +7538,9 @@
       "label": "Collect variable references from any expression AST variant.",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4770",
+      "source_location": "L4773",
       "_origin": "ast",
-      "id": "src_debug_rationale_4770",
+      "id": "src_debug_rationale_4773",
       "community": 32,
       "community_name": ".validate_openmp_loop",
       "norm_label": "collect variable references from any expression ast variant."
@@ -7526,9 +7549,9 @@
       "label": "\u041f\u044b\u0442\u0430\u0435\u0442\u0441\u044f \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0441\u0442\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u0438\u0437 AST",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4813",
+      "source_location": "L4816",
       "_origin": "ast",
-      "id": "src_debug_rationale_4813",
+      "id": "src_debug_rationale_4816",
       "community": 23,
       "community_name": ".get_symbol_info",
       "norm_label": "\u043f\u044b\u0442\u0430\u0435\u0442\u0441\u044f \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u0441\u0442\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u0438\u0437 ast"
@@ -7537,9 +7560,9 @@
       "label": "\u041d\u0430\u0445\u043e\u0434\u0438\u0442 \u0440\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u0441\u043a\u0438\u0439 \u0443\u0437\u0435\u043b (\u0435\u0441\u043b\u0438 \u0435\u0441\u0442\u044c)",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4834",
+      "source_location": "L4837",
       "_origin": "ast",
-      "id": "src_debug_rationale_4834",
+      "id": "src_debug_rationale_4837",
       "community": 23,
       "community_name": ".get_symbol_info",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u0440\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u0441\u043a\u0438\u0438 \u0443\u0437\u0435\u043b (\u0435\u0441\u043b\u0438 \u0435\u0441\u0442\u044c)"
@@ -7548,9 +7571,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0432\u044b\u0437\u043e\u0432\u044b \u043c\u0435\u0442\u043e\u0434\u043e\u0432 \u0432 \u043a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u0435 \u043d\u0430\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4845",
+      "source_location": "L4848",
       "_origin": "ast",
-      "id": "src_debug_rationale_4845",
+      "id": "src_debug_rationale_4848",
       "community": 10,
       "community_name": ".add_warning",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0432\u044b\u0437\u043e\u0432\u044b \u043c\u0435\u0442\u043e\u0434\u043e\u0432 \u0432 \u043a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u0435 \u043d\u0430\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f"
@@ -7559,9 +7582,9 @@
       "label": "\u0421\u043e\u0431\u0438\u0440\u0430\u0435\u0442 \u043c\u0435\u0442\u0440\u0438\u043a\u0438 \u0441\u043b\u043e\u0436\u043d\u043e\u0441\u0442\u0438 \u043a\u043e\u0434\u0430",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4891",
+      "source_location": "L4894",
       "_origin": "ast",
-      "id": "src_debug_rationale_4891",
+      "id": "src_debug_rationale_4894",
       "community": 10,
       "community_name": ".add_warning",
       "norm_label": "\u0441\u043e\u0431\u0438\u0440\u0430\u0435\u0442 \u043c\u0435\u0442\u0440\u0438\u043a\u0438 \u0441\u043b\u043e\u0436\u043d\u043e\u0441\u0442\u0438 \u043a\u043e\u0434\u0430"
@@ -7570,9 +7593,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0447\u0442\u043e \u0432\u0441\u0435 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c\u044b\u0435 \u043c\u0435\u0442\u043e\u0434\u044b \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u044b \u0432 \u043a\u043b\u0430\u0441\u0441\u0435 \u0438\u043b\u0438 \u0435\u0433\u043e \u0440\u043e\u0434\u0438\u0442\u0435\u043b\u044f\u0445",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L4935",
+      "source_location": "L4938",
       "_origin": "ast",
-      "id": "src_debug_rationale_4935",
+      "id": "src_debug_rationale_4938",
       "community": 31,
       "community_name": ".check_undefined_methods",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0447\u0442\u043e \u0432\u0441\u0435 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c\u044b\u0435 \u043c\u0435\u0442\u043e\u0434\u044b \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u044b \u0432 \u043a\u043b\u0430\u0441\u0441\u0435 \u0438\u043b\u0438 \u0435\u0433\u043e \u0440\u043e\u0434\u0438\u0442\u0435\u043b\u044f\u0445"
@@ -7581,9 +7604,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u0435\u0442 \u043b\u0438 \u043c\u0435\u0442\u043e\u0434 \u0432 \u043a\u043b\u0430\u0441\u0441\u0435 \u0438\u043b\u0438 \u0435\u0433\u043e \u0438\u0435\u0440\u0430\u0440\u0445\u0438\u0438 \u043d\u0430\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L5044",
+      "source_location": "L5047",
       "_origin": "ast",
-      "id": "src_debug_rationale_5044",
+      "id": "src_debug_rationale_5047",
       "community": 31,
       "community_name": ".check_undefined_methods",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u0435\u0442 \u043b\u0438 \u043c\u0435\u0442\u043e\u0434 \u0432 \u043a\u043b\u0430\u0441\u0441\u0435 \u0438\u043b\u0438 \u0435\u0433\u043e \u0438\u0435\u0440\u0430\u0440\u0445\u0438\u0438 \u043d\u0430\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f"
@@ -7592,9 +7615,9 @@
       "label": "\u0418\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u0442 \u0432\u044b\u0437\u043e\u0432\u044b \u043c\u0435\u0442\u043e\u0434\u043e\u0432 \u0438\u0437 AST",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L5108",
+      "source_location": "L5111",
       "_origin": "ast",
-      "id": "src_debug_rationale_5108",
+      "id": "src_debug_rationale_5111",
       "community": 31,
       "community_name": ".check_undefined_methods",
       "norm_label": "\u0438\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u0442 \u0432\u044b\u0437\u043e\u0432\u044b \u043c\u0435\u0442\u043e\u0434\u043e\u0432 \u0438\u0437 ast"
@@ -7603,9 +7626,9 @@
       "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043b\u0438 \u043c\u0435\u0442\u043e\u0434 \u0432\u0441\u0442\u0440\u043e\u0435\u043d\u043d\u044b\u043c \u0434\u043b\u044f \u0434\u0430\u043d\u043d\u043e\u0433\u043e \u0442\u0438\u043f\u0430",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L5178",
+      "source_location": "L5181",
       "_origin": "ast",
-      "id": "src_debug_rationale_5178",
+      "id": "src_debug_rationale_5181",
       "community": 31,
       "community_name": ".check_undefined_methods",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043b\u0438 \u043c\u0435\u0442\u043e\u0434 \u0432\u0441\u0442\u0440\u043e\u0435\u043d\u043d\u044b\u043c \u0434\u043b\u044f \u0434\u0430\u043d\u043d\u043e\u0433\u043e \u0442\u0438\u043f\u0430"
@@ -7614,9 +7637,9 @@
       "label": "\u0414\u043e\u0431\u0430\u0432\u043b\u044f\u0435\u0442 \u043a\u043b\u0430\u0441\u0441 \u0432 \u0440\u0435\u0435\u0441\u0442\u0440 \u043a\u043b\u0430\u0441\u0441\u043e\u0432",
       "file_type": "rationale",
       "source_file": "src/debug.py",
-      "source_location": "L5247",
+      "source_location": "L5250",
       "_origin": "ast",
-      "id": "src_debug_rationale_5247",
+      "id": "src_debug_rationale_5250",
       "community": 31,
       "community_name": ".check_undefined_methods",
       "norm_label": "\u0434\u043e\u0431\u0430\u0432\u043b\u044f\u0435\u0442 \u043a\u043b\u0430\u0441\u0441 \u0432 \u0440\u0435\u0435\u0441\u0442\u0440 \u043a\u043b\u0430\u0441\u0441\u043e\u0432"
@@ -7629,7 +7652,7 @@
       "_origin": "ast",
       "id": "src_diagnostics",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "diagnostics.py"
     },
     {
@@ -7642,7 +7665,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnosticseverity",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "diagnosticseverity"
     },
     {
@@ -7653,7 +7676,7 @@
       "_origin": "ast",
       "id": "str",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "str"
     },
     {
@@ -7664,7 +7687,7 @@
       "_origin": "ast",
       "id": "enum",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "enum"
     },
     {
@@ -7676,8 +7699,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_diagnostics_sourcelocation",
-      "community": 10,
-      "community_name": ".add_warning",
+      "community": 65,
+      "community_name": "debug.py",
       "norm_label": "sourcelocation"
     },
     {
@@ -7690,7 +7713,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnostic",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "diagnostic"
     },
     {
@@ -7702,7 +7725,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnostic_source_file",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": ".source_file()"
     },
     {
@@ -7714,7 +7737,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnostic_line_number",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": ".line_number()"
     },
     {
@@ -7726,7 +7749,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnostic_column_number",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": ".column_number()"
     },
     {
@@ -7738,7 +7761,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnostic_format",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": ".format()"
     },
     {
@@ -7750,7 +7773,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnostic_as_dict",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": ".as_dict()"
     },
     {
@@ -7761,7 +7784,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_py_any",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "any"
     },
     {
@@ -7774,7 +7797,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnosticreport",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "diagnosticreport"
     },
     {
@@ -7786,7 +7809,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnosticreport_errors",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": ".errors()"
     },
     {
@@ -7798,7 +7821,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnosticreport_warnings",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": ".warnings()"
     },
     {
@@ -7810,7 +7833,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnosticreport_is_valid",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": ".is_valid()"
     },
     {
@@ -7822,7 +7845,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_diagnosticreport_as_dict",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": ".as_dict()"
     },
     {
@@ -7833,7 +7856,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_rationale_1",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "structured compiler diagnostics. the compiler keeps diagnostics as typed values..."
     },
     {
@@ -7844,7 +7867,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_rationale_16",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "diagnostic importance understood by compiler frontends."
     },
     {
@@ -7854,8 +7877,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "src_diagnostics_rationale_24",
-      "community": 10,
-      "community_name": ".add_warning",
+      "community": 65,
+      "community_name": "debug.py",
       "norm_label": "location of a diagnostic in an ocean source file."
     },
     {
@@ -7866,7 +7889,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_rationale_34",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "one compiler diagnostic with a stable machine-readable code."
     },
     {
@@ -7877,7 +7900,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_rationale_56",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "return the human-readable form used by cli errors."
     },
     {
@@ -7888,7 +7911,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_rationale_64",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "return the compatibility representation used by old callers."
     },
     {
@@ -7899,7 +7922,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_rationale_80",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "immutable typed report produced by validation."
     },
     {
@@ -7910,7 +7933,7 @@
       "_origin": "ast",
       "id": "src_diagnostics_rationale_97",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "return the legacy report shape plus the typed diagnostics."
     },
     {
@@ -7943,7 +7966,7 @@
       "_origin": "ast",
       "id": "src_modules_imports",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": "modules/imports.py"
     },
     {
@@ -7956,7 +7979,7 @@
       "_origin": "ast",
       "id": "src_modules_imports_cimportprocessor",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": "cimportprocessor"
     },
     {
@@ -7968,7 +7991,7 @@
       "_origin": "ast",
       "id": "src_modules_imports_cimportprocessor_init",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": ".__init__()"
     },
     {
@@ -7980,7 +8003,7 @@
       "_origin": "ast",
       "id": "src_modules_imports_cimportprocessor_resolve_cimport",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": ".resolve_cimport()"
     },
     {
@@ -7992,8 +8015,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_modules_imports_importprocessor",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": "importprocessor"
     },
     {
@@ -8004,8 +8027,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_modules_imports_importprocessor_init",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": ".__init__()"
     },
     {
@@ -8016,8 +8039,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_modules_imports_importprocessor_candidate_standard_roots",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": "._candidate_standard_roots()"
     },
     {
@@ -8028,8 +8051,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_modules_imports_importprocessor_parse_import",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": "._parse_import()"
     },
     {
@@ -8040,8 +8063,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_modules_imports_importprocessor_resolve_import_path",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": "._resolve_import_path()"
     },
     {
@@ -8051,8 +8074,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_modules_imports_py_path",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": "path"
     },
     {
@@ -8063,8 +8086,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_modules_imports_importprocessor_read_import",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": "._read_import()"
     },
     {
@@ -8075,8 +8098,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_modules_imports_importprocessor_resolve_import",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": ".resolve_import()"
     },
     {
@@ -8087,8 +8110,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_modules_imports_importprocessor_process_imports",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": ".process_imports()"
     },
     {
@@ -8099,7 +8122,7 @@
       "_origin": "ast",
       "id": "src_modules_imports_rationale_15",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": "\u043f\u0440\u043e\u0441\u0442\u043e \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u0443\u0435\u0442 c \u0438\u043c\u043f\u043e\u0440\u0442 \u0431\u0435\u0437 \u043f\u0430\u0440\u0441\u0438\u043d\u0433\u0430"
     },
     {
@@ -8109,8 +8132,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "src_modules_imports_rationale_45",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": "yield repository std directories from the active source context."
     },
     {
@@ -8120,8 +8143,8 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "src_modules_imports_rationale_137",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": "\u043e\u0431\u0440\u0430\u0431\u0430\u0442\u044b\u0432\u0430\u0435\u0442 \u0438\u043c\u043f\u043e\u0440\u0442 \u0438 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u043c\u043e\u0435 \u0438\u043c\u043f\u043e\u0440\u0442\u0438\u0440\u0443\u0435\u043c\u043e\u0433\u043e \u0444\u0430\u0438\u043b\u0430"
     },
     {
@@ -8131,8 +8154,8 @@
       "source_location": "L142",
       "_origin": "ast",
       "id": "src_modules_imports_rationale_142",
-      "community": 56,
-      "community_name": "ImportProcessor",
+      "community": 0,
+      "community_name": "run",
       "norm_label": "\u043e\u0431\u0440\u0430\u0431\u0430\u0442\u044b\u0432\u0430\u0435\u0442 \u0432\u0441\u0435 \u0438\u043c\u043f\u043e\u0440\u0442\u044b \u0432 \u043a\u043e\u0434\u0435 \u0438 \u0432\u0441\u0442\u0430\u0432\u043b\u044f\u0435\u0442 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u043c\u043e\u0435 \u0444\u0430\u0438\u043b\u043e\u0432"
     },
     {
@@ -8750,7 +8773,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_parser",
-      "community": 62,
+      "community": 41,
       "community_name": "parser.py",
       "norm_label": "parser.py"
     },
@@ -8776,7 +8799,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_init",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": ".__init__()"
     },
     {
@@ -8788,7 +8811,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_reset_state",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": ".reset_state()"
     },
     {
@@ -8799,8 +8822,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_mark_unsafe_nodes",
-      "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "._mark_unsafe_nodes()"
     },
     {
@@ -8907,8 +8930,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_detect_indent_type",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 13,
+      "community_name": "._parse_line_impl",
       "norm_label": ".detect_indent_type()"
     },
     {
@@ -8931,7 +8954,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_get_current_scope_for_indent",
-      "community": 16,
+      "community": 13,
       "community_name": "._parse_line_impl",
       "norm_label": ".get_current_scope_for_indent()"
     },
@@ -8943,7 +8966,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_handle_indent_change",
-      "community": 16,
+      "community": 13,
       "community_name": "._parse_line_impl",
       "norm_label": ".handle_indent_change()"
     },
@@ -8956,7 +8979,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_calculate_indent_level",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".calculate_indent_level()"
     },
     {
@@ -8968,7 +8991,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_find_indented_block_end",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".find_indented_block_end()"
     },
     {
@@ -8991,7 +9014,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_cimport",
-      "community": 16,
+      "community": 13,
       "community_name": "._parse_line_impl",
       "norm_label": ".parse_cimport()"
     },
@@ -9004,7 +9027,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_graph",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": "._parse_graph()"
     },
     {
@@ -9016,7 +9039,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_typed",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": ".parse_typed()"
     },
     {
@@ -9028,7 +9051,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_line",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_line()"
     },
     {
@@ -9039,7 +9062,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_line_impl",
-      "community": 16,
+      "community": 13,
       "community_name": "._parse_line_impl",
       "norm_label": "._parse_line_impl()"
     },
@@ -9052,7 +9075,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_unsafe_block",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_unsafe_block()"
     },
     {
@@ -9063,8 +9086,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_nested_index_assignment",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 39,
+      "community_name": "split_top_level",
       "norm_label": ".parse_nested_index_assignment()"
     },
     {
@@ -9076,7 +9099,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_slice_assignment",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_slice_assignment()"
     },
     {
@@ -9088,7 +9111,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_object_creation_assignment",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_object_creation_assignment()"
     },
     {
@@ -9100,7 +9123,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_constructor_call",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_constructor_call()"
     },
     {
@@ -9112,7 +9135,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_index_assignment",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_index_assignment()"
     },
     {
@@ -9124,7 +9147,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_augmented_index_assignment",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_augmented_index_assignment()"
     },
     {
@@ -9136,7 +9159,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_attribute_assignment",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_attribute_assignment()"
     },
     {
@@ -9148,7 +9171,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_pointer_dereference_assignment",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_pointer_dereference_assignment()"
     },
     {
@@ -9159,8 +9182,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_pointer_to_variable_assignment",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 13,
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_pointer_to_variable_assignment()"
     },
     {
@@ -9232,7 +9255,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_function_declaration",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_function_declaration()"
     },
     {
@@ -9267,8 +9290,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_delete",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 13,
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_delete()"
     },
     {
@@ -9304,7 +9327,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_with_priorities",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "._parse_with_priorities()"
     },
     {
@@ -9316,7 +9339,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_operator_level",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "._parse_operator_level()"
     },
     {
@@ -9328,7 +9351,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_unary_operators",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "._parse_unary_operators()"
     },
     {
@@ -9340,7 +9363,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_is_valid_operator_at",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "._is_valid_operator_at()"
     },
     {
@@ -9352,7 +9375,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_chained_index_access",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "._parse_chained_index_access()"
     },
     {
@@ -9364,7 +9387,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_assignment",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_assignment()"
     },
     {
@@ -9376,7 +9399,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_augmented_assignment",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_augmented_assignment()"
     },
     {
@@ -9388,7 +9411,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_complex_expression",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": ".parse_complex_expression()"
     },
     {
@@ -9447,8 +9470,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_function_call_assignment",
-      "community": 9,
-      "community_name": ".parse_expression_to_ast",
+      "community": 16,
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_function_call_assignment()"
     },
     {
@@ -9471,8 +9494,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_iterable",
-      "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": ".parse_iterable()"
     },
     {
@@ -9483,8 +9506,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_parse_openmp_pragma",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": ".parse_openmp_pragma()"
     },
     {
@@ -9496,7 +9519,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_while_loop",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_while_loop()"
     },
     {
@@ -9508,7 +9531,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_for_loop",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_for_loop()"
     },
     {
@@ -9520,7 +9543,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_function_arguments_to_ast",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_function_arguments_to_ast()"
     },
     {
@@ -9568,7 +9591,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_if_statement",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_if_statement()"
     },
     {
@@ -9580,7 +9603,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_elif_block",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_elif_block()"
     },
     {
@@ -9592,7 +9615,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_else_block",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_else_block()"
     },
     {
@@ -9604,7 +9627,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_nested_if",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_nested_if()"
     },
     {
@@ -9628,7 +9651,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_struct_declaration",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_struct_declaration()"
     },
     {
@@ -9640,7 +9663,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_class_declaration",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_class_declaration()"
     },
     {
@@ -9652,7 +9675,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_class_method_declaration",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_class_method_declaration()"
     },
     {
@@ -9676,7 +9699,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_object_method_call_node",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_object_method_call_node()"
     },
     {
@@ -9688,7 +9711,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_static_method_call_node",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".parse_static_method_call_node()"
     },
     {
@@ -9736,7 +9759,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_extract_dependencies_from_ast",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".extract_dependencies_from_ast()"
     },
     {
@@ -9760,7 +9783,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_is_fully_parenthesized",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": ".is_fully_parenthesized()"
     },
     {
@@ -9772,7 +9795,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_find_lowest_priority_operator",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": ".find_lowest_priority_operator()"
     },
     {
@@ -9784,7 +9807,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_is_identifier_char",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": ".is_identifier_char()"
     },
     {
@@ -9796,7 +9819,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_find_operator_outside_parentheses",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": ".find_operator_outside_parentheses()"
     },
     {
@@ -9808,7 +9831,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_contains_operator",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": ".contains_operator()"
     },
     {
@@ -9832,7 +9855,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_build_operations_from_ast",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".build_operations_from_ast()"
     },
     {
@@ -9844,7 +9867,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_find_symbol_recursive",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".find_symbol_recursive()"
     },
     {
@@ -9891,8 +9914,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_methods_equal",
-      "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": ".methods_equal()"
     },
     {
@@ -9904,7 +9927,7 @@
       "_origin": "ast",
       "id": "src_parser_parser_parse_parameters",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": ".parse_parameters()"
     },
     {
@@ -9939,8 +9962,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parser_parser_resolve_method_info",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": ".resolve_method_info()"
     },
     {
@@ -9963,7 +9986,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_34",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": "reset all per-compilation parser state. a parser instance can safely be reused..."
     },
     {
@@ -9973,8 +9996,8 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "src_parser_rationale_52",
-      "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "mark graph nodes parsed inside an explicit ``unsafe:`` block."
     },
     {
@@ -10028,7 +10051,7 @@
       "source_location": "L238",
       "_origin": "ast",
       "id": "src_parser_rationale_238",
-      "community": 16,
+      "community": 13,
       "community_name": "._parse_line_impl",
       "norm_label": "\u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 \u043e\u0431\u043b\u0430\u0441\u0442\u044c \u0432\u0438\u0434\u0438\u043c\u043e\u0441\u0442\u0438 \u0434\u043b\u044f \u0437\u0430\u0434\u0430\u043d\u043d\u043e\u0433\u043e \u0443\u0440\u043e\u0432\u043d\u044f \u043e\u0442\u0441\u0442\u0443\u043f\u0430"
     },
@@ -10040,7 +10063,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_300",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u043a\u043e\u043d\u0435\u0446 \u0431\u043b\u043e\u043a\u0430 \u0441 \u043e\u0442\u0441\u0442\u0443\u043f\u043e\u043c"
     },
     {
@@ -10062,7 +10085,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_377",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": "build the parser's private graph before typed lowering."
     },
     {
@@ -10073,7 +10096,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_461",
       "community": 41,
-      "community_name": "modules/imports.py",
+      "community_name": "parser.py",
       "norm_label": "parse source into the canonical ``typedmodule`` api."
     },
     {
@@ -10084,7 +10107,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_475",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": "parse one line and attach its source location to emitted nodes."
     },
     {
@@ -10094,7 +10117,7 @@
       "source_location": "L495",
       "_origin": "ast",
       "id": "src_parser_rationale_495",
-      "community": 16,
+      "community": 13,
       "community_name": "._parse_line_impl",
       "norm_label": "\u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0438 \u043c\u0435\u0442\u043e\u0434 \u043f\u0430\u0440\u0441\u0438\u043d\u0433\u0430 \u0441\u0442\u0440\u043e\u043a\u0438 \u0441 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u043e\u0438 \u0432\u0441\u0435\u0445 \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u0438"
     },
@@ -10106,7 +10129,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_1078",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": "parse an explicit unsafe region without changing runtime semantics. ``unsafe:``..."
     },
     {
@@ -10116,8 +10139,8 @@
       "source_location": "L1114",
       "_origin": "ast",
       "id": "src_parser_rationale_1114",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 39,
+      "community_name": "split_top_level",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043c\u043d\u043e\u0433\u043e\u043c\u0435\u0440\u043d\u043e\u0435 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435 \u043f\u043e \u0438\u043d\u0434\u0435\u043a\u0441\u0443: a_data[0][0] = 10"
     },
     {
@@ -10128,7 +10151,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_1237",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435 \u0441\u0440\u0435\u0437\u0443: my_list[1:3] = [20, 30]"
     },
     {
@@ -10139,7 +10162,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_1284",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0441\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u043e\u0431\u044a\u0435\u043a\u0442\u0430 \u0441 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435\u043c: var x: class = class(args)"
     },
     {
@@ -10150,7 +10173,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_1345",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u044b\u0437\u043e\u0432 \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0442\u043e\u0440\u0430 \u0431\u0435\u0437 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u044f: class(args)"
     },
     {
@@ -10161,7 +10184,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_1377",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435 \u043f\u043e \u0438\u043d\u0434\u0435\u043a\u0441\u0443 \u0441 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u043e\u0438 \u043c\u043d\u043e\u0433\u043e\u043c\u0435\u0440\u043d\u044b\u0445 \u043c\u0430\u0441\u0441\u0438\u0432\u043e\u0432"
     },
     {
@@ -10172,7 +10195,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_1485",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0441\u043e\u0441\u0442\u0430\u0432\u043d\u0443\u044e \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u044e \u0441 \u0438\u043d\u0434\u0435\u043a\u0441\u043e\u043c: my_list[0] += 5"
     },
     {
@@ -10183,7 +10206,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_1550",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435 \u0430\u0442\u0440\u0438\u0431\u0443\u0442\u0443: obj.attr = value"
     },
     {
@@ -10194,7 +10217,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_1591",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435 \u0447\u0435\u0440\u0435\u0437 \u0440\u0430\u0437\u044b\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u0443\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044f: *p = value"
     },
     {
@@ -10204,8 +10227,8 @@
       "source_location": "L1638",
       "_origin": "ast",
       "id": "src_parser_rationale_1638",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 13,
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f \u0443\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044f \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u0438: x = *p"
     },
     {
@@ -10271,7 +10294,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_1915",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": "parse a free function with fully nested type annotations."
     },
     {
@@ -10292,8 +10315,8 @@
       "source_location": "L2371",
       "_origin": "ast",
       "id": "src_parser_rationale_2371",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 13,
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 del (\u043f\u043e\u043b\u043d\u043e\u0435 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u0435)"
     },
     {
@@ -10326,7 +10349,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_2521",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0441 \u0443\u0447\u0435\u0442\u043e\u043c \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u043e\u0432 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u043e\u0432 python"
     },
     {
@@ -10337,7 +10360,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_2769",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u043d\u0430 \u0442\u0435\u043a\u0443\u0449\u0435\u043c \u0443\u0440\u043e\u0432\u043d\u0435 \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u0430 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u043e\u0432"
     },
     {
@@ -10348,7 +10371,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_2805",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0443\u043d\u0430\u0440\u043d\u044b\u0435 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u044b"
     },
     {
@@ -10359,7 +10382,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_2858",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0447\u0442\u043e \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 \u0432 \u0434\u0430\u043d\u043d\u043e\u0438 \u043f\u043e\u0437\u0438\u0446\u0438\u0438 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u0432\u0430\u043b\u0438\u0434\u043d\u044b\u043c \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u043e\u043c"
     },
     {
@@ -10370,7 +10393,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_2905",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0446\u0435\u043f\u043e\u0447\u043a\u0438 \u0438\u043d\u0434\u0435\u043a\u0441\u0430\u0446\u0438\u0438 \u0442\u0438\u043f\u0430 a[0][1][2]"
     },
     {
@@ -10381,7 +10404,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_3263",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0441\u043e\u0441\u0442\u0430\u0432\u043d\u044b\u0435 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u044f"
     },
     {
@@ -10392,7 +10415,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_3362",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u0440\u0430\u0437\u0431\u0438\u0440\u0430\u0435\u0442 \u0441\u043b\u043e\u0436\u043d\u044b\u0435 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u044f \u0441 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u0438\u043c\u0438 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0430\u043c\u0438 \u0438 \u0441\u043a\u043e\u0431\u043a\u0430\u043c\u0438"
     },
     {
@@ -10446,8 +10469,8 @@
       "source_location": "L3710",
       "_origin": "ast",
       "id": "src_parser_rationale_3710",
-      "community": 9,
-      "community_name": ".parse_expression_to_ast",
+      "community": 16,
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043f\u0440\u0438\u0441\u0432\u0430\u0438\u0432\u0430\u043d\u0438\u0435 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430 \u0432\u044b\u0437\u043e\u0432\u0430 \u0444\u0443\u043d\u043a\u0446\u0438\u0438: var x: type = func(args)"
     },
     {
@@ -10468,8 +10491,8 @@
       "source_location": "L3780",
       "_origin": "ast",
       "id": "src_parser_rationale_3780",
-      "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0438\u0442\u0435\u0440\u0438\u0440\u0443\u0435\u043c\u043e\u0435 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0434\u043b\u044f for \u0446\u0438\u043a\u043b\u0430"
     },
     {
@@ -10479,8 +10502,8 @@
       "source_location": "L3841",
       "_origin": "ast",
       "id": "src_parser_rationale_3841",
-      "community": 16,
-      "community_name": "._parse_line_impl",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "parse the supported openmp loop directive into structured metadata."
     },
     {
@@ -10491,7 +10514,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_4038",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0430\u0440\u0433\u0443\u043c\u0435\u043d\u0442\u044b \u0444\u0443\u043d\u043a\u0446\u0438\u0438 \u0432 \u0441\u043f\u0438\u0441\u043e\u043a ast"
     },
     {
@@ -10535,7 +10558,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_4362",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 if-elif-else \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u044e - \u0440\u0430\u0431\u043e\u0447\u0430\u044f \u0432\u0435\u0440\u0441\u0438\u044f \u0431\u0435\u0437 \u0431\u0435\u0441\u043a\u043e\u043d\u0435\u0447\u043d\u043e\u0433\u043e \u0446\u0438\u043a\u043b\u0430"
     },
     {
@@ -10546,7 +10569,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_4733",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0435 if \u0432\u043d\u0443\u0442\u0440\u0438 \u0434\u0440\u0443\u0433\u0438\u0445 \u0431\u043b\u043e\u043a\u043e\u0432 (while, for, \u0434\u0440\u0443\u0433\u0438\u0445 if)"
     },
     {
@@ -10568,7 +10591,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_4790",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": "parse a value-semantic struct. structs intentionally contain fields only in..."
     },
     {
@@ -10579,7 +10602,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_4852",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043a\u043b\u0430\u0441\u0441\u0430"
     },
     {
@@ -10590,7 +10613,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_4981",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": "parse a class method using the same typed parameter parser as functions."
     },
     {
@@ -10612,7 +10635,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5182",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u044b\u0437\u043e\u0432 \u043c\u0435\u0442\u043e\u0434\u0430 \u043e\u0431\u044a\u0435\u043a\u0442\u0430 \u0441 \u0443\u0447\u0435\u0442\u043e\u043c \u043d\u0430\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f"
     },
     {
@@ -10623,7 +10646,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5327",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u043f\u0430\u0440\u0441\u0438\u0442 \u0432\u044b\u0437\u043e\u0432 \u0441\u0442\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u043c\u0435\u0442\u043e\u0434\u0430: class.method(args)"
     },
     {
@@ -10667,7 +10690,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5506",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u0438\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u0442 \u0437\u0430\u0432\u0438\u0441\u0438\u043c\u043e\u0441\u0442\u0438 (\u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c\u044b\u0435 \u043f\u0435\u0440\u0435\u043c\u0435\u043d\u043d\u044b\u0435) \u0438\u0437 ast"
     },
     {
@@ -10689,7 +10712,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5728",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u043f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e \u043b\u0438 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0437\u0430\u043a\u043b\u044e\u0447\u0435\u043d\u043e \u0432 \u0441\u043a\u043e\u0431\u043a\u0438"
     },
     {
@@ -10700,7 +10723,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5746",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u043e\u043c \u0432\u043d\u0435 \u0441\u043a\u043e\u0431\u043e\u043a"
     },
     {
@@ -10711,7 +10734,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5781",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043b\u0438 \u0441\u0438\u043c\u0432\u043e\u043b \u0447\u0430\u0441\u0442\u044c\u044e \u0438\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0442\u043e\u0440\u0430"
     },
     {
@@ -10722,7 +10745,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5785",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u043d\u0430\u0445\u043e\u0434\u0438\u0442 \u043f\u043e\u0437\u0438\u0446\u0438\u044e \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0430 \u0432\u043d\u0435 \u0441\u043a\u043e\u0431\u043e\u043a, \u0441\u0442\u0440\u043e\u043a \u0438 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0435\u0432"
     },
     {
@@ -10733,7 +10756,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5851",
       "community": 39,
-      "community_name": "._parse_with_priorities",
+      "community_name": "split_top_level",
       "norm_label": "\u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442, \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043b\u0438 \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u043a\u0430\u043a\u043e\u0438-\u043b\u0438\u0431\u043e \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440"
     },
     {
@@ -10755,7 +10778,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5902",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u0441\u0442\u0440\u043e\u0438\u0442 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438 \u0438\u0437 ast \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u044f"
     },
     {
@@ -10766,7 +10789,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_5980",
       "community": 16,
-      "community_name": "._parse_line_impl",
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u0440\u0435\u043a\u0443\u0440\u0441\u0438\u0432\u043d\u043e \u0438\u0449\u0435\u0442 \u0441\u0438\u043c\u0432\u043e\u043b \u0432 \u0442\u0435\u043a\u0443\u0449\u0435\u043c \u0438 \u0440\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u0441\u043a\u0438\u0445 scope'\u0430\u0445"
     },
     {
@@ -10809,8 +10832,8 @@
       "source_location": "L6182",
       "_origin": "ast",
       "id": "src_parser_rationale_6182",
-      "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "\u0441\u0440\u0430\u0432\u043d\u0438\u0432\u0430\u0435\u0442 \u0434\u0432\u0430 \u043c\u0435\u0442\u043e\u0434\u0430"
     },
     {
@@ -10821,7 +10844,7 @@
       "_origin": "ast",
       "id": "src_parser_rationale_6206",
       "community": 13,
-      "community_name": ".calculate_indent_level",
+      "community_name": "._parse_line_impl",
       "norm_label": "parse a comma-separated parameter list at top level."
     },
     {
@@ -10853,8 +10876,8 @@
       "source_location": "L6330",
       "_origin": "ast",
       "id": "src_parser_rationale_6330",
-      "community": 8,
-      "community_name": "Parser",
+      "community": 16,
+      "community_name": ".extract_dependencies_from_ast",
       "norm_label": "\u0440\u0430\u0437\u0440\u0435\u0448\u0430\u0435\u0442 \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044e \u043e \u043c\u0435\u0442\u043e\u0434\u0435 \u0441 \u0443\u0447\u0435\u0442\u043e\u043c \u043d\u0430\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f"
     },
     {
@@ -10876,7 +10899,7 @@
       "_origin": "ast",
       "id": "src_parsing_init",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "parsing/__init__.py"
     },
     {
@@ -10887,7 +10910,7 @@
       "_origin": "ast",
       "id": "src_parsing_type_system",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "type_system.py"
     },
     {
@@ -10899,8 +10922,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec",
-      "community": 48,
-      "community_name": "TypeSpec",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": "typespec"
     },
     {
@@ -10911,8 +10934,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_canonical",
-      "community": 48,
-      "community_name": "TypeSpec",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": ".canonical()"
     },
     {
@@ -10923,8 +10946,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_base_name",
-      "community": 48,
-      "community_name": "TypeSpec",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": ".base_name()"
     },
     {
@@ -10935,8 +10958,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_memory_kind",
-      "community": 48,
-      "community_name": "TypeSpec",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": ".memory_kind()"
     },
     {
@@ -10947,8 +10970,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_borrow",
-      "community": 48,
-      "community_name": "TypeSpec",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": ".is_borrow()"
     },
     {
@@ -10959,8 +10982,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_mut_borrow",
-      "community": 48,
-      "community_name": "TypeSpec",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": ".is_mut_borrow()"
     },
     {
@@ -10971,8 +10994,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_raw_pointer",
-      "community": 48,
-      "community_name": "TypeSpec",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": ".is_raw_pointer()"
     },
     {
@@ -10983,8 +11006,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_is_optional",
-      "community": 48,
-      "community_name": "TypeSpec",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": ".is_optional()"
     },
     {
@@ -10995,8 +11018,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_typespec_to_dict",
-      "community": 48,
-      "community_name": "TypeSpec",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": ".to_dict()"
     },
     {
@@ -11007,8 +11030,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_parsing_type_system_split_top_level",
-      "community": 62,
-      "community_name": "parser.py",
+      "community": 39,
+      "community_name": "split_top_level",
       "norm_label": "split_top_level()"
     },
     {
@@ -11033,7 +11056,7 @@
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "typeparser"
     },
     {
@@ -11045,7 +11068,7 @@
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser_parse",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": ".parse()"
     },
     {
@@ -11057,7 +11080,7 @@
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser_parse_generic",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "._parse_generic()"
     },
     {
@@ -11069,7 +11092,7 @@
       "_origin": "ast",
       "id": "src_parsing_type_system_typeparser_matching_outer_brackets",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "._matching_outer_brackets()"
     },
     {
@@ -11081,7 +11104,7 @@
       "_origin": "ast",
       "id": "src_parsing_type_system_infer_literal_shape",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "infer_literal_shape()"
     },
     {
@@ -11091,8 +11114,8 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_77",
-      "community": 48,
-      "community_name": "TypeSpec",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": "structured representation of a phils type. the parser still emits the canonical..."
     },
     {
@@ -11102,8 +11125,8 @@
       "source_location": "L174",
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_174",
-      "community": 62,
-      "community_name": "parser.py",
+      "community": 39,
+      "community_name": "split_top_level",
       "norm_label": "split text only when not nested in (), [], {}, <> or strings."
     },
     {
@@ -11125,7 +11148,7 @@
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_320",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "recursive parser for phils type expressions."
     },
     {
@@ -11136,7 +11159,7 @@
       "_origin": "ast",
       "id": "src_parsing_type_system_rationale_389",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "infer a rectangular shape from nested list literals. returns ``none`` for..."
     },
     {
@@ -11147,7 +11170,7 @@
       "_origin": "ast",
       "id": "src_typed_ir",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "typed_ir.py"
     },
     {
@@ -11269,7 +11292,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_typedexpression",
       "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community_name": "TypedExpression",
       "norm_label": "typedexpression"
     },
     {
@@ -11281,7 +11304,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_typedexpression_getitem",
       "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community_name": "TypedExpression",
       "norm_label": ".__getitem__()"
     },
     {
@@ -11304,7 +11327,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_typedexpression_iter",
       "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community_name": "TypedExpression",
       "norm_label": ".__iter__()"
     },
     {
@@ -11316,7 +11339,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_typedexpression_len",
       "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community_name": "TypedExpression",
       "norm_label": ".__len__()"
     },
     {
@@ -11328,8 +11351,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "src_typed_ir_ownershipeffect",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": "ownershipeffect"
     },
     {
@@ -11585,7 +11608,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_typedirbuilder_init",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": ".__init__()"
     },
     {
@@ -11704,7 +11727,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "src_typed_ir_build_typed_module",
-      "community": 62,
+      "community": 41,
       "community_name": "parser.py",
       "norm_label": "_build_typed_module()"
     },
@@ -11716,7 +11739,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_rationale_1",
       "community": 62,
-      "community_name": "parser.py",
+      "community_name": "TypeParser",
       "norm_label": "typed intermediate representation for the ocean compiler. the parser's..."
     },
     {
@@ -11738,7 +11761,7 @@
       "_origin": "ast",
       "id": "src_typed_ir_rationale_58",
       "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community_name": "TypedExpression",
       "norm_label": "recursive typed view of one expression ast node."
     },
     {
@@ -11748,8 +11771,8 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "src_typed_ir_rationale_76",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 62,
+      "community_name": "TypeParser",
       "norm_label": "explicit ownership transition attached to a typed graph node."
     },
     {
@@ -11858,7 +11881,7 @@
       "source_location": "L545",
       "_origin": "ast",
       "id": "src_typed_ir_rationale_545",
-      "community": 62,
+      "community": 41,
       "community_name": "parser.py",
       "norm_label": "build the typed module from the parser's internal graph."
     },
@@ -12725,8 +12748,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_constants",
-      "community": 57,
-      "community_name": "CCodeGenerator",
+      "community": 48,
+      "community_name": "compiler.py",
       "norm_label": "tests/constants.py"
     },
     {
@@ -12736,8 +12759,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_array_tensor",
-      "community": 57,
-      "community_name": "CCodeGenerator",
+      "community": 48,
+      "community_name": "compiler.py",
       "norm_label": "test_array_tensor.py"
     },
     {
@@ -12748,8 +12771,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_array_tensor_generate",
-      "community": 57,
-      "community_name": "CCodeGenerator",
+      "community": 48,
+      "community_name": "compiler.py",
       "norm_label": "generate()"
     },
     {
@@ -12760,8 +12783,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_array_tensor_test_array_lowering_and_index_mutation",
-      "community": 57,
-      "community_name": "CCodeGenerator",
+      "community": 48,
+      "community_name": "compiler.py",
       "norm_label": "test_array_lowering_and_index_mutation()"
     },
     {
@@ -12807,7 +12830,7 @@
       "_origin": "ast",
       "id": "tests_test_debug_validator",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "test_debug_validator.py"
     },
     {
@@ -12819,7 +12842,7 @@
       "_origin": "ast",
       "id": "tests_test_debug_validator_validate",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "validate()"
     },
     {
@@ -12831,7 +12854,7 @@
       "_origin": "ast",
       "id": "tests_test_debug_validator_test_validator_returns_report_for_malformed_input",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "test_validator_returns_report_for_malformed_input()"
     },
     {
@@ -12843,7 +12866,7 @@
       "_origin": "ast",
       "id": "tests_test_debug_validator_test_validator_does_not_leak_symbols_between_functions",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "test_validator_does_not_leak_symbols_between_functions()"
     },
     {
@@ -12855,7 +12878,7 @@
       "_origin": "ast",
       "id": "tests_test_debug_validator_test_validator_accepts_typed_borrow_and_generic_symbols",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "test_validator_accepts_typed_borrow_and_generic_symbols()"
     },
     {
@@ -12867,7 +12890,7 @@
       "_origin": "ast",
       "id": "tests_test_debug_validator_test_validator_reports_real_source_line_for_type_error",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "test_validator_reports_real_source_line_for_type_error()"
     },
     {
@@ -12879,7 +12902,7 @@
       "_origin": "ast",
       "id": "tests_test_debug_validator_test_validator_reports_file_line_and_column",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "test_validator_reports_file_line_and_column()"
     },
     {
@@ -12891,19 +12914,19 @@
       "_origin": "ast",
       "id": "tests_test_debug_validator_test_validator_emits_typed_diagnostics_with_codes",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "test_validator_emits_typed_diagnostics_with_codes()"
     },
     {
       "label": "test_validator_checks_container_and_index_types_from_ast()",
       "file_type": "code",
       "source_file": "tests/test_debug_validator.py",
-      "source_location": "L93",
+      "source_location": "L95",
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_debug_validator_test_validator_checks_container_and_index_types_from_ast",
       "community": 65,
-      "community_name": "Diagnostic",
+      "community_name": "debug.py",
       "norm_label": "test_validator_checks_container_and_index_types_from_ast()"
     },
     {
@@ -13821,8 +13844,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_openmp",
-      "community": 72,
-      "community_name": "test_openmp.py",
+      "community": 12,
+      "community_name": "Validator",
       "norm_label": "test_openmp.py"
     },
     {
@@ -13833,8 +13856,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_openmp_typed",
-      "community": 72,
-      "community_name": "test_openmp.py",
+      "community": 12,
+      "community_name": "Validator",
       "norm_label": "_typed()"
     },
     {
@@ -13845,8 +13868,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_openmp_test_openmp_pragma_is_attached_to_for_and_emitted_as_omp",
-      "community": 72,
-      "community_name": "test_openmp.py",
+      "community": 12,
+      "community_name": "Validator",
       "norm_label": "test_openmp_pragma_is_attached_to_for_and_emitted_as_omp()"
     },
     {
@@ -13857,8 +13880,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_openmp_test_openmp_reduction_is_accepted",
-      "community": 72,
-      "community_name": "test_openmp.py",
+      "community": 12,
+      "community_name": "Validator",
       "norm_label": "test_openmp_reduction_is_accepted()"
     },
     {
@@ -13869,8 +13892,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_openmp_test_openmp_collapse_two_nested_loops_is_emitted_and_accepted",
-      "community": 72,
-      "community_name": "test_openmp.py",
+      "community": 12,
+      "community_name": "Validator",
       "norm_label": "test_openmp_collapse_two_nested_loops_is_emitted_and_accepted()"
     },
     {
@@ -13881,8 +13904,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_openmp_test_openmp_collapse_requires_perfect_nesting",
-      "community": 72,
-      "community_name": "test_openmp.py",
+      "community": 12,
+      "community_name": "Validator",
       "norm_label": "test_openmp_collapse_requires_perfect_nesting()"
     },
     {
@@ -13893,8 +13916,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_openmp_test_openmp_collapse_requires_enough_nested_loops",
-      "community": 72,
-      "community_name": "test_openmp.py",
+      "community": 12,
+      "community_name": "Validator",
       "norm_label": "test_openmp_collapse_requires_enough_nested_loops()"
     },
     {
@@ -13905,8 +13928,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_openmp_test_openmp_collapse_allows_sequential_loop_after_collapsed_nest",
-      "community": 72,
-      "community_name": "test_openmp.py",
+      "community": 12,
+      "community_name": "Validator",
       "norm_label": "test_openmp_collapse_allows_sequential_loop_after_collapsed_nest()"
     },
     {
@@ -13917,8 +13940,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_openmp_test_openmp_rejects_shared_scalar_write_without_reduction",
-      "community": 72,
-      "community_name": "test_openmp.py",
+      "community": 12,
+      "community_name": "Validator",
       "norm_label": "test_openmp_rejects_shared_scalar_write_without_reduction()"
     },
     {
@@ -13929,8 +13952,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_openmp_test_openmp_requires_a_following_for_loop",
-      "community": 72,
-      "community_name": "test_openmp.py",
+      "community": 12,
+      "community_name": "Validator",
       "norm_label": "test_openmp_requires_a_following_for_loop()"
     },
     {
@@ -14201,8 +14224,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_typed_ir",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_typed_ir.py"
     },
     {
@@ -14213,8 +14236,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_typed_ir_test_typed_ir_tracks_types_reads_writes_and_effects",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_typed_ir_tracks_types_reads_writes_and_effects()"
     },
     {
@@ -14225,8 +14248,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_typed_ir_test_parser_typed_entrypoint_is_ready_for_compiler_callers",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_parser_typed_entrypoint_is_ready_for_compiler_callers()"
     },
     {
@@ -14237,8 +14260,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_typed_ir_test_typed_ir_exposes_typed_backend_views",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_typed_ir_exposes_typed_backend_views()"
     },
     {
@@ -14249,8 +14272,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_typed_ir_test_typed_ir_wraps_nested_expression_nodes",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_typed_ir_wraps_nested_expression_nodes()"
     },
     {
@@ -14261,8 +14284,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_typed_ir_test_typed_ir_exposes_ownership_transitions",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_typed_ir_exposes_ownership_transitions()"
     },
     {
@@ -14273,8 +14296,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_typed_ir_test_typed_ir_exposes_source_location_metadata",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_typed_ir_exposes_source_location_metadata()"
     },
     {
@@ -14285,8 +14308,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_typed_ir_test_typed_ir_is_the_canonical_validator_and_codegen_api",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_typed_ir_is_the_canonical_validator_and_codegen_api()"
     },
     {
@@ -14297,8 +14320,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_typed_ir_test_typed_ir_models_device_tensor_as_managed_public_type",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_typed_ir_models_device_tensor_as_managed_public_type()"
     },
     {
@@ -14309,8 +14332,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_typed_ir_test_removed_native_tensor_is_rejected",
-      "community": 67,
-      "community_name": "test_typed_ir.py",
+      "community": 8,
+      "community_name": "Parser",
       "norm_label": "test_removed_native_tensor_is_rejected()"
     },
     {
@@ -26163,7 +26186,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L5246",
+      "source_location": "L5249",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26284,7 +26307,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4289",
+      "source_location": "L4292",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26295,7 +26318,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4742",
+      "source_location": "L4745",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26306,7 +26329,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4934",
+      "source_location": "L4937",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26317,7 +26340,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4407",
+      "source_location": "L4410",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26339,7 +26362,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4890",
+      "source_location": "L4893",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26361,7 +26384,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4769",
+      "source_location": "L4772",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26416,7 +26439,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L5105",
+      "source_location": "L5108",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26438,7 +26461,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4833",
+      "source_location": "L4836",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26465,6 +26488,17 @@
       "_origin": "ast",
       "source": "src_debug_validator",
       "target": "src_debug_validator_function_scope_return_type",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "src/debug.py",
+      "source_location": "L4186",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_debug_validator",
+      "target": "src_debug_validator_get_diagnostic_report",
       "confidence_score": 1.0
     },
     {
@@ -26526,7 +26560,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4812",
+      "source_location": "L4815",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26592,7 +26626,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L5177",
+      "source_location": "L5180",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26779,7 +26813,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L5041",
+      "source_location": "L5044",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26889,7 +26923,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4546",
+      "source_location": "L4549",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26966,7 +27000,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4675",
+      "source_location": "L4678",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -26977,7 +27011,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4844",
+      "source_location": "L4847",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -27109,7 +27143,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4187",
+      "source_location": "L4190",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -27241,7 +27275,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4474",
+      "source_location": "L4477",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -27351,7 +27385,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4621",
+      "source_location": "L4624",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -27384,7 +27418,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4359",
+      "source_location": "L4362",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator",
@@ -27510,6 +27544,18 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_debug_validator",
+      "target": "src_debug_validator",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_debug_validator.py",
+      "source_location": "L77",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_debug_validator_test_validator_emits_typed_diagnostics_with_codes",
       "target": "src_debug_validator",
       "confidence_score": 1.0
     },
@@ -28133,7 +28179,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4340",
+      "source_location": "L4343",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_check_method_resolution_order",
@@ -28145,7 +28191,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L5018",
+      "source_location": "L5021",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_check_undefined_methods",
@@ -28157,7 +28203,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4464",
+      "source_location": "L4467",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_check_unused_parameters",
@@ -28265,7 +28311,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4690",
+      "source_location": "L4693",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_c_function_calls",
@@ -28397,7 +28443,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4213",
+      "source_location": "L4216",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_inheritance_hierarchy",
@@ -28517,7 +28563,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4492",
+      "source_location": "L4495",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_pointer_usage",
@@ -28625,7 +28671,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4382",
+      "source_location": "L4385",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_thread_functions",
@@ -28792,7 +28838,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4761",
+      "source_location": "L4764",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_check_missing_declarations",
@@ -28804,7 +28850,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4470",
+      "source_location": "L4473",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_check_unused_parameters",
@@ -28828,7 +28874,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4913",
+      "source_location": "L4916",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_collect_function_metrics",
@@ -28840,7 +28886,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4568",
+      "source_location": "L4571",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_array_bounds",
@@ -28852,7 +28898,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4715",
+      "source_location": "L4718",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_c_function_calls",
@@ -28864,7 +28910,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4882",
+      "source_location": "L4885",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_class_method_calls",
@@ -28924,7 +28970,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4274",
+      "source_location": "L4277",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_inheritance_hierarchy",
@@ -28948,7 +28994,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4513",
+      "source_location": "L4516",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_pointer_usage",
@@ -28972,7 +29018,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4644",
+      "source_location": "L4647",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_string_operations",
@@ -29008,7 +29054,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4391",
+      "source_location": "L4394",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_thread_functions",
@@ -31612,7 +31658,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4491",
+      "source_location": "L4494",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_pointer_usage",
@@ -31635,7 +31681,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4989",
+      "source_location": "L4992",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_check_undefined_methods",
@@ -31647,7 +31693,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4825",
+      "source_location": "L4828",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_get_static_value_from_ast",
@@ -31659,7 +31705,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4559",
+      "source_location": "L4562",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_array_bounds",
@@ -31671,7 +31717,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4703",
+      "source_location": "L4706",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_c_function_calls",
@@ -31683,7 +31729,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4509",
+      "source_location": "L4512",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_pointer_usage",
@@ -31695,7 +31741,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4632",
+      "source_location": "L4635",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_string_operations",
@@ -31773,22 +31819,45 @@
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
       "source_file": "src/debug.py",
       "source_location": "L4184",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_get_report",
-      "target": "src_diagnostics_diagnosticreport"
+      "target": "src_debug_validator_get_diagnostic_report",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4188",
+      "source_location": "L4187",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4188",
+      "source": "src_debug_rationale_4187",
+      "target": "src_debug_validator_get_diagnostic_report",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "return_type",
+      "confidence": "EXTRACTED",
+      "source_file": "src/debug.py",
+      "source_location": "L4186",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_debug_validator_get_diagnostic_report",
+      "target": "src_diagnostics_diagnosticreport",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "src/debug.py",
+      "source_location": "L4191",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_debug_rationale_4191",
       "target": "src_debug_validator_validate_inheritance_hierarchy",
       "confidence_score": 1.0
     },
@@ -31796,10 +31865,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4290",
+      "source_location": "L4293",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4290",
+      "source": "src_debug_rationale_4293",
       "target": "src_debug_validator_check_method_resolution_order",
       "confidence_score": 1.0
     },
@@ -31807,10 +31876,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4360",
+      "source_location": "L4363",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4360",
+      "source": "src_debug_rationale_4363",
       "target": "src_debug_validator_validate_thread_functions",
       "confidence_score": 1.0
     },
@@ -31818,10 +31887,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4408",
+      "source_location": "L4411",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4408",
+      "source": "src_debug_rationale_4411",
       "target": "src_debug_validator_check_unused_parameters",
       "confidence_score": 1.0
     },
@@ -31829,10 +31898,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4477",
+      "source_location": "L4480",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4477",
+      "source": "src_debug_rationale_4480",
       "target": "src_debug_validator_validate_pointer_usage",
       "confidence_score": 1.0
     },
@@ -31840,10 +31909,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4549",
+      "source_location": "L4552",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4549",
+      "source": "src_debug_rationale_4552",
       "target": "src_debug_validator_validate_array_bounds",
       "confidence_score": 1.0
     },
@@ -31852,7 +31921,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4564",
+      "source_location": "L4567",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_array_bounds",
@@ -31863,10 +31932,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4624",
+      "source_location": "L4627",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4624",
+      "source": "src_debug_rationale_4627",
       "target": "src_debug_validator_validate_string_operations",
       "confidence_score": 1.0
     },
@@ -31875,7 +31944,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4639",
+      "source_location": "L4642",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_validate_string_operations",
@@ -31886,10 +31955,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4678",
+      "source_location": "L4681",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4678",
+      "source": "src_debug_rationale_4681",
       "target": "src_debug_validator_validate_c_function_calls",
       "confidence_score": 1.0
     },
@@ -31897,10 +31966,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4743",
+      "source_location": "L4746",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4743",
+      "source": "src_debug_rationale_4746",
       "target": "src_debug_validator_check_missing_declarations",
       "confidence_score": 1.0
     },
@@ -31908,10 +31977,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4770",
+      "source_location": "L4773",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4770",
+      "source": "src_debug_rationale_4773",
       "target": "src_debug_validator_collect_vars_from_ast",
       "confidence_score": 1.0
     },
@@ -31919,10 +31988,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4813",
+      "source_location": "L4816",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4813",
+      "source": "src_debug_rationale_4816",
       "target": "src_debug_validator_get_static_value_from_ast",
       "confidence_score": 1.0
     },
@@ -31930,10 +31999,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4834",
+      "source_location": "L4837",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4834",
+      "source": "src_debug_rationale_4837",
       "target": "src_debug_validator_find_parent_node",
       "confidence_score": 1.0
     },
@@ -31941,10 +32010,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4845",
+      "source_location": "L4848",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4845",
+      "source": "src_debug_rationale_4848",
       "target": "src_debug_validator_validate_class_method_calls",
       "confidence_score": 1.0
     },
@@ -31952,10 +32021,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4891",
+      "source_location": "L4894",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4891",
+      "source": "src_debug_rationale_4894",
       "target": "src_debug_validator_collect_function_metrics",
       "confidence_score": 1.0
     },
@@ -31963,47 +32032,11 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L4935",
+      "source_location": "L4938",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_4935",
+      "source": "src_debug_rationale_4938",
       "target": "src_debug_validator_check_undefined_methods",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "src/debug.py",
-      "source_location": "L5012",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_debug_validator_check_undefined_methods",
-      "target": "src_debug_validator_add_class_to_registry",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "src/debug.py",
-      "source_location": "L4965",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_debug_validator_check_undefined_methods",
-      "target": "src_debug_validator_extract_method_calls_from_ast",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "src/debug.py",
-      "source_location": "L5028",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_debug_validator_check_undefined_methods",
-      "target": "src_debug_validator_is_builtin_method_for_type",
       "confidence_score": 1.0
     },
     {
@@ -32015,6 +32048,42 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_check_undefined_methods",
+      "target": "src_debug_validator_add_class_to_registry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/debug.py",
+      "source_location": "L4968",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_debug_validator_check_undefined_methods",
+      "target": "src_debug_validator_extract_method_calls_from_ast",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/debug.py",
+      "source_location": "L5031",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_debug_validator_check_undefined_methods",
+      "target": "src_debug_validator_is_builtin_method_for_type",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/debug.py",
+      "source_location": "L5018",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_debug_validator_check_undefined_methods",
       "target": "src_debug_validator_method_exists_in_class_hierarchy",
       "confidence_score": 1.0
     },
@@ -32022,10 +32091,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L5044",
+      "source_location": "L5047",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_5044",
+      "source": "src_debug_rationale_5047",
       "target": "src_debug_validator_method_exists_in_class_hierarchy",
       "confidence_score": 1.0
     },
@@ -32034,7 +32103,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L5047",
+      "source_location": "L5050",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_debug_validator_method_exists_in_class_hierarchy",
@@ -32045,10 +32114,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L5108",
+      "source_location": "L5111",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_5108",
+      "source": "src_debug_rationale_5111",
       "target": "src_debug_validator_extract_method_calls_from_ast",
       "confidence_score": 1.0
     },
@@ -32056,10 +32125,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L5178",
+      "source_location": "L5181",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_5178",
+      "source": "src_debug_rationale_5181",
       "target": "src_debug_validator_is_builtin_method_for_type",
       "confidence_score": 1.0
     },
@@ -32067,10 +32136,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/debug.py",
-      "source_location": "L5247",
+      "source_location": "L5250",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "src_debug_rationale_5247",
+      "source": "src_debug_rationale_5250",
       "target": "src_debug_validator_add_class_to_registry",
       "confidence_score": 1.0
     },
@@ -35256,6 +35325,18 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_debug_validator",
+      "target": "src_parser_parser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_debug_validator.py",
+      "source_location": "L78",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "tests_test_debug_validator_test_validator_emits_typed_diagnostics_with_codes",
       "target": "src_parser_parser",
       "confidence_score": 1.0
     },
@@ -45241,7 +45322,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_debug_validator.py",
-      "source_location": "L93",
+      "source_location": "L95",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_debug_validator",
@@ -45331,7 +45412,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_debug_validator.py",
-      "source_location": "L94",
+      "source_location": "L96",
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_debug_validator_test_validator_checks_container_and_index_types_from_ast",
@@ -45347,18 +45428,6 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "tests_test_debug_validator_test_validator_does_not_leak_symbols_between_functions",
-      "target": "tests_test_debug_validator_validate",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "tests/test_debug_validator.py",
-      "source_location": "L77",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "tests_test_debug_validator_test_validator_emits_typed_diagnostics_with_codes",
       "target": "tests_test_debug_validator_validate",
       "confidence_score": 1.0
     },

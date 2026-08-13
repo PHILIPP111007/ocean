@@ -127,6 +127,12 @@ The implementation must not expose both a public CPU tensor field and a public
 GPU handle. That would allow `device` and storage to disagree. `GpuStorage`
 owns an opaque runtime handle and its OpenCL context association.
 
+The C runtime implements this boundary through the internal
+`std/tensor/tensor_backend.h` contract. Each backend supplies storage
+`allocate`, `zero`, `copy`, `read`, `write`, `release`, and operation entry
+points. The runtime selects the table from the Tensor device, so public methods
+do not duplicate CPU/OpenCL storage transitions.
+
 ## `matmul`
 
 `A.matmul(B)` computes ordinary row-major `C = A x B`:
@@ -138,6 +144,11 @@ owns an opaque runtime handle and its OpenCL context association.
 - GPU uses OpenCL kernels for `float32` and `int32`, with a correct CPU
   fallback for other numeric dtypes until specialized kernels are added;
 - the operation must not transpose `B` implicitly.
+
+`matmul` is dispatched through the selected backend's operation table. CPU and
+OpenCL therefore share the same shape/dtype/device checks, while
+backend-specific allocation and transfer code stays behind the runtime
+contract.
 
 Mixed-device matmul is rejected in v1. An explicit `.to("cpu")` or
 `.to("gpu")` makes the transfer visible and predictable.
