@@ -115,6 +115,28 @@ def test_compile_c_adds_libm_for_generated_math_import(tmp_path, monkeypatch):
     assert command[-1] == "-lm"
 
 
+def test_compile_c_places_explicit_libraries_after_sources(tmp_path, monkeypatch):
+    c_file = tmp_path / "opencl.c"
+    binary = tmp_path / "opencl"
+    c_file.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+    captured = {}
+
+    def fake_run(command, check):
+        captured["command"] = command
+        assert check is True
+
+    monkeypatch.setattr("main.subprocess.run", fake_run)
+    command = compile_c(
+        c_file,
+        binary,
+        cflags=["-std=c11", "-L/opt/opencl/lib", "-lOpenCL"],
+    )
+
+    assert command == captured["command"]
+    assert command.index(str(c_file)) < command.index("-lOpenCL")
+    assert "-L/opt/opencl/lib" in command
+
+
 def test_standard_runtime_is_discovered_from_paired_header(tmp_path):
     header = tmp_path / "std" / "demo" / "demo.h"
     source = header.with_suffix(".c")

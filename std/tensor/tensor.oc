@@ -33,6 +33,63 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+    def add(self, other: &Tensor) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 0)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def sub(self, other: &Tensor) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 1)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def mul(self, other: &Tensor) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 2)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def div(self, other: &Tensor) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 3)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def add_scalar(self, value: float64) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 0)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def sub_scalar(self, value: float64) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 1)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def mul_scalar(self, value: float64) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 2)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def div_scalar(self, value: float64) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 3)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def reshape(self, rows: int, cols: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_reshape_2d(self.handle, rows, cols)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def transpose(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_transpose(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def sum(self) -> float64:
+        return ocean_tensor_sum(self.handle)
+
+    def fill(self, value: float64) -> None:
+        ocean_tensor_fill(self.handle, value)
+        return None
+
     def shape(self, axis: int) -> int:
         return ocean_tensor_shape(self.handle, axis)
 

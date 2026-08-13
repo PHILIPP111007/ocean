@@ -62,3 +62,76 @@ def main() -> int:
         "2",
         "12",
     ]
+
+
+def test_standard_tensor_operations_and_metadata(tmp_path):
+    source = tmp_path / "tensor_operations.oc"
+    source.write_text(
+        """
+import <std/tensor/tensor.oc>
+
+def main() -> int:
+    var native_left: tensor[int32] = [[1, 2], [3, 4]]
+    var native_right: tensor[int32] = [[5, 6], [7, 8]]
+    var native_bias: tensor[int32] = [[10, 20]]
+    var left: Tensor[int32] = Tensor[int32].from_tensor(native_left, "cpu")
+    var right: Tensor[int32] = Tensor[int32].from_tensor(native_right, "cpu")
+    var bias: Tensor[int32] = Tensor[int32].from_tensor(native_bias, "cpu")
+    var added: Tensor[int32] = left.add(right)
+    var subtracted: Tensor[int32] = right.sub(left)
+    var multiplied: Tensor[int32] = left.mul(right)
+    var transposed: Tensor[int32] = left.transpose()
+    var reshaped: Tensor[int32] = left.reshape(1, 4)
+    var scaled: Tensor[int32] = left.mul_scalar(2.0)
+    var broadcast: Tensor[int32] = left.add(bias)
+    left.fill(9.0)
+    var restored_added: tensor[int32] = added.to_tensor()
+    var restored_subtracted: tensor[int32] = subtracted.to_tensor()
+    var restored_multiplied: tensor[int32] = multiplied.to_tensor()
+    var restored_transposed: tensor[int32] = transposed.to_tensor()
+    var restored_reshaped: tensor[int32] = reshaped.to_tensor()
+    var restored_scaled: tensor[int32] = scaled.to_tensor()
+    var restored_broadcast: tensor[int32] = broadcast.to_tensor()
+    print(restored_added[1, 0])
+    print(restored_subtracted[0, 1])
+    print(restored_multiplied[1, 1])
+    print(restored_transposed[0, 1])
+    print(restored_reshaped.shape[1])
+    print(restored_scaled[1, 1])
+    print(restored_broadcast[0, 1])
+    print(restored_broadcast[1, 0])
+    print(left.sum())
+    return 0
+""",
+        encoding="utf-8",
+    )
+    json_path = tmp_path / "tensor_operations.json"
+    c_path = tmp_path / "tensor_operations.generated.c"
+    binary_path = tmp_path / "tensor_operations"
+
+    compile_pipeline(
+        str(Path(__file__).resolve().parents[1]),
+        source,
+        json_path,
+        c_path,
+        quiet=True,
+    )
+    compile_c(c_path, binary_path)
+    result = subprocess.run(
+        [str(binary_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "10",
+        "4",
+        "32",
+        "3",
+        "4",
+        "8",
+        "22",
+        "13",
+        "36.000000",
+    ]

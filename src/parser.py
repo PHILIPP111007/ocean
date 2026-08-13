@@ -5298,6 +5298,14 @@ class Parser:
         }
         if obj_type.startswith("tensor[") and method_name in tensor_methods:
             method_found = True
+        if obj_type == "Tensor" or obj_type.startswith("Tensor["):
+            if method_name in {
+                "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
+                "mul_scalar", "div_scalar", "fill", "sum", "copy",
+                "transpose", "reshape", "matmul", "to", "to_tensor",
+                "shape", "ndim", "size", "device", "release",
+            }:
+                method_found = True
 
         if not method_found:
             logger.debug(
@@ -5318,11 +5326,12 @@ class Parser:
         # standalone there as well (for example ``self.hidden.initialize()``).
         builtin_receiver = (
             obj_type == "str"
-            or obj_type.startswith(("list[", "dict[", "tuple[", "tensor["))
+            or obj_type.startswith(("list[", "dict[", "tuple[", "tensor[", "Tensor["))
+            or obj_type == "Tensor"
         )
         is_standalone = "." in obj_name or (
-            not builtin_receiver
-            and method_info.get("return_type") in {None, "None", "void"}
+            method_info.get("return_type") in {None, "None", "void"}
+            and (not builtin_receiver or obj_type == "Tensor" or obj_type.startswith("Tensor["))
         )
 
         operations = [

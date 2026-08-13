@@ -426,6 +426,8 @@ class CallsMixin:
                             format_parts.append("%s")
                         elif method_name == "size":
                             format_parts.append("%zu")
+                        elif method_name == "sum":
+                            format_parts.append("%f")
                         else:
                             format_parts.append("%d")
                         value_parts.append(expr)

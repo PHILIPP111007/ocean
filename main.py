@@ -227,8 +227,8 @@ def compile_c(c_path: Path, binary_path: Path, compiler: str = "gcc", cflags: li
     # ``math.h`` declares functions supplied by libm on GCC and Clang.  Keep
     # the FFI source syntax simple: a ``cimport <math.h>`` automatically makes
     # the corresponding linker dependency available to the generated program.
-    link_flags = [flag for flag in flags if flag == "-lm"]
-    flags = [flag for flag in flags if flag != "-lm"]
+    link_flags = [flag for flag in flags if flag.startswith("-l")]
+    flags = [flag for flag in flags if not flag.startswith("-l")]
     if "#include <math.h>" in generated_c and not link_flags:
         link_flags.append("-lm")
     command = [

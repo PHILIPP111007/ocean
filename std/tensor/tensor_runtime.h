@@ -26,6 +26,29 @@ ocean_tensor_handle_t ocean_tensor_matmul(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right
 );
+ocean_tensor_handle_t ocean_tensor_binary(
+    ocean_tensor_handle_t left,
+    ocean_tensor_handle_t right,
+    int operation
+);
+ocean_tensor_handle_t ocean_tensor_scalar(
+    ocean_tensor_handle_t tensor,
+    double scalar,
+    int operation
+);
+ocean_tensor_handle_t ocean_tensor_reshape(
+    ocean_tensor_handle_t tensor,
+    const size_t *shape,
+    size_t ndim
+);
+ocean_tensor_handle_t ocean_tensor_reshape_2d(
+    ocean_tensor_handle_t tensor,
+    int rows,
+    int cols
+);
+ocean_tensor_handle_t ocean_tensor_transpose(ocean_tensor_handle_t tensor);
+double ocean_tensor_sum(ocean_tensor_handle_t tensor);
+void ocean_tensor_fill(ocean_tensor_handle_t tensor, double value);
 
 int ocean_tensor_shape(ocean_tensor_handle_t tensor, int axis);
 int ocean_tensor_ndim(ocean_tensor_handle_t tensor);

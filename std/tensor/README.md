@@ -29,6 +29,18 @@ class Tensor:
     def to(self, device: str) -> Tensor[T]
     def to_tensor(self) -> pointer
     def matmul(self, other: &Tensor[T]) -> Tensor[T]
+    def add(self, other: &Tensor[T]) -> Tensor[T]
+    def sub(self, other: &Tensor[T]) -> Tensor[T]
+    def mul(self, other: &Tensor[T]) -> Tensor[T]
+    def div(self, other: &Tensor[T]) -> Tensor[T]
+    def add_scalar(self, value: float64) -> Tensor[T]
+    def sub_scalar(self, value: float64) -> Tensor[T]
+    def mul_scalar(self, value: float64) -> Tensor[T]
+    def div_scalar(self, value: float64) -> Tensor[T]
+    def reshape(self, rows: int, cols: int) -> Tensor[T]
+    def transpose(self) -> Tensor[T]
+    def sum(self) -> float64
+    def fill(self, value: float64) -> None
     def copy(self) -> Tensor[T]
     def shape(self, axis: int) -> int
     def ndim() -> int
@@ -106,9 +118,32 @@ owns an opaque runtime handle and its OpenCL context association.
 - both tensors must be on the same device in v1;
 - the result is allocated on that device;
 - CPU dispatches through a dtype-generic implementation;
-- GPU uses the OpenCL `float32` kernel and a correct CPU fallback for other
-  numeric dtypes until specialized OpenCL kernels are added;
+- GPU uses OpenCL kernels for `float32` and `int32`, with a correct CPU
+  fallback for other numeric dtypes until specialized kernels are added;
 - the operation must not transpose `B` implicitly.
 
 Mixed-device matmul is rejected in v1. An explicit `.to("cpu")` or
 `.to("gpu")` makes the transfer visible and predictable.
+
+## Elementwise operations and layout transforms
+
+The facade provides explicit elementwise methods instead of relying on operator overloading:
+
+```text
+var sum: Tensor[int32] = left.add(right)
+var scaled: Tensor[int32] = sum.mul_scalar(2.0)
+var transposed: Tensor[int32] = scaled.transpose()
+var flattened: Tensor[int32] = transposed.reshape(1, 4)
+var total: float64 = flattened.sum()
+```
+
+`add`, `sub`, `mul`, and `div` support trailing-axis broadcasting on CPU. GPU `float32` and
+`int32` tensors use OpenCL kernels for equal-shape elementwise operations; broadcasting and other
+numeric dtypes use the CPU implementation and are transferred back to the original device.
+`fill` updates the existing tensor in place. `reshape` and `transpose` currently return independent
+contiguous storage, so they do not share an ownership link with the source tensor.
+
+The OpenCL runtime caches its context, queue, program, and kernels for the process and releases
+them through an exit handler. Individual GPU buffers are released with their owning `Tensor`
+object. OpenCL failures are converted to a descriptive process error with the operation and error
+code.

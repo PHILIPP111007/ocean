@@ -204,6 +204,66 @@ static const char *ocean_tensor_matmul_kernel_source =
     "sum += a[row * cols_a + k] * b[k * cols_b + col];"
     "c[row * cols_b + col] = sum;"
     "}"
+    "}"
+    "__kernel void ocean_tensor_binary("
+    "__global const float *a, __global const float *b, __global float *out, "
+    "const int operation, const int size) {"
+    "int index = (int)get_global_id(0);"
+    "if (index < size) {"
+    "float left = a[index]; float right = b[index];"
+    "if (operation == 0) out[index] = left + right;"
+    "else if (operation == 1) out[index] = left - right;"
+    "else if (operation == 2) out[index] = left * right;"
+    "else out[index] = left / right;"
+    "}"
+    "}"
+    "__kernel void ocean_tensor_scalar("
+    "__global const float *input, __global float *out, const float scalar, "
+    "const int operation, const int size) {"
+    "int index = (int)get_global_id(0);"
+    "if (index < size) {"
+    "float value = input[index];"
+    "if (operation == 0) out[index] = value + scalar;"
+    "else if (operation == 1) out[index] = value - scalar;"
+    "else if (operation == 2) out[index] = value * scalar;"
+    "else out[index] = value / scalar;"
+    "}"
+    "}"
+    "__kernel void ocean_tensor_matmul_int32("
+    "__global const int *a, __global const int *b, __global int *c, "
+    "const int rows_a, const int cols_a, const int cols_b) {"
+    "int row = (int)get_global_id(0);"
+    "int col = (int)get_global_id(1);"
+    "if (row < rows_a && col < cols_b) {"
+    "int sum = 0;"
+    "for (int k = 0; k < cols_a; ++k)"
+    "sum += a[row * cols_a + k] * b[k * cols_b + col];"
+    "c[row * cols_b + col] = sum;"
+    "}"
+    "}"
+    "__kernel void ocean_tensor_binary_int32("
+    "__global const int *a, __global const int *b, __global int *out, "
+    "const int operation, const int size) {"
+    "int index = (int)get_global_id(0);"
+    "if (index < size) {"
+    "int left = a[index]; int right = b[index];"
+    "if (operation == 0) out[index] = left + right;"
+    "else if (operation == 1) out[index] = left - right;"
+    "else if (operation == 2) out[index] = left * right;"
+    "else out[index] = right == 0 ? 0 : left / right;"
+    "}"
+    "}"
+    "__kernel void ocean_tensor_scalar_int32("
+    "__global const int *input, __global int *out, const int scalar, "
+    "const int operation, const int size) {"
+    "int index = (int)get_global_id(0);"
+    "if (index < size) {"
+    "int value = input[index];"
+    "if (operation == 0) out[index] = value + scalar;"
+    "else if (operation == 1) out[index] = value - scalar;"
+    "else if (operation == 2) out[index] = value * scalar;"
+    "else out[index] = scalar == 0 ? 0 : value / scalar;"
+    "}"
     "}";
 
 typedef struct ocean_tensor_opencl_runtime {
@@ -211,10 +271,56 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_command_queue queue;
     cl_program program;
     cl_kernel matmul_kernel;
+    cl_kernel matmul_int32_kernel;
+    cl_kernel binary_kernel;
+    cl_kernel binary_int32_kernel;
+    cl_kernel scalar_kernel;
+    cl_kernel scalar_int32_kernel;
 } ocean_tensor_opencl_runtime;
 
 static ocean_tensor_opencl_runtime ocean_tensor_opencl;
 static int ocean_tensor_opencl_initialized = 0;
+
+static void ocean_tensor_opencl_shutdown(void) {
+    if (!ocean_tensor_opencl_initialized) return;
+    if (ocean_tensor_opencl.scalar_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.scalar_kernel);
+        ocean_tensor_opencl.scalar_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.binary_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.binary_kernel);
+        ocean_tensor_opencl.binary_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.matmul_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.matmul_kernel);
+        ocean_tensor_opencl.matmul_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.matmul_int32_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.matmul_int32_kernel);
+        ocean_tensor_opencl.matmul_int32_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.scalar_int32_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.scalar_int32_kernel);
+        ocean_tensor_opencl.scalar_int32_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.binary_int32_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.binary_int32_kernel);
+        ocean_tensor_opencl.binary_int32_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.program) {
+        clReleaseProgram(ocean_tensor_opencl.program);
+        ocean_tensor_opencl.program = NULL;
+    }
+    if (ocean_tensor_opencl.queue) {
+        clReleaseCommandQueue(ocean_tensor_opencl.queue);
+        ocean_tensor_opencl.queue = NULL;
+    }
+    if (ocean_tensor_opencl.context) {
+        clReleaseContext(ocean_tensor_opencl.context);
+        ocean_tensor_opencl.context = NULL;
+    }
+    ocean_tensor_opencl_initialized = 0;
+}
 
 static void ocean_tensor_opencl_check(cl_int status, const char *operation) {
     if (status != CL_SUCCESS) {
@@ -227,6 +333,8 @@ static void ocean_tensor_opencl_check(cl_int status, const char *operation) {
 
 static void ocean_tensor_opencl_init(void) {
     if (ocean_tensor_opencl_initialized) return;
+    ocean_tensor_opencl_initialized = 1;
+    atexit(ocean_tensor_opencl_shutdown);
 
     cl_uint platform_count = 0;
     ocean_tensor_opencl_check(
@@ -283,7 +391,26 @@ static void ocean_tensor_opencl_init(void) {
         ocean_tensor_opencl.program, "ocean_tensor_matmul", &status
     );
     ocean_tensor_opencl_check(status, "clCreateKernel");
-    ocean_tensor_opencl_initialized = 1;
+    ocean_tensor_opencl.matmul_int32_kernel = clCreateKernel(
+        ocean_tensor_opencl.program, "ocean_tensor_matmul_int32", &status
+    );
+    ocean_tensor_opencl_check(status, "clCreateKernel");
+    ocean_tensor_opencl.binary_kernel = clCreateKernel(
+        ocean_tensor_opencl.program, "ocean_tensor_binary", &status
+    );
+    ocean_tensor_opencl_check(status, "clCreateKernel");
+    ocean_tensor_opencl.binary_int32_kernel = clCreateKernel(
+        ocean_tensor_opencl.program, "ocean_tensor_binary_int32", &status
+    );
+    ocean_tensor_opencl_check(status, "clCreateKernel");
+    ocean_tensor_opencl.scalar_kernel = clCreateKernel(
+        ocean_tensor_opencl.program, "ocean_tensor_scalar", &status
+    );
+    ocean_tensor_opencl_check(status, "clCreateKernel");
+    ocean_tensor_opencl.scalar_int32_kernel = clCreateKernel(
+        ocean_tensor_opencl.program, "ocean_tensor_scalar_int32", &status
+    );
+    ocean_tensor_opencl_check(status, "clCreateKernel");
 }
 
 static void ocean_tensor_gpu_alloc(ocean_tensor_handle_t tensor) {
@@ -291,7 +418,8 @@ static void ocean_tensor_gpu_alloc(ocean_tensor_handle_t tensor) {
     cl_int status = CL_SUCCESS;
     tensor->gpu_data = clCreateBuffer(
         ocean_tensor_opencl.context, CL_MEM_READ_WRITE,
-        ocean_tensor_bytes(tensor), NULL, &status
+        ocean_tensor_bytes(tensor) ? ocean_tensor_bytes(tensor) : 1,
+        NULL, &status
     );
     ocean_tensor_opencl_check(status, "clCreateBuffer");
 }
@@ -614,6 +742,410 @@ static void ocean_tensor_write_scalar(
     ocean_tensor_fail("invalid Tensor scalar type");
 }
 
+enum {
+    OCEAN_TENSOR_ADD = 0,
+    OCEAN_TENSOR_SUB = 1,
+    OCEAN_TENSOR_MUL = 2,
+    OCEAN_TENSOR_DIV = 3,
+};
+
+static long double ocean_tensor_apply_binary(
+    long double left,
+    long double right,
+    int operation
+) {
+    switch (operation) {
+        case OCEAN_TENSOR_ADD: return left + right;
+        case OCEAN_TENSOR_SUB: return left - right;
+        case OCEAN_TENSOR_MUL: return left * right;
+        case OCEAN_TENSOR_DIV:
+            if (right == 0.0L) ocean_tensor_fail("Tensor division by zero");
+            return left / right;
+    }
+    ocean_tensor_fail("invalid Tensor binary operation");
+    return 0.0L;
+}
+
+static void ocean_tensor_broadcast_shape(
+    const ocean_tensor_handle_t left,
+    const ocean_tensor_handle_t right,
+    size_t **shape_out,
+    size_t *ndim_out
+) {
+    size_t ndim = left->ndim > right->ndim ? left->ndim : right->ndim;
+    size_t *shape = (size_t *)malloc(ndim * sizeof(size_t));
+    if (!shape) ocean_tensor_fail("out of memory allocating broadcast shape");
+    for (size_t axis = 0; axis < ndim; ++axis) {
+        size_t left_axis = axis + left->ndim >= ndim
+            ? left->shape[axis + left->ndim - ndim] : 1;
+        size_t right_axis = axis + right->ndim >= ndim
+            ? right->shape[axis + right->ndim - ndim] : 1;
+        if (left_axis != right_axis && left_axis != 1 && right_axis != 1) {
+            free(shape);
+            ocean_tensor_fail("Tensor shapes are not broadcast-compatible");
+        }
+        shape[axis] = left_axis > right_axis ? left_axis : right_axis;
+    }
+    *shape_out = shape;
+    *ndim_out = ndim;
+}
+
+static size_t ocean_tensor_broadcast_offset(
+    const ocean_tensor_handle_t tensor,
+    const size_t *result_shape,
+    size_t result_ndim,
+    size_t linear
+) {
+    size_t remaining = linear;
+    size_t offset = 0;
+    for (size_t axis = result_ndim; axis-- > 0;) {
+        size_t coordinate = result_shape[axis]
+            ? remaining % result_shape[axis] : 0;
+        remaining = result_shape[axis]
+            ? remaining / result_shape[axis] : 0;
+        if (axis + tensor->ndim >= result_ndim) {
+            size_t tensor_axis = axis + tensor->ndim - result_ndim;
+            if (tensor->shape[tensor_axis] != 1) {
+                offset += coordinate * tensor->strides[tensor_axis];
+            }
+        }
+    }
+    return offset;
+}
+
+static ocean_tensor_handle_t ocean_tensor_binary_cpu(
+    const ocean_tensor_handle_t left,
+    const ocean_tensor_handle_t right,
+    int operation
+) {
+    size_t *shape = NULL;
+    size_t ndim = 0;
+    ocean_tensor_broadcast_shape(left, right, &shape, &ndim);
+    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+        shape, ndim, left->dtype, OCEAN_TENSOR_CPU
+    );
+    for (size_t linear = 0; linear < result->size; ++linear) {
+        size_t left_index = ocean_tensor_broadcast_offset(
+            left, shape, ndim, linear
+        );
+        size_t right_index = ocean_tensor_broadcast_offset(
+            right, shape, ndim, linear
+        );
+        ocean_tensor_write_scalar(
+            result,
+            linear,
+            ocean_tensor_apply_binary(
+                ocean_tensor_read_scalar(left, left_index),
+                ocean_tensor_read_scalar(right, right_index),
+                operation
+            )
+        );
+    }
+    free(shape);
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_tensor_scalar_cpu(
+    const ocean_tensor_handle_t tensor,
+    double scalar,
+    int operation
+) {
+    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+        tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_CPU
+    );
+    for (size_t linear = 0; linear < tensor->size; ++linear) {
+        ocean_tensor_write_scalar(
+            result,
+            linear,
+            ocean_tensor_apply_binary(
+                ocean_tensor_read_scalar(tensor, linear),
+                (long double)scalar,
+                operation
+            )
+        );
+    }
+    return result;
+}
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+static int ocean_tensor_same_shape(
+    const ocean_tensor_handle_t left,
+    const ocean_tensor_handle_t right
+) {
+    if (left->ndim != right->ndim) return 0;
+    for (size_t axis = 0; axis < left->ndim; ++axis) {
+        if (left->shape[axis] != right->shape[axis]) return 0;
+    }
+    return 1;
+}
+
+static void ocean_tensor_opencl_binary(
+    const ocean_tensor_handle_t left,
+    const ocean_tensor_handle_t right,
+    ocean_tensor_handle_t result,
+    int operation,
+    cl_kernel kernel
+) {
+    int size = (int)left->size;
+    if (left->size > (size_t)INT32_MAX) {
+        ocean_tensor_fail("GPU Tensor is too large for OpenCL kernel indexing");
+    }
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &left->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &right->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(cl_mem), &result->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(int), &operation),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(int), &size),
+        "clSetKernelArg"
+    );
+    size_t global_size = left->size ? left->size : 1;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, NULL
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFinish(ocean_tensor_opencl.queue), "clFinish"
+    );
+}
+
+static void ocean_tensor_opencl_scalar(
+    const ocean_tensor_handle_t tensor,
+    ocean_tensor_handle_t result,
+    double scalar,
+    int operation,
+    cl_kernel kernel,
+    int integer_kernel
+) {
+    if (tensor->size > (size_t)INT32_MAX) {
+        ocean_tensor_fail("GPU Tensor is too large for OpenCL kernel indexing");
+    }
+    float scalar_value = (float)scalar;
+    int integer_value = (int)scalar;
+    int size = (int)tensor->size;
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &tensor->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &result->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(
+            kernel, 2,
+            integer_kernel ? sizeof(int) : sizeof(float),
+            integer_kernel ? (const void *)&integer_value : (const void *)&scalar_value
+        ),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(int), &operation),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(int), &size),
+        "clSetKernelArg"
+    );
+    size_t global_size = tensor->size ? tensor->size : 1;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, NULL
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFinish(ocean_tensor_opencl.queue), "clFinish"
+    );
+}
+#endif
+
+ocean_tensor_handle_t ocean_tensor_binary(
+    ocean_tensor_handle_t left,
+    ocean_tensor_handle_t right,
+    int operation
+) {
+    if (!left || !right) ocean_tensor_fail("Tensor operation on null handle");
+    if (left->dtype != right->dtype) {
+        ocean_tensor_fail("Tensor operation requires matching dtypes");
+    }
+    if (left->device != right->device) {
+        ocean_tensor_fail("Tensor operation requires matching devices");
+    }
+    if (left->device == OCEAN_TENSOR_CPU) {
+        return ocean_tensor_binary_cpu(left, right, operation);
+    }
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if ((left->dtype == OCEAN_TENSOR_FLOAT32 || left->dtype == OCEAN_TENSOR_INT32) &&
+        ocean_tensor_same_shape(left, right)) {
+        ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+            left->shape, left->ndim, left->dtype, OCEAN_TENSOR_GPU
+        );
+        ocean_tensor_gpu_alloc(result);
+        cl_kernel kernel = left->dtype == OCEAN_TENSOR_INT32
+            ? ocean_tensor_opencl.binary_int32_kernel
+            : ocean_tensor_opencl.binary_kernel;
+        ocean_tensor_opencl_binary(left, right, result, operation, kernel);
+        return result;
+    }
+    ocean_tensor_handle_t left_cpu = ocean_tensor_to(left, "cpu");
+    ocean_tensor_handle_t right_cpu = ocean_tensor_to(right, "cpu");
+    ocean_tensor_handle_t cpu_result = ocean_tensor_binary_cpu(
+        left_cpu, right_cpu, operation
+    );
+    ocean_tensor_handle_t gpu_result = ocean_tensor_to(cpu_result, "gpu");
+    ocean_tensor_release(left_cpu);
+    ocean_tensor_release(right_cpu);
+    ocean_tensor_release(cpu_result);
+    return gpu_result;
+#else
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+    return NULL;
+#endif
+}
+
+ocean_tensor_handle_t ocean_tensor_scalar(
+    ocean_tensor_handle_t tensor,
+    double scalar,
+    int operation
+) {
+    if (!tensor) ocean_tensor_fail("Tensor scalar operation on null handle");
+    if (tensor->device == OCEAN_TENSOR_CPU) {
+        return ocean_tensor_scalar_cpu(tensor, scalar, operation);
+    }
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (tensor->dtype == OCEAN_TENSOR_FLOAT32 || tensor->dtype == OCEAN_TENSOR_INT32) {
+        ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+            tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_GPU
+        );
+        ocean_tensor_gpu_alloc(result);
+        cl_kernel kernel = tensor->dtype == OCEAN_TENSOR_INT32
+            ? ocean_tensor_opencl.scalar_int32_kernel
+            : ocean_tensor_opencl.scalar_kernel;
+        ocean_tensor_opencl_scalar(
+            tensor, result, scalar, operation, kernel,
+            tensor->dtype == OCEAN_TENSOR_INT32
+        );
+        return result;
+    }
+    ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
+    ocean_tensor_handle_t cpu_result = ocean_tensor_scalar_cpu(cpu, scalar, operation);
+    ocean_tensor_handle_t gpu_result = ocean_tensor_to(cpu_result, "gpu");
+    ocean_tensor_release(cpu);
+    ocean_tensor_release(cpu_result);
+    return gpu_result;
+#else
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+    return NULL;
+#endif
+}
+
+ocean_tensor_handle_t ocean_tensor_reshape(
+    ocean_tensor_handle_t tensor,
+    const size_t *shape,
+    size_t ndim
+) {
+    if (!tensor || !shape) ocean_tensor_fail("Tensor reshape received null metadata");
+    if (ocean_tensor_elements_from_shape(shape, ndim) != tensor->size) {
+        ocean_tensor_fail("Tensor reshape must preserve the number of elements");
+    }
+    ocean_tensor_handle_t cpu_source = tensor->device == OCEAN_TENSOR_CPU
+        ? ocean_tensor_copy(tensor) : ocean_tensor_to(tensor, "cpu");
+    ocean_tensor_handle_t cpu_result = ocean_tensor_alloc_zeros(
+        shape, ndim, tensor->dtype, OCEAN_TENSOR_CPU
+    );
+    if (tensor->size) memcpy(cpu_result->cpu_data, cpu_source->cpu_data, ocean_tensor_bytes(tensor));
+    ocean_tensor_handle_t result = tensor->device == OCEAN_TENSOR_CPU
+        ? cpu_result : ocean_tensor_to(cpu_result, "gpu");
+    ocean_tensor_release(cpu_source);
+    if (tensor->device != OCEAN_TENSOR_CPU) ocean_tensor_release(cpu_result);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_tensor_reshape_2d(
+    ocean_tensor_handle_t tensor,
+    int rows,
+    int cols
+) {
+    if (rows < 0 || cols < 0) {
+        ocean_tensor_fail("Tensor reshape dimensions must be non-negative");
+    }
+    size_t shape[2] = {(size_t)rows, (size_t)cols};
+    return ocean_tensor_reshape(tensor, shape, 2);
+}
+
+ocean_tensor_handle_t ocean_tensor_transpose(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor transpose on null handle");
+    if (tensor->ndim != 2) ocean_tensor_fail("Tensor transpose currently expects 2D Tensor");
+    size_t shape[2] = {tensor->shape[1], tensor->shape[0]};
+    ocean_tensor_handle_t cpu_source = tensor->device == OCEAN_TENSOR_CPU
+        ? ocean_tensor_copy(tensor) : ocean_tensor_to(tensor, "cpu");
+    ocean_tensor_handle_t cpu_result = ocean_tensor_alloc_zeros(
+        shape, 2, tensor->dtype, OCEAN_TENSOR_CPU
+    );
+    for (size_t row = 0; row < tensor->shape[0]; ++row) {
+        for (size_t col = 0; col < tensor->shape[1]; ++col) {
+            size_t source_index = row * cpu_source->strides[0] + col * cpu_source->strides[1];
+            size_t result_index = col * cpu_result->strides[0] + row * cpu_result->strides[1];
+            memcpy(
+                (unsigned char *)cpu_result->cpu_data + result_index * tensor->item_size,
+                (unsigned char *)cpu_source->cpu_data + source_index * tensor->item_size,
+                tensor->item_size
+            );
+        }
+    }
+    ocean_tensor_handle_t result = tensor->device == OCEAN_TENSOR_CPU
+        ? cpu_result : ocean_tensor_to(cpu_result, "gpu");
+    ocean_tensor_release(cpu_source);
+    if (tensor->device != OCEAN_TENSOR_CPU) ocean_tensor_release(cpu_result);
+    return result;
+}
+
+double ocean_tensor_sum(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor sum on null handle");
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor : ocean_tensor_to(tensor, "cpu");
+    long double result = 0.0L;
+    for (size_t index = 0; index < cpu->size; ++index) {
+        result += ocean_tensor_read_scalar(cpu, index);
+    }
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return (double)result;
+}
+
+void ocean_tensor_fill(ocean_tensor_handle_t tensor, double value) {
+    if (!tensor) ocean_tensor_fail("Tensor fill on null handle");
+    if (tensor->device == OCEAN_TENSOR_CPU) {
+        for (size_t index = 0; index < tensor->size; ++index) {
+            ocean_tensor_write_scalar(tensor, index, (long double)value);
+        }
+        return;
+    }
+    ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
+    ocean_tensor_fill(cpu, value);
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    ocean_tensor_gpu_write(tensor, cpu->cpu_data);
+#else
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+#endif
+    ocean_tensor_release(cpu);
+}
+
 static ocean_tensor_handle_t ocean_tensor_matmul_cpu(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right
@@ -661,9 +1193,9 @@ ocean_tensor_handle_t ocean_tensor_matmul(
     }
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
-    if (left->dtype != OCEAN_TENSOR_FLOAT32) {
-        /* The first OpenCL kernel is float32; preserve GPU semantics for all
-           numeric dtypes through a correct CPU fallback and upload the result. */
+    if (left->dtype != OCEAN_TENSOR_FLOAT32 && left->dtype != OCEAN_TENSOR_INT32) {
+        /* Preserve GPU semantics for dtypes without a specialized kernel
+           through a correct CPU fallback and upload of the result. */
         ocean_tensor_handle_t left_cpu = ocean_tensor_to(left, "cpu");
         ocean_tensor_handle_t right_cpu = ocean_tensor_to(right, "cpu");
         ocean_tensor_handle_t cpu_result = ocean_tensor_matmul_cpu(left_cpu, right_cpu);
@@ -679,7 +1211,17 @@ ocean_tensor_handle_t ocean_tensor_matmul(
         shape, 2, OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_GPU
     );
     ocean_tensor_gpu_alloc(result);
-    cl_kernel kernel = ocean_tensor_opencl.matmul_kernel;
+    if (left->shape[0] == 0 || right->shape[1] == 0) {
+        return result;
+    }
+    if (left->shape[0] > (size_t)INT32_MAX ||
+        left->shape[1] > (size_t)INT32_MAX ||
+        right->shape[1] > (size_t)INT32_MAX) {
+        ocean_tensor_fail("GPU Tensor dimensions are too large for OpenCL kernel indexing");
+    }
+    cl_kernel kernel = left->dtype == OCEAN_TENSOR_INT32
+        ? ocean_tensor_opencl.matmul_int32_kernel
+        : ocean_tensor_opencl.matmul_kernel;
     int rows = (int)left->shape[0];
     int cols = (int)left->shape[1];
     int result_cols = (int)right->shape[1];

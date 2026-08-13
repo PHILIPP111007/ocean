@@ -96,13 +96,19 @@ var restored: tensor[float32] = result_cpu.to_tensor()
 
 The supported devices are exactly `"cpu"` and `"gpu"`. `.to(device)` is non-mutating: it returns
 an owned tensor on the requested device and leaves the source tensor valid. `Tensor` also provides
-`zeros`, `from_tensor`, `copy`, `matmul`, `shape`, `ndim`, `size`, `device`, `to_tensor`, and
+`zeros`, `from_tensor`, `copy`, `matmul`, `add`, `sub`, `mul`, `div`, scalar arithmetic,
+`reshape`, `transpose`, `sum`, `fill`, `shape`, `ndim`, `size`, `device`, `to_tensor`, and
 `release`.
 
 `Tensor.matmul` requires compatible 2D shapes and matching devices. CPU matmul is dtype-generic.
-The GPU path currently uses an OpenCL `float32` kernel; other numeric dtypes use a correct CPU
-fallback until specialized GPU kernels are added. The operation does not transpose the right-hand
-matrix implicitly.
+The GPU path currently has OpenCL kernels for `float32` and `int32`; other numeric dtypes use a
+correct CPU fallback until specialized GPU kernels are added. The operation does not transpose the
+right-hand matrix implicitly.
+
+Elementwise methods support trailing-axis broadcasting on CPU. Equal-shape `float32` GPU operations
+use OpenCL kernels; broadcasting and other dtypes use the CPU implementation and transfer the
+result back to the original device. `reshape` and `transpose` currently return independent
+contiguous tensors, while `fill` mutates the existing tensor.
 
 The public facade owns an opaque runtime handle. Ocean code does not access `cl_mem`, OpenCL
 contexts, queues, or backend-specific pointers directly. See [std/tensor/README.md](std/tensor/README.md)
