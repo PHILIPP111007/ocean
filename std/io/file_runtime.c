@@ -117,7 +117,10 @@ void ocean_file_flush(ocean_file_handle_t file) {
 bool ocean_file_eof(ocean_file_handle_t file) {
     struct ocean_file_handle *checked = ocean_file_require(file);
     int value = fgetc(checked->stream);
-    if (value == EOF) return true;
+    if (value == EOF) {
+        if (ferror(checked->stream)) ocean_file_fail("cannot inspect file end");
+        return true;
+    }
     if (ungetc(value, checked->stream) == EOF) {
         ocean_file_fail("cannot inspect file end");
     }

@@ -248,7 +248,7 @@ def compile_c(
     # the corresponding linker dependency available to the generated program.
     link_flags = [flag for flag in flags if flag.startswith("-l")]
     flags = [flag for flag in flags if not flag.startswith("-l")]
-    if "#include <math.h>" in generated_c and not link_flags:
+    if "#include <math.h>" in generated_c and "-lm" not in link_flags:
         link_flags.append("-lm")
     command = [
         compiler,

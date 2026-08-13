@@ -125,7 +125,10 @@ class TensorCodegenMixin:
                 raise RuntimeError("Tensor.load_npy expects path and device")
             path = generate_argument(args[0])
             device = generate_argument(args[1])
-            return f"create_Tensor(ocean_tensor_load_npy({path}, {device}))"
+            return (
+                f"create_Tensor(ocean_tensor_load_npy_typed({path}, {device}, "
+                f"\"{dtype}\"))"
+            )
 
         return None
 

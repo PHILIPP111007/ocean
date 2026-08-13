@@ -982,6 +982,20 @@ static void ocean_tensor_write_scalar(
     ocean_tensor_fail("invalid Tensor scalar type");
 }
 
+static bool ocean_tensor_contains_zero(const ocean_tensor_handle_t tensor) {
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor : ocean_tensor_to(tensor, "cpu");
+    bool found = false;
+    for (size_t index = 0; index < cpu->size; ++index) {
+        if (ocean_tensor_read_scalar(cpu, index) == 0.0L) {
+            found = true;
+            break;
+        }
+    }
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return found;
+}
+
 enum {
     OCEAN_TENSOR_ADD = 0,
     OCEAN_TENSOR_SUB = 1,
@@ -1024,7 +1038,12 @@ static void ocean_tensor_broadcast_shape(
             free(shape);
             ocean_tensor_fail("Tensor shapes are not broadcast-compatible");
         }
-        shape[axis] = left_axis > right_axis ? left_axis : right_axis;
+        /* Broadcasting dimension 0 with dimension 1 produces dimension 0.
+           Using max(left_axis, right_axis) incorrectly turns that case into
+           a non-empty result and later dereferences a NULL data buffer. */
+        if (left_axis == right_axis) shape[axis] = left_axis;
+        else if (left_axis == 1) shape[axis] = right_axis;
+        else if (right_axis == 1) shape[axis] = left_axis;
     }
     *shape_out = shape;
     *ndim_out = ndim;
@@ -1225,6 +1244,9 @@ static ocean_tensor_handle_t ocean_tensor_binary_opencl(
     int operation
 ) {
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (operation == OCEAN_TENSOR_DIV && ocean_tensor_contains_zero(right)) {
+        ocean_tensor_fail("Tensor division by zero");
+    }
     if ((left->dtype == OCEAN_TENSOR_FLOAT32 || left->dtype == OCEAN_TENSOR_INT32) &&
         ocean_tensor_same_shape(left, right)) {
         ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
@@ -1316,6 +1338,9 @@ ocean_tensor_handle_t ocean_tensor_scalar(
     int operation
 ) {
     if (!tensor) ocean_tensor_fail("Tensor scalar operation on null handle");
+    if (operation == OCEAN_TENSOR_DIV && scalar == 0.0) {
+        ocean_tensor_fail("Tensor division by zero");
+    }
     return ocean_tensor_backend_for_device(tensor->device)->scalar(
         tensor, scalar, operation
     );
@@ -2056,10 +2081,10 @@ void ocean_tensor_save_npy(
             );
     }
     free(header);
-    fclose(stream);
+    bool close_ok = fclose(stream) == 0;
     if (contiguous) ocean_tensor_release(contiguous);
     if (cpu) ocean_tensor_release(cpu);
-    if (!ok) ocean_tensor_fail("failed writing .npy file");
+    if (!ok || !close_ok) ocean_tensor_fail("failed writing .npy file");
 }
 
 static uint16_t ocean_tensor_npy_read_u16(const unsigned char *bytes) {
@@ -2326,6 +2351,23 @@ ocean_tensor_handle_t ocean_tensor_load_npy(
     ocean_tensor_handle_t moved = ocean_tensor_to(result, device);
     ocean_tensor_release(result);
     return moved;
+}
+
+ocean_tensor_handle_t ocean_tensor_load_npy_typed(
+    const char *path,
+    const char *device,
+    const char *expected_dtype
+) {
+    if (!expected_dtype) {
+        ocean_tensor_fail("Tensor.load_npy requires an expected dtype");
+    }
+    ocean_tensor_dtype expected = ocean_tensor_parse_dtype(expected_dtype);
+    ocean_tensor_handle_t result = ocean_tensor_load_npy(path, device);
+    if (result->dtype != expected) {
+        ocean_tensor_release(result);
+        ocean_tensor_fail(".npy dtype does not match Tensor[T]");
+    }
+    return result;
 }
 
 int ocean_tensor_shape(ocean_tensor_handle_t tensor, int axis) {
