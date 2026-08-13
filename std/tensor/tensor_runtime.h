@@ -2,6 +2,8 @@
 #define OCEAN_STD_TENSOR_RUNTIME_H
 
 #include <stddef.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 typedef struct ocean_tensor_handle *ocean_tensor_handle_t;
 
@@ -58,6 +60,17 @@ ocean_tensor_handle_t ocean_tensor_slice(
 );
 double ocean_tensor_sum(ocean_tensor_handle_t tensor);
 void ocean_tensor_fill(ocean_tensor_handle_t tensor, double value);
+double ocean_tensor_get_nd(
+    ocean_tensor_handle_t tensor,
+    const size_t *indices,
+    size_t ndim
+);
+void ocean_tensor_set_nd(
+    ocean_tensor_handle_t tensor,
+    const size_t *indices,
+    size_t ndim,
+    double value
+);
 double ocean_tensor_get_2d(ocean_tensor_handle_t tensor, int row, int col);
 void ocean_tensor_set_2d(ocean_tensor_handle_t tensor, int row, int col, double value);
 

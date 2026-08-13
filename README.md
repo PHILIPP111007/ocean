@@ -64,7 +64,8 @@ var result: Tensor[float32] = matrix.add(transposed)
 
 Tensor storage is opaque at the public API boundary. Indexing is bounds-checked by the runtime;
 `sum`, `fill`, `copy`, `transpose`, and 2D `matmul` are exposed as methods on `Tensor[T]`.
-`transpose()` returns an independent copying tensor.
+Indexing supports arbitrary rank, for example `cube[1, 0, 1]`; `transpose()` returns an
+independent copying tensor.
 
 ### Device-aware `Tensor[T]`
 

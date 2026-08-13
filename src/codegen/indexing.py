@@ -415,7 +415,11 @@ class IndexingMixin:
                 target_expr = variable
                 if variable.startswith("self."):
                     target_expr = f"self->{variable[5:]}"
-                current_expr = f"Tensor_get({target_expr}, {', '.join(index_exprs)})"
+                literal = ", ".join(f"(size_t)({index})" for index in index_exprs)
+                current_expr = (
+                    f"ocean_tensor_get_nd({target_expr}->handle, "
+                    f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
+                )
             else:
                 target_expr = variable
                 current_expr = self._tensor_index_call(
@@ -626,9 +630,11 @@ class IndexingMixin:
                     field = self.class_registry.field(current_class, attr_name)
                     attr_type = field.py_type if field else None
                     if attr_type and self.is_device_tensor_type(attr_type):
-                        if len(index_exprs) != 2:
-                            raise RuntimeError("Tensor indexing currently expects exactly two indices")
-                        return f"Tensor_get(self->{attr_name}, {index_exprs[0]}, {index_exprs[1]})"
+                        literal = ", ".join(f"(size_t)({index})" for index in index_exprs)
+                        return (
+                            f"ocean_tensor_get_nd(self->{attr_name}->handle, "
+                            f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
+                        )
                     if attr_type and self.is_tensor_type(attr_type):
                         return self._tensor_index_call(
                             f"self->{attr_name}", attr_type, index_exprs
@@ -657,9 +663,11 @@ class IndexingMixin:
                 field = self.class_registry.field(class_name, attr_name)
                 attr_type = field.py_type if field else None
                 if attr_type and self.is_device_tensor_type(attr_type):
-                    if len(index_exprs) != 2:
-                        raise RuntimeError("Tensor indexing currently expects exactly two indices")
-                    return f"Tensor_get({obj_name}->{attr_name}, {index_exprs[0]}, {index_exprs[1]})"
+                    literal = ", ".join(f"(size_t)({index})" for index in index_exprs)
+                    return (
+                        f"ocean_tensor_get_nd({obj_name}->{attr_name}->handle, "
+                        f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
+                    )
                 if attr_type and self.is_tensor_type(attr_type):
                     return self._tensor_index_call(
                         f"{obj_name}->{attr_name}", attr_type, index_exprs

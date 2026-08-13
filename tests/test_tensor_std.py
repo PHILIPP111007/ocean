@@ -223,6 +223,8 @@ def main() -> int:
     var row: Tensor[float32] = matrix.row(1)
     var column: Tensor[float32] = matrix.column(1)
     var sliced: Tensor[float32] = matrix.slice(1, 1, 3, 1)
+    var cube: Tensor[int32] = Tensor.from_list([[[1, 2], [3, 4]], [[5, 6], [7, 8]]], "cpu")
+    cube[1, 0, 1] *= 3
     print(row.ndim())
     print(row.shape(0))
     print(row.sum())
@@ -231,6 +233,7 @@ def main() -> int:
     print(sliced.shape(0))
     print(sliced.shape(1))
     print(sliced.sum())
+    print(cube[1, 0, 1])
     return 0
 """,
         encoding="utf-8",
@@ -263,4 +266,5 @@ def main() -> int:
         "2",
         "2",
         "16.000000",
+        "18.000000",
     ]

@@ -651,18 +651,24 @@ static {struct_name}* {struct_name}_scalar_broadcast(
         py_type = self.strip_borrow_type(info.get("py_type", ""))
         indices = [self.generate_expression(index) for index in ast.get("indices", [])]
         if self.is_device_tensor_type(py_type):
-            if len(indices) != 2:
-                raise RuntimeError("Tensor indexing currently expects exactly two indices")
-            return f"Tensor_get({variable}, {indices[0]}, {indices[1]})"
+            if not indices:
+                raise RuntimeError("Tensor indexing expects at least one index")
+            literal = ", ".join(f"(size_t)({index})" for index in indices)
+            return (
+                f"ocean_tensor_get_nd({variable}->handle, "
+                f"(const size_t[]){{{literal}}}, {len(indices)})"
+            )
         return self._tensor_index_call(variable, py_type, indices)
 
     def generate_tensor_index_assignment(self, variable: str, py_type: str, indices, value: str) -> None:
         expressions = [self.generate_expression(index) for index in indices]
         if self.is_device_tensor_type(py_type):
-            if len(expressions) != 2:
-                raise RuntimeError("Tensor indexing currently expects exactly two indices")
+            if not expressions:
+                raise RuntimeError("Tensor indexing expects at least one index")
+            literal = ", ".join(f"(size_t)({index})" for index in expressions)
             self.add_line(
-                f"Tensor_set({variable}, {expressions[0]}, {expressions[1]}, {value});"
+                f"ocean_tensor_set_nd({variable}->handle, (const size_t[]){{{literal}}}, "
+                f"{len(expressions)}, {value});"
             )
             return
         self.add_line(self._tensor_set_call(variable, py_type, expressions, value))

@@ -1259,42 +1259,52 @@ void ocean_tensor_fill(ocean_tensor_handle_t tensor, double value) {
     ocean_tensor_release(cpu);
 }
 
-double ocean_tensor_get_2d(ocean_tensor_handle_t tensor, int row, int col) {
-    if (!tensor || tensor->ndim != 2) {
-        ocean_tensor_fail("Tensor get expects a 2D Tensor");
+static size_t ocean_tensor_index_offset(
+    const ocean_tensor_handle_t tensor,
+    const size_t *indices,
+    size_t ndim
+) {
+    if (!tensor || !indices || ndim != tensor->ndim) {
+        ocean_tensor_fail("Tensor index rank does not match Tensor rank");
     }
-    if (row < 0 || col < 0 || (size_t)row >= tensor->shape[0]
-        || (size_t)col >= tensor->shape[1]) {
-        ocean_tensor_fail("Tensor get index is out of bounds");
+    size_t offset = 0;
+    for (size_t axis = 0; axis < ndim; ++axis) {
+        if (indices[axis] >= tensor->shape[axis]) {
+            ocean_tensor_fail("Tensor index is out of bounds");
+        }
+        offset += indices[axis] * tensor->strides[axis];
     }
+    return offset;
+}
+
+double ocean_tensor_get_nd(
+    ocean_tensor_handle_t tensor,
+    const size_t *indices,
+    size_t ndim
+) {
+    if (!tensor) ocean_tensor_fail("Tensor get received a null Tensor");
     ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
         ? tensor : ocean_tensor_to(tensor, "cpu");
-    size_t offset = (size_t)row * cpu->strides[0]
-        + (size_t)col * cpu->strides[1];
+    size_t offset = ocean_tensor_index_offset(cpu, indices, ndim);
     double result = (double)ocean_tensor_read_scalar(cpu, offset);
     if (cpu != tensor) ocean_tensor_release(cpu);
     return result;
 }
 
-void ocean_tensor_set_2d(
-    ocean_tensor_handle_t tensor, int row, int col, double value
+void ocean_tensor_set_nd(
+    ocean_tensor_handle_t tensor,
+    const size_t *indices,
+    size_t ndim,
+    double value
 ) {
-    if (!tensor || tensor->ndim != 2) {
-        ocean_tensor_fail("Tensor set expects a 2D Tensor");
-    }
-    if (row < 0 || col < 0 || (size_t)row >= tensor->shape[0]
-        || (size_t)col >= tensor->shape[1]) {
-        ocean_tensor_fail("Tensor set index is out of bounds");
-    }
+    if (!tensor) ocean_tensor_fail("Tensor set received a null Tensor");
     if (tensor->device == OCEAN_TENSOR_CPU) {
-        size_t offset = (size_t)row * tensor->strides[0]
-            + (size_t)col * tensor->strides[1];
+        size_t offset = ocean_tensor_index_offset(tensor, indices, ndim);
         ocean_tensor_write_scalar(tensor, offset, (long double)value);
         return;
     }
     ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
-    size_t offset = (size_t)row * cpu->strides[0]
-        + (size_t)col * cpu->strides[1];
+    size_t offset = ocean_tensor_index_offset(cpu, indices, ndim);
     ocean_tensor_write_scalar(cpu, offset, (long double)value);
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     ocean_tensor_gpu_write(tensor, cpu->cpu_data);
@@ -1302,6 +1312,20 @@ void ocean_tensor_set_2d(
     ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
 #endif
     ocean_tensor_release(cpu);
+}
+
+double ocean_tensor_get_2d(ocean_tensor_handle_t tensor, int row, int col) {
+    if (row < 0 || col < 0) ocean_tensor_fail("Tensor get index is out of bounds");
+    size_t indices[2] = {(size_t)row, (size_t)col};
+    return ocean_tensor_get_nd(tensor, indices, 2);
+}
+
+void ocean_tensor_set_2d(
+    ocean_tensor_handle_t tensor, int row, int col, double value
+) {
+    if (row < 0 || col < 0) ocean_tensor_fail("Tensor set index is out of bounds");
+    size_t indices[2] = {(size_t)row, (size_t)col};
+    ocean_tensor_set_nd(tensor, indices, 2, value);
 }
 
 static ocean_tensor_handle_t ocean_tensor_matmul_cpu(

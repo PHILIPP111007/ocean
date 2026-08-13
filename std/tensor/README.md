@@ -89,6 +89,13 @@ For user code, literals can be converted directly without declaring a native
 var A: Tensor[float32] = Tensor.from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
 ```
 
+Indexing is rank-generic and supports read, write, and augmented assignment:
+
+```text
+var cube: Tensor[int32] = Tensor.from_list([[[1, 2], [3, 4]]], "cpu")
+cube[0, 1, 1] *= 2
+```
+
 ## Semantics of `.to(device)`
 
 `.to()` is a non-mutating operation, matching the useful part of the PyTorch

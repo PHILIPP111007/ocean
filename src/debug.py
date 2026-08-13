@@ -131,6 +131,8 @@ class JSONValidator:
                             "ocean_tensor_slice",
                             "ocean_tensor_sum",
                             "ocean_tensor_fill",
+                            "ocean_tensor_get_nd",
+                            "ocean_tensor_set_nd",
                             "ocean_tensor_get_2d",
                             "ocean_tensor_set_2d",
                             "ocean_tensor_shape",
