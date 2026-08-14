@@ -1,0 +1,73 @@
+import <std/tensor/tensor.oc>
+
+
+class DenseLayer:
+    def __init__(self, input_size: int, output_size: int, activation: int) -> None:
+        self.input_size: int = input_size
+        self.output_size: int = output_size
+        self.activation: int = activation
+        self.weights: Tensor[float32] = Tensor.zeros(input_size, output_size, "cpu")
+        self.bias: Tensor[float32] = Tensor.zeros(1, output_size, "cpu")
+
+    def forward(self, inputs: &Tensor[float32]) -> Tensor[float32]:
+        var outputs: Tensor[float32] = Tensor.zeros(1, self.output_size, "cpu")
+        for j in range(self.output_size):
+            var value: float32 = self.bias[0, j]
+            for i in range(self.input_size):
+                value = value + inputs[0, i] * self.weights[i, j]
+            if self.activation == 1:  # ReLU
+                if value < 0.0:
+                    value = 0.0
+            outputs[0, j] = value
+        return outputs
+
+    def load_weights(self, weight_path: str, bias_path: str) -> None:
+        var loaded_weights: Tensor[float32] = Tensor.load_npy(weight_path, "cpu")
+        var loaded_bias: Tensor[float32] = Tensor.load_npy(bias_path, "cpu")
+
+        for i in range(self.input_size):
+            for j in range(self.output_size):
+                self.weights[i, j] = loaded_weights[i, j]
+        for j in range(self.output_size):
+            self.bias[0, j] = loaded_bias[0, j]
+
+class MLP_Ocean:
+    def __init__(self):
+        self.fc1 = DenseLayer(784, 256, 1)   # ReLU
+        self.fc2 = DenseLayer(256, 128, 1)   # ReLU
+        self.fc3 = DenseLayer(128, 10, 0)    # линейный (выход)
+
+    def forward(self, inputs: &Tensor[float32]) -> Tensor[float32]:
+        var h1: Tensor[float32] = self.fc1.forward(inputs)
+        var h2: Tensor[float32] = self.fc2.forward(h1)
+        var out: Tensor[float32] = self.fc3.forward(h2)
+        return out
+
+    def load_all_weights(self, folder: str) -> None:
+        self.fc1.load_weights(folder + "/fc1_weight.npy", folder + "/fc1_bias.npy")
+        self.fc2.load_weights(folder + "/fc2_weight.npy", folder + "/fc2_bias.npy")
+        self.fc3.load_weights(folder + "/fc3_weight.npy", folder + "/fc3_bias.npy")
+
+def main() -> int:
+    var net: MLP_Ocean = MLP_Ocean()
+    net.load_all_weights("./examples/MNIST/weights")
+
+    
+    var sample: Tensor[float32] = Tensor.zeros(1, 784, "cpu")
+    var logits: Tensor[float32] = net.forward(sample)
+    var pred_class: int = 0
+    var max_val: float32 = logits[0, 0]
+    for j in range(1, 10):
+        if logits[0, j] > max_val:
+            max_val = logits[0, j]
+            pred_class = j
+    print("Predicted class:", pred_class)
+    print(max_val)
+    return 0
+
+
+# =========== Program ===========
+# Predicted class: 8
+# 0.105679
+#
+# IT WORKS!!!!!!!!
