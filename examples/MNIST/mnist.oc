@@ -1,6 +1,5 @@
 import <std/tensor/tensor.oc>
 
-
 class DenseLayer:
     def __init__(self, input_size: int, output_size: int, activation: int) -> None:
         self.input_size: int = input_size
@@ -10,21 +9,21 @@ class DenseLayer:
         self.bias: Tensor[float32] = Tensor.zeros(1, output_size, "cpu")
 
     def forward(self, inputs: &Tensor[float32]) -> Tensor[float32]:
-        var outputs: Tensor[float32] = Tensor.zeros(1, self.output_size, "cpu")
+        var outputs: Tensor[float32] = inputs.matmul(self.weights)
+        
         for j in range(self.output_size):
-            var value: float32 = self.bias[0, j]
-            for i in range(self.input_size):
-                value = value + inputs[0, i] * self.weights[i, j]
-            if self.activation == 1:  # ReLU
-                if value < 0.0:
-                    value = 0.0
-            outputs[0, j] = value
+            outputs[0, j] = outputs[0, j] + self.bias[0, j]
+        
+        if self.activation == 1:
+            for j in range(self.output_size):
+                if outputs[0, j] < 0.0:
+                    outputs[0, j] = 0.0
+        
         return outputs
 
     def load_weights(self, weight_path: str, bias_path: str) -> None:
         var loaded_weights: Tensor[float32] = Tensor.load_npy(weight_path, "cpu")
         var loaded_bias: Tensor[float32] = Tensor.load_npy(bias_path, "cpu")
-
         for i in range(self.input_size):
             for j in range(self.output_size):
                 self.weights[i, j] = loaded_weights[i, j]
@@ -51,7 +50,6 @@ class MLP_Ocean:
 def main() -> int:
     var net: MLP_Ocean = MLP_Ocean()
     net.load_all_weights("./examples/MNIST/weights")
-
     
     var sample: Tensor[float32] = Tensor.load_npy("./examples/MNIST/data/one_sample_mnist.npy", "cpu")
     var logits: Tensor[float32] = net.forward(sample)
