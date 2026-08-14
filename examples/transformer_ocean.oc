@@ -1,41 +1,37 @@
-# A small decoder-only Transformer language model in Ocean/Phils.
-#
-# The class structure mirrors transformer_pytorch.py:
-# TokenEmbedding, PositionalEncoding, Linear, LayerNorm,
-# MultiHeadSelfAttention, FeedForward, TransformerBlock, and TransformerLM.
-#
-# Ocean currently has no autograd or optimizer runtime.  This example therefore
-# implements inference, causal attention, greedy generation, and an explicit
-# cross-entropy calculation.  Parameters are deterministic tensors so the file
-# is self-contained and can be compiled without a Python or ML dependency.
+# ============================================================
+# Масштабируемая декодерная Transformer-модель на Ocean
+# Поддерживает конфигурации от малых (игрушечных) до больших
+# (например, 125M параметров, как GPT-2 small).
+# ============================================================
 
 cimport <math.h>
 import <std/tensor/tensor.oc>
 
-
+# -------------------- Конфигурация --------------------
 class TransformerConfig:
-    def __init__(self, vocab_size: int, max_seq_len: int, d_model: int, heads: int, hidden_size: int) -> None:
+    def __init__(self, vocab_size: int, max_seq_len: int, d_model: int,
+                 heads: int, hidden_size: int, num_layers: int) -> None:
         self.vocab_size: int = vocab_size
         self.max_seq_len: int = max_seq_len
         self.d_model: int = d_model
         self.heads: int = heads
         self.hidden_size: int = hidden_size
+        self.num_layers: int = num_layers
 
-
+# -------------------- Линейный слой --------------------
 class Linear:
     def __init__(self, input_size: int, output_size: int) -> None:
         self.input_size: int = input_size
         self.output_size: int = output_size
         self.weights: Tensor[float32] = Tensor.zeros(input_size, output_size, "cpu")
         self.bias: Tensor[float32] = Tensor.zeros(1, output_size, "cpu")
+        var bound: float32 = 0.02
         for i in range(input_size):
             for j in range(output_size):
                 if (i + j) % 2 == 0:
-                    self.weights[i, j] = 0.02
+                    self.weights[i, j] = bound
                 else:
-                    self.weights[i, j] = -0.02
-
-        return None
+                    self.weights[i, j] = -bound
 
     def forward(self, inputs: &Tensor[float32]) -> Tensor[float32]:
         var rows: int = inputs.shape(0)
@@ -44,25 +40,23 @@ class Linear:
             for j in range(self.output_size):
                 var value: float32 = self.bias[0, j]
                 for k in range(self.input_size):
-                    value = value + inputs[i, k] * self.weights[k, j]
+                    value += inputs[i, k] * self.weights[k, j]
                 outputs[i, j] = value
-
         return outputs
 
-
+# -------------------- Токен-эмбеддинги --------------------
 class TokenEmbedding:
     def __init__(self, vocab_size: int, d_model: int) -> None:
         self.vocab_size: int = vocab_size
         self.d_model: int = d_model
         self.weights: Tensor[float32] = Tensor.zeros(vocab_size, d_model, "cpu")
+        var bound: float32 = 0.05
         for token in range(vocab_size):
             for feature in range(d_model):
                 if (token + feature) % 2 == 0:
-                    self.weights[token, feature] = 0.05
+                    self.weights[token, feature] = bound
                 else:
-                    self.weights[token, feature] = -0.05
-
-        return None
+                    self.weights[token, feature] = -bound
 
     def forward(self, tokens: list[int]) -> Tensor[float32]:
         var length: int = len(tokens)
@@ -71,88 +65,75 @@ class TokenEmbedding:
             var token: int = tokens[i]
             for j in range(self.d_model):
                 outputs[i, j] = self.weights[token, j]
-
         return outputs
 
-
+# -------------------- Позиционное кодирование --------------------
 class PositionalEncoding:
     def __init__(self, max_seq_len: int, d_model: int) -> None:
         self.max_seq_len: int = max_seq_len
         self.d_model: int = d_model
         self.values: Tensor[float32] = Tensor.zeros(max_seq_len, d_model, "cpu")
+        var bound: float32 = 0.01
         for position in range(max_seq_len):
             for feature in range(d_model):
                 if (position + feature) % 2 == 0:
-                    self.values[position, feature] = 0.01
+                    self.values[position, feature] = bound
                 else:
-                    self.values[position, feature] = -0.01
-
-        return None
+                    self.values[position, feature] = -bound
 
     def add_to(self, values: &mut Tensor[float32]) -> None:
         var length: int = values.shape(0)
         var width: int = values.shape(1)
-
         for i in range(length):
             for j in range(width):
-                values[i, j] = values[i, j] + self.values[i, j]
+                values[i, j] += self.values[i, j]
 
-        return None
-
-
+# -------------------- LayerNorm --------------------
 class LayerNorm:
     def __init__(self, width: int) -> None:
         self.width: int = width
-        self.epsilon: float32 = 0.00001
+        self.epsilon: float32 = 1e-5
         self.gamma: Tensor[float32] = Tensor.zeros(1, width, "cpu")
         self.beta: Tensor[float32] = Tensor.zeros(1, width, "cpu")
         for j in range(width):
             self.gamma[0, j] = 1.0
             self.beta[0, j] = 0.0
 
-        return None
-
     def forward(self, inputs: &Tensor[float32]) -> Tensor[float32]:
         unsafe:
             var rows: int = inputs.shape(0)
             var outputs: Tensor[float32] = Tensor.zeros(rows, self.width, "cpu")
-            var epsilon: float32 = self.epsilon
-
+            var eps: float32 = self.epsilon
             for i in range(rows):
                 var mean: float32 = 0.0
                 for j in range(self.width):
-                    mean = mean + inputs[i, j]
-                mean = mean / self.width
+                    mean += inputs[i, j]
+                mean /= self.width
 
                 var variance: float32 = 0.0
                 for j in range(self.width):
                     var delta: float32 = inputs[i, j] - mean
-                    variance = variance + delta * delta
-                variance = variance / self.width
+                    variance += delta * delta
+                variance /= self.width
 
-                var inverse_std: float32 = 1.0 / @sqrtf(variance + epsilon)
+                var inv_std: float32 = 1.0 / @sqrtf(variance + eps)
                 for j in range(self.width):
-                    var normalized_value: float32 = inputs[i, j] - mean
-                    normalized_value = normalized_value * inverse_std
-                    normalized_value = normalized_value * self.gamma[0, j]
-                    normalized_value = normalized_value + self.beta[0, j]
-                    outputs[i, j] = normalized_value
-
+                    var val: float32 = (inputs[i, j] - mean) * inv_std
+                    val = val * self.gamma[0, j] + self.beta[0, j]
+                    outputs[i, j] = val
             return outputs
 
-
+# -------------------- MultiHeadSelfAttention --------------------
 class MultiHeadSelfAttention:
     def __init__(self, d_model: int, heads: int) -> None:
         self.d_model: int = d_model
         self.heads: int = heads
         self.head_width: int = d_model / heads
-        self.scale: float32 = 0.5
+        # scale вычисляется в forward (там есть unsafe)
         self.query: Linear = Linear(d_model, d_model)
         self.key: Linear = Linear(d_model, d_model)
         self.value: Linear = Linear(d_model, d_model)
         self.output: Linear = Linear(d_model, d_model)
-
-        return None
 
     def forward(self, inputs: &Tensor[float32]) -> Tensor[float32]:
         unsafe:
@@ -161,10 +142,8 @@ class MultiHeadSelfAttention:
             var keys: Tensor[float32] = self.key.forward(inputs)
             var values: Tensor[float32] = self.value.forward(inputs)
             var context: Tensor[float32] = Tensor.zeros(length, self.d_model, "cpu")
-            var scale: float32 = self.scale
+            var scale: float32 = 1.0 / @sqrtf(self.head_width)  # масштабирование
 
-            # Causal scaled dot-product attention.  Each position can see itself
-            # and earlier positions, matching a decoder-only Transformer mask.
             for head in range(self.heads):
                 var offset: int = head * self.head_width
                 for i in range(length):
@@ -172,144 +151,114 @@ class MultiHeadSelfAttention:
                     for j in range(i + 1):
                         var score: float32 = 0.0
                         for k in range(self.head_width):
-                            score = score + queries[i, offset + k] * keys[j, offset + k]
-                        score = score * scale
-                        denominator = denominator + @expf(score)
+                            score += queries[i, offset + k] * keys[j, offset + k]
+                        score *= scale
+                        denominator += @expf(score)
 
                     for k in range(self.head_width):
                         var result: float32 = 0.0
                         for j in range(i + 1):
                             var dot: float32 = 0.0
                             for q in range(self.head_width):
-                                dot = dot + queries[i, offset + q] * keys[j, offset + q]
-                            var scaled_dot: float32 = dot * scale
-                            var weight: float32 = @expf(scaled_dot) / denominator
-                            result = result + weight * values[j, offset + k]
+                                dot += queries[i, offset + q] * keys[j, offset + q]
+                            var weight: float32 = @expf(dot * scale) / denominator
+                            result += weight * values[j, offset + k]
                         context[i, offset + k] = result
 
             var projected: Tensor[float32] = self.output.forward(context)
             return projected
 
-
+# -------------------- FeedForward --------------------
 class FeedForward:
     def __init__(self, d_model: int, hidden_size: int) -> None:
+        self.d_model: int = d_model
+        self.hidden_size: int = hidden_size
         self.first: Linear = Linear(d_model, hidden_size)
         self.second: Linear = Linear(hidden_size, d_model)
-        self.hidden_size: int = hidden_size
-
-        return None
 
     def forward(self, inputs: &Tensor[float32]) -> Tensor[float32]:
         var hidden: Tensor[float32] = self.first.forward(inputs)
         var rows: int = hidden.shape(0)
-
         for i in range(rows):
             for j in range(self.hidden_size):
                 if hidden[i, j] < 0.0:
-                    hidden[i, j] = 0.0
-
+                    hidden[i, j] = 0.0   # ReLU
         var outputs: Tensor[float32] = self.second.forward(hidden)
         return outputs
 
-
+# -------------------- TransformerBlock --------------------
 class TransformerBlock:
     def __init__(self, d_model: int, heads: int, hidden_size: int) -> None:
+        self.d_model: int = d_model
+        self.heads: int = heads
+        self.hidden_size: int = hidden_size
         self.attention: MultiHeadSelfAttention = MultiHeadSelfAttention(d_model, heads)
         self.feed_forward: FeedForward = FeedForward(d_model, hidden_size)
         self.norm1: LayerNorm = LayerNorm(d_model)
         self.norm2: LayerNorm = LayerNorm(d_model)
-        self.d_model: int = d_model
-
-        return None
 
     def forward(self, inputs: &Tensor[float32]) -> Tensor[float32]:
-        var attention_output: Tensor[float32] = self.attention.forward(inputs)
-        var first_residual: Tensor[float32] = inputs.copy()
-        var rows: int = first_residual.shape(0)
-        var cols: int = first_residual.shape(1)
-        for i in range(rows):
-            for j in range(cols):
-                first_residual[i, j] = first_residual[i, j] + attention_output[i, j]
-        var normalized_attention: Tensor[float32] = self.norm1.forward(first_residual)
+        var normed1: Tensor[float32] = self.norm1.forward(inputs)
+        var attn_out: Tensor[float32] = self.attention.forward(normed1)
+        var residual1: Tensor[float32] = inputs.copy()
+        for i in range(residual1.shape(0)):
+            for j in range(residual1.shape(1)):
+                residual1[i, j] += attn_out[i, j]
 
-        var feed_forward_output: Tensor[float32] = self.feed_forward.forward(normalized_attention)
-        var second_residual: Tensor[float32] = normalized_attention.copy()
-        for i in range(rows):
-            for j in range(cols):
-                second_residual[i, j] = second_residual[i, j] + feed_forward_output[i, j]
-        var outputs: Tensor[float32] = self.norm2.forward(second_residual)
-        return outputs
+        var normed2: Tensor[float32] = self.norm2.forward(residual1)
+        var ff_out: Tensor[float32] = self.feed_forward.forward(normed2)
+        var residual2: Tensor[float32] = residual1.copy()
+        for i in range(residual2.shape(0)):
+            for j in range(residual2.shape(1)):
+                residual2[i, j] += ff_out[i, j]
+        return residual2
 
-
+# -------------------- TransformerLM (главная модель) --------------------
 class TransformerLM:
-    def __init__(self, vocab_size: int, max_seq_len: int, d_model: int, heads: int, hidden_size: int) -> None:
-        self.vocab_size: int = vocab_size
-        self.max_seq_len: int = max_seq_len
-        self.tokens: TokenEmbedding = TokenEmbedding(vocab_size, d_model)
-        self.positions: PositionalEncoding = PositionalEncoding(max_seq_len, d_model)
-        self.block: TransformerBlock = TransformerBlock(d_model, heads, hidden_size)
-        self.final_norm: LayerNorm = LayerNorm(d_model)
-        self.lm_head: Linear = Linear(d_model, vocab_size)
-
-        return None
+    def __init__(self, config: TransformerConfig) -> None:
+        self.config: TransformerConfig = config
+        self.tokens: TokenEmbedding = TokenEmbedding(config.vocab_size, config.d_model)
+        self.positions: PositionalEncoding = PositionalEncoding(config.max_seq_len, config.d_model)
+        self.blocks: list[TransformerBlock] = []
+        for _ in range(config.num_layers):
+            self.blocks.append(TransformerBlock(config.d_model, config.heads, config.hidden_size))
+        self.final_norm: LayerNorm = LayerNorm(config.d_model)
+        self.lm_head: Linear = Linear(config.d_model, config.vocab_size)
 
     def forward(self, input_tokens: list[int]) -> Tensor[float32]:
         var hidden: Tensor[float32] = self.tokens.forward(input_tokens)
         self.positions.add_to(hidden)
-        var block_output: Tensor[float32] = self.block.forward(hidden)
-        var normalized: Tensor[float32] = self.final_norm.forward(block_output)
+        for block in self.blocks:
+            hidden = block.forward(hidden)
+        var normalized: Tensor[float32] = self.final_norm.forward(hidden)
         var logits: Tensor[float32] = self.lm_head.forward(normalized)
         return logits
 
     def next_token(self, input_tokens: list[int]) -> int:
         var logits: Tensor[float32] = self.forward(input_tokens)
         var last: int = len(input_tokens) - 1
-        var next: int = 0
-        var best_value: float32 = logits[last, 0]
-        for j in range(1, self.vocab_size):
-            if logits[last, j] > best_value:
-                best_value = logits[last, j]
-                next = j
-        return next
+        var best_id: int = 0
+        var best_val: float32 = logits[last, 0]
+        for j in range(1, self.config.vocab_size):
+            if logits[last, j] > best_val:
+                best_val = logits[last, j]
+                best_id = j
+        return best_id
 
-    def loss(self, logits: &Tensor[float32], targets: list[int]) -> float32:
-        unsafe:
-            var rows: int = logits.shape(0)
-            var total: float32 = 0.0
-
-            for i in range(rows):
-                var maximum: float32 = logits[i, 0]
-                for j in range(1, self.vocab_size):
-                    if logits[i, j] > maximum:
-                        maximum = logits[i, j]
-
-                var denominator: float32 = 0.0
-                for j in range(self.vocab_size):
-                    var logit_value: float32 = logits[i, j]
-                    denominator = denominator + @expf(logit_value - maximum)
-
-                var target: int = targets[i]
-                var target_logit: float32 = logits[i, target]
-                var probability: float32 = @expf(target_logit - maximum) / denominator
-                total = total - @logf(probability)
-
-            return total / rows
+    def generate(self, prompt: list[int], max_new_tokens: int) -> list[int]:
+        var result: list[int] = prompt
+        for _ in range(max_new_tokens):
+            var next_id: int = self.next_token(result)
+            result.append(next_id)
+        return result
 
 
+# -------------------- Пример использования --------------------
 def main() -> int:
-    var model: TransformerLM = TransformerLM(16, 16, 8, 2, 16)
-    var tokens: list[int] = [1, 4, 6, 2, 5, 3]
-    var targets: list[int] = [4, 6, 2, 5, 3, 7]
+    var config: TransformerConfig = TransformerConfig(50257, 1024, 768, 12, 3072, 12)
+    var model: TransformerLM = TransformerLM(config)
 
-    var logits: Tensor[float32] = model.forward(tokens)
-    var loss: float32 = model.loss(logits, targets)
+    var prompt: list[int] = [1, 4, 6, 2, 5, 3]
+    var generated: list[int] = model.generate(prompt, max_new_tokens=10)
 
-    # Greedy generation mirrors TransformerLanguageModel.generate().
-    for _ in range(4):
-        var next: int = model.next_token(tokens)
-        tokens.append(next)
-
-    print("loss =", loss)
-    print("generated length =", len(tokens))
-    print("last token =", tokens[len(tokens) - 1])
     return 0
