@@ -53,7 +53,7 @@ def main() -> int:
     net.load_all_weights("./examples/MNIST/weights")
 
     
-    var sample: Tensor[float32] = Tensor.zeros(1, 784, "cpu")
+    var sample: Tensor[float32] = Tensor.load_npy("./examples/MNIST/data/one_sample_mnist.npy", "cpu")
     var logits: Tensor[float32] = net.forward(sample)
     var pred_class: int = 0
     var max_val: float32 = logits[0, 0]
@@ -67,7 +67,7 @@ def main() -> int:
 
 
 # =========== Program ===========
-# Predicted class: 8
-# 0.105679
+# Predicted class: 7
+# 13.694785
 #
 # IT WORKS!!!!!!!!

@@ -50,7 +50,7 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 # ----------------------------
 # 4. Обучение
 # ----------------------------
-epochs = 1
+epochs = 5
 for epoch in range(epochs):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -107,3 +107,9 @@ for name, param in model.named_parameters():
     print(f"Saved {filename} with shape {np_data.shape}")
 
 print("Все веса сохранены в папке ocean_weights/")
+
+image, label = test_set[0]
+# Преобразуем в плоский вектор (1, 784)
+flat_image = image.view(1, -1).numpy()
+np.save("./examples/MNIST/data/one_sample_mnist.npy", flat_image)
+print(f"Label: {label}")
