@@ -2460,11 +2460,27 @@ class Parser:
                 "source": self.parse_expression_to_ast(inner),
             }
 
-        # ``&identifier`` outside raw-pointer declaration context is an immutable
-        # borrow expression. Raw pointers are disambiguated in parse_var().
+        # ``&identifier`` is normally an immutable Ocean borrow.
+        #
+        # Inside an explicit unsafe block the same spelling is used at an FFI
+        # boundary to obtain a raw address. Preserve that distinction in AST:
+        #
+        #   safe:   &value -> borrow
+        #   unsafe: &value -> address_of
+        #
+        # This is required for pthread-style void* arguments.
         if expression.startswith("&"):
             inner = expression[1:].strip()
             if inner and not inner.startswith("&"):
+                if (
+                    self.unsafe_depth > 0
+                    and re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", inner)
+                ):
+                    return {
+                        "type": "address_of",
+                        "variable": inner,
+                    }
+
                 return {
                     "type": "borrow",
                     "mutable": False,
@@ -4751,7 +4767,7 @@ class Parser:
         # Разбираем аргументы
         args = []
         if args_str.strip():
-            args = self.parse_function_arguments(args_str)
+            args = self.parse_function_arguments_to_ast(args_str)
 
         operations = [{"type": "C_CALL", "function": func_name, "arguments": args}]
 

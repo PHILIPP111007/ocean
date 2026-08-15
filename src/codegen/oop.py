@@ -196,6 +196,8 @@ class OopMixin:
                 self.add_line(f"ocean_tensor_release({access});")
             elif field_type == "ocean_file_handle_t":
                 self.add_line(f"ocean_file_close({access});")
+            elif field_type == "ocean_thread_handle_t":
+                self.add_line(f"ocean_thread_release({access});")
         self.add_line("free(self);")
         self.indent_level -= 1
         self.add_line("}")

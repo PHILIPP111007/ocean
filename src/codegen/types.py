@@ -17,6 +17,15 @@ class TypesMixin:
         if py_type.startswith("&"):
             return self.map_type_to_c(py_type[1:].strip(), is_pointer=False)
 
+        # Ocean raw-pointer syntax is prefix-based (*T), while C uses T*.
+        # This MUST be handled before _is_c_type(), because _is_c_type("*void")
+        # otherwise accepts it as an already-valid C pointer spelling and emits
+        # invalid C such as "*void arg".
+        if py_type.startswith("*"):
+            base_type = py_type[1:].strip() or "void"
+            c_base_type = self.map_type_to_c(base_type)
+            return f"{c_base_type}*"
+
         # Проверяем, не является ли это уже C типом
         if self._is_c_type(py_type):
             # Если это известный C тип, возвращаем как есть
@@ -34,10 +43,6 @@ class TypesMixin:
 
         if py_type == "None":
             return "void*"  # None -> void*
-        elif py_type.startswith("*"):
-            base_type = py_type[1:]
-            c_base_type = self.map_type_to_c(base_type)
-            return f"{c_base_type}*"
         elif py_type == "pointer":
             return "void*"
         elif py_type.startswith("tuple["):

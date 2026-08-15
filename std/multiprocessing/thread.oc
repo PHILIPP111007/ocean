@@ -23,5 +23,6 @@ class Thread:
 
     def is_joinable(self) -> bool:
         unsafe:
-            var result: bool = @ocean_thread_is_joinable(self.handle)
+            var handle: ocean_thread_handle_t = self.handle
+            var result: bool = @ocean_thread_is_joinable(handle)
         return result

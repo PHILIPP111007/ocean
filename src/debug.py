@@ -238,7 +238,9 @@ class Validator:
                         {
                             "ocean_thread_create",
                             "ocean_thread_join",
-                            "ocean_thread_dispatch",
+                            "ocean_thread_detach",
+                            "ocean_thread_is_joinable",
+                            "ocean_thread_release",
                         }
                     )
             level = scope.get("level", 0)
@@ -4091,6 +4093,19 @@ class Validator:
         # Если типы равны - совместимы
         if target_type == value_type:
             return True
+
+        # Raw pointers follow the C void* interoperability rule. Ownership
+        # and unsafe-boundary checks are performed separately; this rule only
+        # answers whether the raw pointer representations are compatible.
+        if target_type.startswith("*") and value_type.startswith("*"):
+            target_base = target_type[1:].strip()
+            value_base = value_type[1:].strip()
+
+            return (
+                target_base == value_base
+                or target_base == "void"
+                or value_base == "void"
+            )
 
         # A borrow declaration binds a view to an existing compatible owner.
         # The lifetime pass separately verifies that the source stays alive and

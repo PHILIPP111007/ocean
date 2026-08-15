@@ -198,6 +198,15 @@ def compile_c(
         if include_flag not in flags:
             flags.append(include_flag)
 
+    # pthread is required at both compile and link time. When the standard
+    # Thread runtime is discovered, add the flag automatically.
+    if any(
+        Path(source).name == "thread_backend.c"
+        for source in runtime_sources
+    ):
+        if "-pthread" not in flags:
+            flags.append("-pthread")
+
     runtime_link_flags: list[str] = []
     if runtime_requires_opencl and shutil.which("pkg-config"):
         opencl_probe = subprocess.run(
