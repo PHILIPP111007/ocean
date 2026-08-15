@@ -336,7 +336,9 @@ class Validator:
                             "ocean_logging_write",
                             "ocean_logging_flush",
                             "ocean_logging_shutdown",
-                        }
+                            "ocean_logging_set_colors",
+                            "ocean_logging_get_colors",
+}
                     )
 
                 if (

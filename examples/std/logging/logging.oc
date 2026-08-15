@@ -4,6 +4,7 @@ import <std/logging/logging.oc>
 def main() -> int:
     Logging.to_stdout()
     Logging.set_timestamps(False)
+    Logging.set_colors(True)
     Logging.set_level(LogLevel.DEBUG())
 
     var logger: Logger = Logging.get_logger("demo")

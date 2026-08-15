@@ -19,6 +19,9 @@ bool ocean_logging_enabled(int level);
 void ocean_logging_set_timestamps(bool enabled);
 bool ocean_logging_get_timestamps(void);
 
+void ocean_logging_set_colors(bool enabled);
+bool ocean_logging_get_colors(void);
+
 void ocean_logging_to_stderr(void);
 void ocean_logging_to_stdout(void);
 void ocean_logging_to_file(const char *path, bool append);

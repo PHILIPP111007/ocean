@@ -99,6 +99,16 @@ class Logging:
         return ocean_logging_get_timestamps()
 
     @staticmethod
+    def set_colors(enabled: bool) -> None:
+        ocean_logging_set_colors(enabled)
+        return None
+
+    @staticmethod
+    def colors() -> bool:
+        return ocean_logging_get_colors()
+
+
+    @staticmethod
     def to_stderr() -> None:
         ocean_logging_to_stderr()
         return None

@@ -10,6 +10,7 @@
 
 static atomic_int ocean_logging_global_level = ATOMIC_VAR_INIT(OCEAN_LOG_INFO);
 static atomic_bool ocean_logging_timestamps = ATOMIC_VAR_INIT(true);
+static atomic_bool ocean_logging_colors = ATOMIC_VAR_INIT(true);
 
 static atomic_flag ocean_logging_lock_flag = ATOMIC_FLAG_INIT;
 static FILE *ocean_logging_stream = NULL;
@@ -43,6 +44,18 @@ static const char *ocean_logging_level_name(int level) {
     if (level >= OCEAN_LOG_WARNING) return "WARNING";
     if (level >= OCEAN_LOG_INFO) return "INFO";
     return "DEBUG";
+}
+
+static const char *ocean_logging_level_color(int level) {
+    if (level >= OCEAN_LOG_CRITICAL) return "\x1b[1;35m";
+    if (level >= OCEAN_LOG_ERROR) return "\x1b[1;31m";
+    if (level >= OCEAN_LOG_WARNING) return "\x1b[1;33m";
+    if (level >= OCEAN_LOG_INFO) return "\x1b[1;32m";
+    return "\x1b[1;36m";
+}
+
+static const char *ocean_logging_color_reset(void) {
+    return "\x1b[0m";
 }
 
 static void ocean_logging_close_owned_stream_locked(void) {
@@ -85,6 +98,21 @@ void ocean_logging_set_timestamps(bool enabled) {
 bool ocean_logging_get_timestamps(void) {
     return atomic_load_explicit(
         &ocean_logging_timestamps,
+        memory_order_acquire
+    );
+}
+
+void ocean_logging_set_colors(bool enabled) {
+    atomic_store_explicit(
+        &ocean_logging_colors,
+        enabled,
+        memory_order_release
+    );
+}
+
+bool ocean_logging_get_colors(void) {
+    return atomic_load_explicit(
+        &ocean_logging_colors,
         memory_order_acquire
     );
 }
@@ -193,14 +221,22 @@ void ocean_logging_write(
         fputs(" | ", stream);
     }
 
-    fprintf(
-        stream,
-        "%-8s | %s | %s\n",
-        ocean_logging_level_name(level),
-        safe_name,
-        safe_message
-    );
+    const bool terminal_stream =
+        stream == stdout || stream == stderr;
+    const bool use_color =
+        terminal_stream && ocean_logging_get_colors();
 
+    if (use_color) {
+        fputs(ocean_logging_level_color(level), stream);
+    }
+
+    fprintf(stream, "%-8s", ocean_logging_level_name(level));
+
+    if (use_color) {
+        fputs(ocean_logging_color_reset(), stream);
+    }
+
+    fprintf(stream, " | %s | %s\n", safe_name, safe_message);
     fflush(stream);
 
     ocean_logging_unlock();
