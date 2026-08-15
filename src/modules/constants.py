@@ -20,10 +20,18 @@ DATA_TYPES = [
     "float16",
     "float32",
     "float64",
+    "int8",
+    "int16",
+    "int32",
+    "int64",
     "int8_t",
     "int16_t",
     "int32_t",
     "int64_t",
+    "uint8",
+    "uint16",
+    "uint32",
+    "uint64",
     "uint8_t",
     "uint16_t",
     "uint32_t",
@@ -77,6 +85,7 @@ KNOWN_C_TYPES = set(
         "clock_t",
         "ocean_tensor_handle_t",
         "ocean_file_handle_t",
+        "ocean_json_handle_t",
     ]
 )
 

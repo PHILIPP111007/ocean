@@ -1,17 +1,16 @@
 import <std/multiprocessing/thread.oc>
 cimport <stdio.h>
-cimport <stdlib.h>
-cimport <pthread.h>
 
 def my_worker(arg: *void) -> None:
     unsafe:
-        var num: int = *(int*)arg
+        var num: int = int(arg)
         @printf("Worker: arg = %d\n", num)
-    return
+    return None
 
 def main() -> int:
     var value: int = 42
-    var thread: Thread = Thread.create(my_worker, &value)
-    thread.join()
+    unsafe:
+        var thread: Thread = Thread.create(my_worker, &value)
+        thread.join()
     print("Main: worker finished")
     return 0

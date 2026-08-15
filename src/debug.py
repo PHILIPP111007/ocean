@@ -165,6 +165,48 @@ class Validator:
                         }
                     )
 
+
+                if (
+                    isinstance(node, Mapping)
+                    and node.get("node") == "c_import"
+                    and node.get("header") == "std/json/json_runtime.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "ocean_json_parse",
+                            "ocean_json_stringify",
+                            "ocean_json_release",
+                            "ocean_json_new_null",
+                            "ocean_json_new_bool",
+                            "ocean_json_new_int",
+                            "ocean_json_new_number",
+                            "ocean_json_new_string",
+                            "ocean_json_new_array",
+                            "ocean_json_new_object",
+                            "ocean_json_kind",
+                            "ocean_json_is_null",
+                            "ocean_json_is_bool",
+                            "ocean_json_is_number",
+                            "ocean_json_is_string",
+                            "ocean_json_is_array",
+                            "ocean_json_is_object",
+                            "ocean_json_size",
+                            "ocean_json_as_bool",
+                            "ocean_json_as_int",
+                            "ocean_json_as_float",
+                            "ocean_json_as_string_copy",
+                            "ocean_json_object_has",
+                            "ocean_json_object_get",
+                            "ocean_json_object_set",
+                            "ocean_json_object_remove",
+                            "ocean_json_object_key_at",
+                            "ocean_json_object_value_at",
+                            "ocean_json_array_get",
+                            "ocean_json_array_set",
+                            "ocean_json_array_append",
+                        }
+                    )
+
                 if (
                     isinstance(node, Mapping)
                     and node.get("node") == "c_import"

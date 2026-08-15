@@ -1,0 +1,158 @@
+import <std/io/file.oc>
+cimport <std/json/json_runtime.h>
+
+
+class Json:
+    def __init__(self, handle: ocean_json_handle_t):
+        self.handle = handle
+
+    @staticmethod
+    def parse(text: str) -> Json:
+        var handle: ocean_json_handle_t = ocean_json_parse(text)
+        var value: Json = Json(handle)
+        return value
+
+    @staticmethod
+    def loads(text: str) -> Json:
+        return Json.parse(text)
+
+    @staticmethod
+    def null() -> Json:
+        var handle: ocean_json_handle_t = ocean_json_new_null()
+        var value: Json = Json(handle)
+        return value
+
+    @staticmethod
+    def boolean(value: bool) -> Json:
+        var handle: ocean_json_handle_t = ocean_json_new_bool(value)
+        var result: Json = Json(handle)
+        return result
+
+    @staticmethod
+    def integer(value: int64) -> Json:
+        var handle: ocean_json_handle_t = ocean_json_new_int(value)
+        var result: Json = Json(handle)
+        return result
+
+    @staticmethod
+    def number(value: float64) -> Json:
+        var handle: ocean_json_handle_t = ocean_json_new_number(value)
+        var result: Json = Json(handle)
+        return result
+
+    @staticmethod
+    def string(value: str) -> Json:
+        var handle: ocean_json_handle_t = ocean_json_new_string(value)
+        var result: Json = Json(handle)
+        return result
+
+    @staticmethod
+    def array() -> Json:
+        var handle: ocean_json_handle_t = ocean_json_new_array()
+        var result: Json = Json(handle)
+        return result
+
+    @staticmethod
+    def object() -> Json:
+        var handle: ocean_json_handle_t = ocean_json_new_object()
+        var result: Json = Json(handle)
+        return result
+
+    @staticmethod
+    def load(path: str) -> Json:
+        var file: File = open(path, "r")
+        var text: str = file.read()
+        file.close()
+        return Json.parse(text)
+
+    @staticmethod
+    def dump(value: &Json, path: str, indent: int) -> None:
+        var file: File = open(path, "w")
+        var text: str = value.stringify(indent)
+        file.write(text)
+        file.close()
+        return None
+
+    @staticmethod
+    def dumps(value: &Json, indent: int) -> str:
+        return value.stringify(indent)
+
+    def kind(self) -> int:
+        return ocean_json_kind(self.handle)
+
+    def is_null(self) -> bool:
+        return ocean_json_is_null(self.handle)
+
+    def is_bool(self) -> bool:
+        return ocean_json_is_bool(self.handle)
+
+    def is_number(self) -> bool:
+        return ocean_json_is_number(self.handle)
+
+    def is_string(self) -> bool:
+        return ocean_json_is_string(self.handle)
+
+    def is_array(self) -> bool:
+        return ocean_json_is_array(self.handle)
+
+    def is_object(self) -> bool:
+        return ocean_json_is_object(self.handle)
+
+    def size(self) -> size_t:
+        return ocean_json_size(self.handle)
+
+    def as_bool(self) -> bool:
+        return ocean_json_as_bool(self.handle)
+
+    def as_int(self) -> int64:
+        return ocean_json_as_int(self.handle)
+
+    def as_float(self) -> float64:
+        return ocean_json_as_float(self.handle)
+
+    def as_str(self) -> str:
+        return ocean_json_as_string_copy(self.handle)
+
+    def has(self, key: str) -> bool:
+        return ocean_json_object_has(self.handle, key)
+
+    def get(self, key: str) -> Json:
+        var handle: ocean_json_handle_t = ocean_json_object_get(self.handle, key)
+        var result: Json = Json(handle)
+        return result
+
+    def set(self, key: str, value: &Json) -> None:
+        ocean_json_object_set(self.handle, key, value.handle)
+        return None
+
+    def remove(self, key: str) -> bool:
+        return ocean_json_object_remove(self.handle, key)
+
+    def key_at(self, index: size_t) -> str:
+        return ocean_json_object_key_at(self.handle, index)
+
+    def value_at(self, index: size_t) -> Json:
+        var handle: ocean_json_handle_t = ocean_json_object_value_at(self.handle, index)
+        var result: Json = Json(handle)
+        return result
+
+    def at(self, index: size_t) -> Json:
+        var handle: ocean_json_handle_t = ocean_json_array_get(self.handle, index)
+        var result: Json = Json(handle)
+        return result
+
+    def set_at(self, index: size_t, value: &Json) -> None:
+        ocean_json_array_set(self.handle, index, value.handle)
+        return None
+
+    def append(self, value: &Json) -> None:
+        ocean_json_array_append(self.handle, value.handle)
+        return None
+
+    def stringify(self, indent: int) -> str:
+        return ocean_json_stringify(self.handle, indent)
+
+    def release(self) -> None:
+        ocean_json_release(self.handle)
+        self.handle = None
+        return None

@@ -326,6 +326,49 @@ class CallsMixin:
         # Просто генерируем вызов C-функции
         self.add_line(f"{func_name}({args_str});")
 
+    def _printf_value_for_type(self, py_type: str, expression: str):
+        """Return printf format plus an ABI-safe expression for an Ocean type."""
+        py_type = self.strip_borrow_type((py_type or "").strip())
+
+        if py_type == "str":
+            return "%s", expression
+        if py_type == "bool":
+            return "%d", f"(int)({expression})"
+        if py_type == "size_t":
+            return "%zu", expression
+        if py_type in {"int64", "int64_t"}:
+            return "%lld", f"(long long)({expression})"
+        if py_type in {"uint64", "uint64_t"}:
+            return "%llu", f"(unsigned long long)({expression})"
+        if py_type in {
+            "uint8", "uint16", "uint32",
+            "uint8_t", "uint16_t", "uint32_t",
+        }:
+            return "%u", f"(unsigned int)({expression})"
+        if py_type in {
+            "int", "int8", "int16", "int32",
+            "int8_t", "int16_t", "int32_t",
+        }:
+            return "%d", f"(int)({expression})"
+        if py_type in {"float", "float16", "float32", "float64", "double"}:
+            return "%f", f"(double)({expression})"
+
+        return None, expression
+
+    def _method_return_type_for_print(self, node: Dict) -> str:
+        """Resolve user-class method result type through ClassRegistry."""
+        object_name = node.get("object", "")
+        method_name = node.get("method", "")
+        object_type, _ = self.resolve_object_path(object_name)
+        object_type = self.strip_borrow_type(object_type or "")
+
+        model = self.class_registry.get(object_type)
+        if not model:
+            return ""
+
+        method = model.direct_method(method_name)
+        return method.return_type if method else ""
+
     def generate_builtin_function_call(self, node: Dict):
         """Генерирует вызов встроенной функции"""
         func_name = node.get("function", "")
@@ -387,18 +430,11 @@ class CallsMixin:
                         var_info = self.get_variable_info(var_name)
                         if var_info:
                             var_type = var_info.get("py_type", "")
-                            if var_type in {"int", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
-                                format_parts.append("%d")
-                                value_parts.append(var_name)
-                            elif var_type in {"float", "float16", "float32", "float64", "double"}:
-                                format_parts.append("%f")
-                                value_parts.append(var_name)
-                            elif var_type == "str":
-                                format_parts.append("%s")
-                                value_parts.append(var_name)
-                            else:
-                                format_parts.append("%d")
-                                value_parts.append(var_name)
+                            printf_format, printf_expr = self._printf_value_for_type(
+                                var_type, var_name
+                            )
+                            format_parts.append(printf_format or "%d")
+                            value_parts.append(printf_expr)
                         else:
                             format_parts.append("%d")
                             value_parts.append(var_name)
@@ -417,24 +453,44 @@ class CallsMixin:
                     elif arg.get("type") == "method_call":
                         expr = self.generate_expression(arg)
                         method_name = arg.get("method", "")
-                        if method_name in {"device", "dtype"}:
+                        return_type = self._method_return_type_for_print(arg)
+
+                        if return_type:
+                            if self.strip_borrow_type(return_type) == "str":
+                                temporary = f"ocean_print_tmp_{self.temp_var_counter}"
+                                self.temp_var_counter += 1
+                                self.add_line(f"char* {temporary} = {expr};")
+                                expr = temporary
+                                temporary_cleanup.append(temporary)
+
+                            printf_format, printf_expr = self._printf_value_for_type(
+                                return_type, expr
+                            )
+                            format_parts.append(printf_format or "%d")
+                            value_parts.append(printf_expr)
+                        elif method_name in {"device", "dtype"}:
                             temporary = f"ocean_print_tmp_{self.temp_var_counter}"
                             self.temp_var_counter += 1
                             self.add_line(f"char* {temporary} = {expr};")
                             expr = temporary
                             temporary_cleanup.append(temporary)
                             format_parts.append("%s")
+                            value_parts.append(expr)
                         elif method_name == "size":
                             format_parts.append("%zu")
+                            value_parts.append(expr)
                         elif method_name in {"sum", "mean", "max", "min", "item"}:
                             format_parts.append("%f")
+                            value_parts.append(expr)
                         elif method_name == "is_contiguous":
                             format_parts.append("%d")
+                            value_parts.append(expr)
                         elif method_name == "get":
                             format_parts.append("%f")
+                            value_parts.append(expr)
                         else:
                             format_parts.append("%d")
-                        value_parts.append(expr)
+                            value_parts.append(expr)
                     elif arg.get("type") in {"index_access", "tensor_index_access"}:
                         expr = self.generate_expression(arg)
                         source = arg.get("variable", "")

@@ -50,68 +50,66 @@ class ImportsMixin:
             self.add_empty_line()
 
     def collect_imports_and_declarations(self, scopes: List[Dict]):
-        """Собирает импорты и объявления функций из typed AST."""
+        """Collect C imports and all forward declarations from semantic metadata."""
         self.c_imports = []
         self.function_declarations = []
 
-        # Собираем импорты из module scope
         for scope in scopes:
-            if scope.get("type") == "module":
-                for node in scope.get("graph", []):
-                    if node.get("node") == "c_import":
-                        self.c_imports.append(node)
+            if scope.get("type") != "module":
+                continue
+            for node in scope.get("graph", []):
+                if node.get("node") == "c_import":
+                    self.c_imports.append(node)
 
-        # Собираем информацию о классах и их методах
+        # ClassRegistry contains ordinary, static and class methods.  Using it
+        # fixes missing prototypes for @staticmethod functions such as Json.parse.
+        for class_name, model in self.class_registry.models.items():
+            for method_name, method in model.methods.items():
+                if method_name == "__init__":
+                    continue
+
+                c_return_type = self.map_type_to_c(method.return_type)
+                param_decls = []
+                for param in method.parameters:
+                    param_name = param.get("name", "")
+                    param_type = param.get("type", "int")
+                    if param_name == "self":
+                        c_param_type = f"{class_name}*"
+                    else:
+                        c_param_type = self.map_type_to_c(param_type)
+                    param_decls.append(f"{c_param_type} {param_name}")
+
+                params_str = ", ".join(param_decls) if param_decls else "void"
+                self.function_declarations.append(
+                    f"{c_return_type} {class_name}_{method_name}({params_str});"
+                )
+
+        # Imported Ocean module functions can be emitted after their callers
+        # (for example std/io.open), so they also require forward declarations.
         for scope in scopes:
-            if scope.get("type") == "module":
-                for node in scope.get("graph", []):
-                    if node.get("node") == "class_declaration":
-                        class_name = node.get("class_name", "")
-                        methods = node.get("methods", [])
+            if scope.get("type") != "function" or scope.get("is_stub", False):
+                continue
 
-                        # Генерируем объявления методов
-                        for method in methods:
-                            if method.get("name") != "__init__":
-                                method_name = method.get("name", "")
-                                return_type = method.get("return_type", "void")
+            function_name = scope.get("function_name", "")
+            if not function_name:
+                continue
 
-                                # Определяем C тип возвращаемого значения
-                                if return_type.startswith("list["):
-                                    self.generate_list_struct(return_type)
-                                    struct_name = self.generate_list_struct_name(
-                                        return_type
-                                    )
-                                    c_return_type = f"{struct_name}*"
-                                elif return_type.startswith("tuple["):
-                                    self.generate_tuple_struct(return_type)
-                                    struct_name = self.generate_tuple_struct_name(
-                                        return_type
-                                    )
-                                    c_return_type = f"{struct_name}*"
-                                else:
-                                    c_return_type = self.map_type_to_c(return_type)
+            c_return_type = self.map_type_to_c(scope.get("return_type", "None"))
+            param_decls = []
+            for param in scope.get("parameters", []):
+                param_name = param.get("name", "")
+                param_type = param.get("type", "int")
+                param_decls.append(
+                    f"{self.map_type_to_c(param_type)} {param_name}"
+                )
 
-                                params = method.get("parameters", [])
+            params_str = ", ".join(param_decls) if param_decls else "void"
+            self.function_declarations.append(
+                f"{c_return_type} {function_name}({params_str});"
+            )
 
-                                # Формируем параметры метода
-                                param_decls = []
-                                for i, param in enumerate(params):
-                                    param_name = param.get("name", "")
-                                    param_type = param.get("type", "int")
-
-                                    if i == 0 and param_name == "self":
-                                        param_decls.append(f"{class_name}* self")
-                                    else:
-                                        c_param_type = self.map_type_to_c(param_type)
-                                        param_decls.append(
-                                            f"{c_param_type} {param_name}"
-                                        )
-
-                                params_str = (
-                                    ", ".join(param_decls) if param_decls else "void"
-                                )
-                                declaration = f"{c_return_type} {class_name}_{method_name}({params_str});"
-                                self.function_declarations.append(declaration)
-
-        # Добавляем объявление main
-        self.function_declarations.append("int main(void);")
+        if not any(
+            declaration.strip().startswith("int main(")
+            for declaration in self.function_declarations
+        ):
+            self.function_declarations.append("int main(void);")

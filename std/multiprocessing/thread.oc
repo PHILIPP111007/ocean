@@ -1,26 +1,27 @@
 # std/multiprocessing/thread.oc
-cimport <pthread.h>
-cimport <stdlib.h>
 cimport <std/multiprocessing/thread_backend.h>
 
 class Thread:
-    def __init__(self):
-        # Выделяем память под C-структуру ocean_Thread
-        unsafe:
-            self.handle: *ocean_Thread = @malloc(sizeof(ocean_Thread))
+    def __init__(self, handle: ocean_thread_handle_t):
+        self.handle = handle
 
     @staticmethod
-    def create(start_routine: pointer, arg: pointer) -> Thread:
-        var t: Thread = Thread()
+    def create(start_routine: ocean_thread_fn_t, arg: *void) -> Thread:
         unsafe:
-            var result: int = @ocean_thread_create(t.handle, start_routine, arg)
-            if result != 0:
-                @free(t.handle)
-                t.handle = None
-        return t
+            var handle: ocean_thread_handle_t = @ocean_thread_create(start_routine, arg)
+        return Thread(handle)
 
     def join(self) -> None:
         unsafe:
             @ocean_thread_join(self.handle)
-            @free(self.handle)
         return None
+
+    def detach(self) -> None:
+        unsafe:
+            @ocean_thread_detach(self.handle)
+        return None
+
+    def is_joinable(self) -> bool:
+        unsafe:
+            var result: bool = @ocean_thread_is_joinable(self.handle)
+        return result
