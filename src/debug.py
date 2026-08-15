@@ -232,6 +232,61 @@ class Validator:
                 if (
                     isinstance(node, Mapping)
                     and node.get("node") == "c_import"
+                    and node.get("header") == "math.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "acos",
+                            "acosh",
+                            "asin",
+                            "asinh",
+                            "atan",
+                            "atan2",
+                            "atanh",
+                            "cbrt",
+                            "ceil",
+                            "copysign",
+                            "cos",
+                            "cosh",
+                            "erf",
+                            "erfc",
+                            "exp",
+                            "exp2",
+                            "expm1",
+                            "fabs",
+                            "floor",
+                            "fmax",
+                            "fmin",
+                            "fmod",
+                            "hypot",
+                            "isfinite",
+                            "isinf",
+                            "isnan",
+                            "ldexp",
+                            "lgamma",
+                            "log",
+                            "log10",
+                            "log1p",
+                            "log2",
+                            "nan",
+                            "nextafter",
+                            "pow",
+                            "remainder",
+                            "round",
+                            "scalbn",
+                            "sin",
+                            "sinh",
+                            "sqrt",
+                            "tan",
+                            "tanh",
+                            "tgamma",
+                            "trunc",
+                        }
+                    )
+
+                if (
+                    isinstance(node, Mapping)
+                    and node.get("node") == "c_import"
                     and node.get("header") == "std/os/os_runtime.h"
                 ):
                     self.external_c_functions.update(

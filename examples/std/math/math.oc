@@ -1,0 +1,21 @@
+import <std/math/math.oc>
+
+
+def main() -> int:
+    var pi: float64 = Math.pi()
+    var root: float64 = Math.sqrt(2.0)
+    var sine: float64 = Math.sin(pi / 2.0)
+    var logarithm: float64 = Math.log(Math.e())
+    var angle: float64 = Math.degrees(pi)
+    var distance: float64 = Math.hypot(3.0, 4.0)
+    var close: bool = Math.isclose(root * root, 2.0, 0.000000001, 0.000000001)
+
+    print("pi:", pi)
+    print("sqrt(2):", root)
+    print("sin(pi/2):", sine)
+    print("log(e):", logarithm)
+    print("degrees(pi):", angle)
+    print("hypot(3,4):", distance)
+    print("isclose:", close)
+
+    return 0

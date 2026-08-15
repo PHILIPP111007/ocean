@@ -1,0 +1,345 @@
+cimport <math.h>
+
+
+class Math:
+    @staticmethod
+    def pi() -> float64:
+        return 3.141592653589793238462643383279502884
+
+    @staticmethod
+    def e() -> float64:
+        return 2.718281828459045235360287471352662498
+
+    @staticmethod
+    def tau() -> float64:
+        return 6.283185307179586476925286766559005768
+
+    @staticmethod
+    def sqrt2() -> float64:
+        return 1.414213562373095048801688724209698079
+
+    @staticmethod
+    def ln2() -> float64:
+        return 0.693147180559945309417232121458176568
+
+    @staticmethod
+    def ln10() -> float64:
+        return 2.302585092994045684017991454684364208
+
+    @staticmethod
+    def abs(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @fabs(x)
+        return result
+
+    @staticmethod
+    def sqrt(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @sqrt(x)
+        return result
+
+    @staticmethod
+    def cbrt(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @cbrt(x)
+        return result
+
+    @staticmethod
+    def pow(x: float64, exponent: float64) -> float64:
+        unsafe:
+            var result: float64 = @pow(x, exponent)
+        return result
+
+    @staticmethod
+    def exp(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @exp(x)
+        return result
+
+    @staticmethod
+    def exp2(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @exp2(x)
+        return result
+
+    @staticmethod
+    def expm1(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @expm1(x)
+        return result
+
+    @staticmethod
+    def log(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @log(x)
+        return result
+
+    @staticmethod
+    def log2(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @log2(x)
+        return result
+
+    @staticmethod
+    def log10(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @log10(x)
+        return result
+
+    @staticmethod
+    def log1p(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @log1p(x)
+        return result
+
+    @staticmethod
+    def log_base(x: float64, base: float64) -> float64:
+        unsafe:
+            var numerator: float64 = @log(x)
+            var denominator: float64 = @log(base)
+        return numerator / denominator
+
+    @staticmethod
+    def sin(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @sin(x)
+        return result
+
+    @staticmethod
+    def cos(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @cos(x)
+        return result
+
+    @staticmethod
+    def tan(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @tan(x)
+        return result
+
+    @staticmethod
+    def asin(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @asin(x)
+        return result
+
+    @staticmethod
+    def acos(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @acos(x)
+        return result
+
+    @staticmethod
+    def atan(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @atan(x)
+        return result
+
+    @staticmethod
+    def atan2(y: float64, x: float64) -> float64:
+        unsafe:
+            var result: float64 = @atan2(y, x)
+        return result
+
+    @staticmethod
+    def sinh(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @sinh(x)
+        return result
+
+    @staticmethod
+    def cosh(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @cosh(x)
+        return result
+
+    @staticmethod
+    def tanh(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @tanh(x)
+        return result
+
+    @staticmethod
+    def asinh(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @asinh(x)
+        return result
+
+    @staticmethod
+    def acosh(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @acosh(x)
+        return result
+
+    @staticmethod
+    def atanh(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @atanh(x)
+        return result
+
+    @staticmethod
+    def floor(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @floor(x)
+        return result
+
+    @staticmethod
+    def ceil(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @ceil(x)
+        return result
+
+    @staticmethod
+    def trunc(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @trunc(x)
+        return result
+
+    @staticmethod
+    def round(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @round(x)
+        return result
+
+    @staticmethod
+    def fmod(x: float64, y: float64) -> float64:
+        unsafe:
+            var result: float64 = @fmod(x, y)
+        return result
+
+    @staticmethod
+    def remainder(x: float64, y: float64) -> float64:
+        unsafe:
+            var result: float64 = @remainder(x, y)
+        return result
+
+    @staticmethod
+    def hypot(x: float64, y: float64) -> float64:
+        unsafe:
+            var result: float64 = @hypot(x, y)
+        return result
+
+    @staticmethod
+    def min(x: float64, y: float64) -> float64:
+        unsafe:
+            var result: float64 = @fmin(x, y)
+        return result
+
+    @staticmethod
+    def max(x: float64, y: float64) -> float64:
+        unsafe:
+            var result: float64 = @fmax(x, y)
+        return result
+
+    @staticmethod
+    def copysign(x: float64, y: float64) -> float64:
+        unsafe:
+            var result: float64 = @copysign(x, y)
+        return result
+
+    @staticmethod
+    def erf(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @erf(x)
+        return result
+
+    @staticmethod
+    def erfc(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @erfc(x)
+        return result
+
+    @staticmethod
+    def gamma(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @tgamma(x)
+        return result
+
+    @staticmethod
+    def lgamma(x: float64) -> float64:
+        unsafe:
+            var result: float64 = @lgamma(x)
+        return result
+
+    @staticmethod
+    def nextafter(x: float64, toward: float64) -> float64:
+        unsafe:
+            var result: float64 = @nextafter(x, toward)
+        return result
+
+    @staticmethod
+    def ldexp(x: float64, exponent: int) -> float64:
+        unsafe:
+            var result: float64 = @ldexp(x, exponent)
+        return result
+
+    @staticmethod
+    def scalbn(x: float64, exponent: int) -> float64:
+        unsafe:
+            var result: float64 = @scalbn(x, exponent)
+        return result
+
+    @staticmethod
+    def isfinite(x: float64) -> bool:
+        unsafe:
+            var result: bool = @isfinite(x)
+        return result
+
+    @staticmethod
+    def isinf(x: float64) -> bool:
+        unsafe:
+            var result: bool = @isinf(x)
+        return result
+
+    @staticmethod
+    def isnan(x: float64) -> bool:
+        unsafe:
+            var result: bool = @isnan(x)
+        return result
+
+    @staticmethod
+    def nan() -> float64:
+        unsafe:
+            var result: float64 = @nan("")
+        return result
+
+    @staticmethod
+    def radians(degrees: float64) -> float64:
+        return degrees * 0.017453292519943295769236907684886127
+
+    @staticmethod
+    def degrees(radians: float64) -> float64:
+        return radians * 57.295779513082320876798154814105170
+
+    @staticmethod
+    def clamp(value: float64, minimum: float64, maximum: float64) -> float64:
+        if value < minimum:
+            return minimum
+        if value > maximum:
+            return maximum
+        return value
+
+    @staticmethod
+    def sign(value: float64) -> int:
+        if value > 0.0:
+            return 1
+        if value < 0.0:
+            return -1
+        return 0
+
+    @staticmethod
+    def isclose(a: float64, b: float64, rel_tol: float64, abs_tol: float64) -> bool:
+        var difference: float64 = Math.abs(a - b)
+        var abs_a: float64 = Math.abs(a)
+        var abs_b: float64 = Math.abs(b)
+        var scale: float64 = abs_a
+
+        if abs_b > scale:
+            scale = abs_b
+
+        var tolerance: float64 = rel_tol * scale
+
+        if abs_tol > tolerance:
+            tolerance = abs_tol
+
+        return difference <= tolerance
