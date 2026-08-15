@@ -1,17 +1,22 @@
-cimport <pthread.h>
+import <std/multiprocessing/thread.oc>
 
-def worker(arg: None) -> None:
+
+
+
+
+
+
+
+
+def my_worker(arg: None) -> None:
     unsafe:
-        @printf("worker: started, arg=%p\n", arg)
-    return None
-
+        var num: int = *(int*)arg
+        @printf("Worker: arg = %d\n", num)
+    return
 
 def main() -> int:
-    var thread: pthread_t = 0
-
-    unsafe:
-        @pthread_create(&thread, NULL, worker, NULL)
-        @pthread_join(thread, NULL)
-
-    print("main: worker joined")
+    var value: int = 42
+    var thread: Thread = Thread.create(my_worker, &value)
+    thread.join()
+    print("Main: worker finished")
     return 0
