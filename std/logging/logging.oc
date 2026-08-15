@@ -1,0 +1,154 @@
+cimport <std/logging/logging_runtime.h>
+
+
+class LogLevel:
+    @staticmethod
+    def DEBUG() -> int:
+        return 10
+
+    @staticmethod
+    def INFO() -> int:
+        return 20
+
+    @staticmethod
+    def WARNING() -> int:
+        return 30
+
+    @staticmethod
+    def ERROR() -> int:
+        return 40
+
+    @staticmethod
+    def CRITICAL() -> int:
+        return 50
+
+    @staticmethod
+    def OFF() -> int:
+        return 100
+
+
+class Logger:
+    def __init__(self, name: str, minimum_level: int):
+        self.name = name
+        self.minimum_level = minimum_level
+
+    def set_level(self, level: int) -> None:
+        self.minimum_level = level
+        return None
+
+    def threshold(self) -> int:
+        return self.minimum_level
+
+    def enabled(self, level: int) -> bool:
+        if level < self.minimum_level:
+            return False
+        return ocean_logging_enabled(level)
+
+    def log(self, level: int, message: str) -> None:
+        if level >= self.minimum_level:
+            ocean_logging_write(level, self.name, message)
+        return None
+
+    def debug(self, message: str) -> None:
+        if 10 >= self.minimum_level:
+            ocean_logging_write(10, self.name, message)
+        return None
+
+    def info(self, message: str) -> None:
+        if 20 >= self.minimum_level:
+            ocean_logging_write(20, self.name, message)
+        return None
+
+    def warning(self, message: str) -> None:
+        if 30 >= self.minimum_level:
+            ocean_logging_write(30, self.name, message)
+        return None
+
+    def error(self, message: str) -> None:
+        if 40 >= self.minimum_level:
+            ocean_logging_write(40, self.name, message)
+        return None
+
+    def critical(self, message: str) -> None:
+        if 50 >= self.minimum_level:
+            ocean_logging_write(50, self.name, message)
+        return None
+
+
+class Logging:
+    @staticmethod
+    def set_level(level: int) -> None:
+        ocean_logging_set_level(level)
+        return None
+
+    @staticmethod
+    def level() -> int:
+        return ocean_logging_get_level()
+
+    @staticmethod
+    def enabled(level: int) -> bool:
+        return ocean_logging_enabled(level)
+
+    @staticmethod
+    def set_timestamps(enabled: bool) -> None:
+        ocean_logging_set_timestamps(enabled)
+        return None
+
+    @staticmethod
+    def timestamps() -> bool:
+        return ocean_logging_get_timestamps()
+
+    @staticmethod
+    def to_stderr() -> None:
+        ocean_logging_to_stderr()
+        return None
+
+    @staticmethod
+    def to_stdout() -> None:
+        ocean_logging_to_stdout()
+        return None
+
+    @staticmethod
+    def to_file(path: str, append: bool) -> None:
+        ocean_logging_to_file(path, append)
+        return None
+
+    @staticmethod
+    def flush() -> None:
+        ocean_logging_flush()
+        return None
+
+    @staticmethod
+    def shutdown() -> None:
+        ocean_logging_shutdown()
+        return None
+
+    @staticmethod
+    def get_logger(name: str) -> Logger:
+        var result: Logger = Logger(name, 10)
+        return result
+
+    @staticmethod
+    def debug(message: str) -> None:
+        ocean_logging_write(10, "root", message)
+        return None
+
+    @staticmethod
+    def info(message: str) -> None:
+        ocean_logging_write(20, "root", message)
+        return None
+
+    @staticmethod
+    def warning(message: str) -> None:
+        ocean_logging_write(30, "root", message)
+        return None
+
+    @staticmethod
+    def error(message: str) -> None:
+        ocean_logging_write(40, "root", message)
+        return None
+
+    @staticmethod
+    def critical(message: str) -> None:
+        ocean_logging_write(50, "root", message)
+        return None

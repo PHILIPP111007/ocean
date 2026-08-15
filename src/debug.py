@@ -321,6 +321,27 @@ class Validator:
                 if (
                     isinstance(node, Mapping)
                     and node.get("node") == "c_import"
+                    and node.get("header") == "std/logging/logging_runtime.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "ocean_logging_set_level",
+                            "ocean_logging_get_level",
+                            "ocean_logging_enabled",
+                            "ocean_logging_set_timestamps",
+                            "ocean_logging_get_timestamps",
+                            "ocean_logging_to_stderr",
+                            "ocean_logging_to_stdout",
+                            "ocean_logging_to_file",
+                            "ocean_logging_write",
+                            "ocean_logging_flush",
+                            "ocean_logging_shutdown",
+                        }
+                    )
+
+                if (
+                    isinstance(node, Mapping)
+                    and node.get("node") == "c_import"
                     and node.get("header") == "std/multiprocessing/thread_backend.h"
                 ):
                     self.external_c_functions.update(

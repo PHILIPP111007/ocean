@@ -1,0 +1,27 @@
+import <std/logging/logging.oc>
+
+
+def main() -> int:
+    Logging.to_stdout()
+    Logging.set_timestamps(False)
+    Logging.set_level(LogLevel.DEBUG())
+
+    var logger: Logger = Logging.get_logger("demo")
+
+    logger.debug("starting")
+    logger.info("loading data")
+    logger.warning("example warning")
+    logger.error("example error")
+
+    logger.set_level(LogLevel.ERROR())
+    logger.info("this local INFO is filtered")
+    logger.error("this ERROR is visible")
+
+    Logging.to_file("examples/std/logging/ocean.log", False)
+    logger.critical("written to file")
+    Logging.shutdown()
+
+    Logging.to_stdout()
+    Logging.info("logging finished")
+
+    return 0
