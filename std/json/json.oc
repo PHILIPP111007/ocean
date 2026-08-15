@@ -23,13 +23,13 @@ class Json:
         return value
 
     @staticmethod
-    def boolean(value: bool) -> Json:
+    def bool(value: bool) -> Json:
         var handle: ocean_json_handle_t = ocean_json_new_bool(value)
         var result: Json = Json(handle)
         return result
 
     @staticmethod
-    def integer(value: int64) -> Json:
+    def int(value: int64) -> Json:
         var handle: ocean_json_handle_t = ocean_json_new_int(value)
         var result: Json = Json(handle)
         return result
@@ -41,13 +41,13 @@ class Json:
         return result
 
     @staticmethod
-    def string(value: str) -> Json:
+    def str(value: str) -> Json:
         var handle: ocean_json_handle_t = ocean_json_new_string(value)
         var result: Json = Json(handle)
         return result
 
     @staticmethod
-    def array() -> Json:
+    def arr() -> Json:
         var handle: ocean_json_handle_t = ocean_json_new_array()
         var result: Json = Json(handle)
         return result
@@ -89,10 +89,10 @@ class Json:
     def is_number(self) -> bool:
         return ocean_json_is_number(self.handle)
 
-    def is_string(self) -> bool:
+    def is_str(self) -> bool:
         return ocean_json_is_string(self.handle)
 
-    def is_array(self) -> bool:
+    def is_arr(self) -> bool:
         return ocean_json_is_array(self.handle)
 
     def is_object(self) -> bool:

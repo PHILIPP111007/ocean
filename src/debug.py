@@ -1934,8 +1934,21 @@ class Validator:
                     )
             return
 
+        # Never interpret identifiers inside quoted literals as symbols.
+        # Examples: "./examples/ocean.json", "foo(bar)", "user.name".
+        # The parser has already represented strings as literal AST nodes;
+        # this legacy textual validator must ignore their contents.
+        scan_expression = re.sub(
+            r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'',
+            "",
+            expression,
+        )
+
         # Проверяем вызовы функций - ИГНОРИРУЕМ функции с @
-        func_calls = re.findall(r"(@?[a-zA-Z_][a-zA-Z0-9_]*)\s*\(", expression)
+        func_calls = re.findall(
+            r"(@?[a-zA-Z_][a-zA-Z0-9_]*)\s*\(",
+            scan_expression,
+        )
         for func_name in func_calls:
             # Игнорируем функции, начинающиеся с @
             if func_name.startswith("@"):
@@ -1961,7 +1974,7 @@ class Validator:
 
         # Проверяем переменные (игнорируя части внутри вызовов функций)
         # Убираем все вызовы функций для упрощения
-        temp_expr = expression
+        temp_expr = scan_expression
         for func_name in func_calls:
             # Простое удаление вызовов функций
             temp_expr = temp_expr.replace(f"{func_name}(", "")
