@@ -1,14 +1,9 @@
 import <std/multiprocessing/thread.oc>
+cimport <stdio.h>
+cimport <stdlib.h>
+cimport <pthread.h>
 
-
-
-
-
-
-
-
-
-def my_worker(arg: None) -> None:
+def my_worker(arg: *void) -> None:
     unsafe:
         var num: int = *(int*)arg
         @printf("Worker: arg = %d\n", num)
