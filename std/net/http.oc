@@ -1,0 +1,66 @@
+cimport <std/net/net_runtime.h>
+
+
+class HttpResponse:
+    def __init__(self, handle: ocean_http_response_t):
+        self.handle = handle
+
+    def status(self) -> int:
+        unsafe:
+            var handle: ocean_http_response_t = self.handle
+            var result: int = @ocean_http_status(handle)
+        return result
+
+    def ok(self) -> bool:
+        unsafe:
+            var handle: ocean_http_response_t = self.handle
+            var result: bool = @ocean_http_ok(handle)
+        return result
+
+    def status_text(self) -> str:
+        unsafe:
+            var handle: ocean_http_response_t = self.handle
+            var result: str = @ocean_http_status_text_copy(handle)
+        return result
+
+    def headers(self) -> str:
+        unsafe:
+            var handle: ocean_http_response_t = self.handle
+            var result: str = @ocean_http_headers_copy(handle)
+        return result
+
+    def body(self) -> str:
+        unsafe:
+            var handle: ocean_http_response_t = self.handle
+            var result: str = @ocean_http_body_copy(handle)
+        return result
+
+
+class HTTP:
+    @staticmethod
+    def request(method: str, url: str, headers: str, body: str, timeout_ms: int) -> HttpResponse:
+        unsafe:
+            var handle: ocean_http_response_t = @ocean_http_request(method, url, headers, body, timeout_ms)
+        return HttpResponse(handle)
+
+    @staticmethod
+    def get(url: str, timeout_ms: int) -> HttpResponse:
+        return HTTP.request("GET", url, "", "", timeout_ms)
+
+    @staticmethod
+    def get_with_headers(url: str, headers: str, timeout_ms: int) -> HttpResponse:
+        return HTTP.request("GET", url, headers, "", timeout_ms)
+
+    @staticmethod
+    def post(url: str, body: str, content_type: str, timeout_ms: int) -> HttpResponse:
+        var headers: str = "Content-Type: " + content_type + "\r\n"
+        return HTTP.request("POST", url, headers, body, timeout_ms)
+
+    @staticmethod
+    def put(url: str, body: str, content_type: str, timeout_ms: int) -> HttpResponse:
+        var headers: str = "Content-Type: " + content_type + "\r\n"
+        return HTTP.request("PUT", url, headers, body, timeout_ms)
+
+    @staticmethod
+    def delete(url: str, timeout_ms: int) -> HttpResponse:
+        return HTTP.request("DELETE", url, "", "", timeout_ms)

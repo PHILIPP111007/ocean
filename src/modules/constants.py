@@ -87,6 +87,8 @@ KNOWN_C_TYPES = set(
         "ocean_file_handle_t",
         "ocean_json_handle_t",
         "ocean_os_dir_list_t",
+        "ocean_socket_handle_t",
+        "ocean_http_response_t",
     ]
 )
 

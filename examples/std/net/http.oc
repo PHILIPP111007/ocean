@@ -1,0 +1,9 @@
+import <std/net/http.oc>
+
+
+def main() -> int:
+    var response: HttpResponse = HTTP.get("http://127.0.0.1:8080/", 5000)
+    print("status:", response.status())
+    print("ok:", response.ok())
+    print("body:", response.body())
+    return 0

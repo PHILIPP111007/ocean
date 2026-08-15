@@ -1,0 +1,27 @@
+import <std/net/socket.oc>
+
+
+def main() -> int:
+    var server: Socket = Socket.tcp()
+
+    server.bind("127.0.0.1", 8080, True)
+    server.listen(128)
+
+    print("Listening on 127.0.0.1:8080")
+
+    while True:
+        print("Waiting...")
+
+        var client: Socket = server.accept()
+
+        print("Accepted")
+
+        var response: str = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 20\r\nConnection: close\r\n\r\nHello from Ocean!"
+
+        var sent: int = client.send(response)
+
+        print("Sent:", sent)
+
+        client.close()
+
+    return 0

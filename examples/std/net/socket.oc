@@ -1,0 +1,10 @@
+import <std/net/socket.oc>
+
+
+def main() -> int:
+    var socket: Socket = Socket.connect("127.0.0.1", 8080, 5000)
+    socket.send("hello")
+    var reply: str = socket.recv(4096)
+    print(reply)
+    socket.close()
+    return 0

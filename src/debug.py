@@ -355,6 +355,36 @@ class Validator:
                             "ocean_thread_release",
                         }
                     )
+                if (
+                    isinstance(node, Mapping)
+                    and node.get("node") == "c_import"
+                    and node.get("header") == "std/net/net_runtime.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "ocean_socket_create",
+                            "ocean_socket_connect",
+                            "ocean_socket_bind",
+                            "ocean_socket_listen",
+                            "ocean_socket_accept",
+                            "ocean_socket_send",
+                            "ocean_socket_recv",
+                            "ocean_socket_set_timeout",
+                            "ocean_socket_is_open",
+                            "ocean_socket_peer_address",
+                            "ocean_socket_local_address",
+                            "ocean_socket_close",
+                            "ocean_socket_release",
+                            "ocean_http_request",
+                            "ocean_http_status",
+                            "ocean_http_ok",
+                            "ocean_http_status_text_copy",
+                            "ocean_http_headers_copy",
+                            "ocean_http_body_copy",
+                            "ocean_http_response_release",
+                        }
+                    )
+
             level = scope.get("level", 0)
 
             if isinstance(scope.get("symbol_table"), Mapping) and scope["symbol_table"]:

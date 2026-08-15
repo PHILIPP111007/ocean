@@ -1,0 +1,87 @@
+cimport <std/net/net_runtime.h>
+
+
+class Socket:
+    def __init__(self, handle: ocean_socket_handle_t):
+        self.handle = handle
+
+    @staticmethod
+    def tcp() -> Socket:
+        unsafe:
+            var handle: ocean_socket_handle_t = @ocean_socket_create()
+        return Socket(handle)
+
+    @staticmethod
+    def connect(host: str, port: int, timeout_ms: int) -> Socket:
+        unsafe:
+            var handle: ocean_socket_handle_t = @ocean_socket_create()
+            @ocean_socket_connect(handle, host, port)
+            if timeout_ms > 0:
+                @ocean_socket_set_timeout(handle, timeout_ms)
+        return Socket(handle)
+
+    def connect_to(self, host: str, port: int) -> None:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            @ocean_socket_connect(handle, host, port)
+        return None
+
+    def bind(self, host: str, port: int, reuse_address: bool) -> None:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            @ocean_socket_bind(handle, host, port, reuse_address)
+        return None
+
+    def listen(self, backlog: int) -> None:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            @ocean_socket_listen(handle, backlog)
+        return None
+
+    def accept(self) -> Socket:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            var client_handle: ocean_socket_handle_t = @ocean_socket_accept(handle)
+        return Socket(client_handle)
+
+    def send(self, data: str) -> int:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            var result: int = @ocean_socket_send(handle, data)
+        return result
+
+    def recv(self, max_bytes: int) -> str:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            var result: str = @ocean_socket_recv(handle, max_bytes)
+        return result
+
+    def set_timeout(self, timeout_ms: int) -> None:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            @ocean_socket_set_timeout(handle, timeout_ms)
+        return None
+
+    def is_open(self) -> bool:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            var result: bool = @ocean_socket_is_open(handle)
+        return result
+
+    def peer_address(self) -> str:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            var result: str = @ocean_socket_peer_address(handle)
+        return result
+
+    def local_address(self) -> str:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            var result: str = @ocean_socket_local_address(handle)
+        return result
+
+    def close(self) -> None:
+        unsafe:
+            var handle: ocean_socket_handle_t = self.handle
+            @ocean_socket_close(handle)
+        return None
