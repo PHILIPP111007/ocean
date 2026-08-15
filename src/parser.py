@@ -916,7 +916,15 @@ class Parser:
             # A variable may legally start with an uppercase letter (for
             # example matrix variables A/B).  Prefer the object call when
             # the receiver is already present in the current symbol scope.
-            receiver_symbol, _ = self.find_symbol_recursive(current_scope, class_name)
+            receiver_lookup = self.find_symbol_recursive(
+                current_scope,
+                class_name,
+            )
+            receiver_symbol = (
+                receiver_lookup[0]
+                if receiver_lookup is not None
+                else None
+            )
             receiver_is_variable = bool(
                 receiver_symbol
                 and receiver_symbol.get("key") not in {"class", "function"}
