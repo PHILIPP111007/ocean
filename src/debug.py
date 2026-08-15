@@ -164,6 +164,19 @@ class Validator:
                             "ocean_file_write_byte",
                         }
                     )
+
+                if (
+                    isinstance(node, Mapping)
+                    and node.get("node") == "c_import"
+                    and node.get("header") == "std/multiprocessing/thread_backend.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "ocean_thread_create",
+                            "ocean_thread_join",
+                            "ocean_thread_dispatch",
+                        }
+                    )
             level = scope.get("level", 0)
 
             if isinstance(scope.get("symbol_table"), Mapping) and scope["symbol_table"]:

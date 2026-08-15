@@ -1,0 +1,30 @@
+cimport <std/multiprocessing/thread_backend.h>
+
+
+def ocean_thread_dispatch() -> None:
+    return
+
+class Thread:
+    def __init__(self, handle: pthread_t):
+        self.handle = handle
+
+    @staticmethod
+    def create(start_routine: *void, arg: *void) -> Thread:
+        unsafe:
+            var handle: pthread_t = 0
+            var task: *ocean_thread_task_t = @malloc(sizeof(ocean_thread_task_t))
+            task.start_routine = start_routine
+            task.arg = arg
+
+            var result: int = @ocean_thread_create(&handle, ocean_thread_dispatch, task)
+            if result != 0:
+                @free(task)
+                return Thread(0)
+            return Thread(handle)
+
+    def join(self) -> None:
+        unsafe:
+            if self.handle != 0:
+                @ocean_thread_join(self.handle)
+                self.handle = 0
+        return None
