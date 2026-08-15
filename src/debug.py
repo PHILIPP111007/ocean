@@ -210,6 +210,28 @@ class Validator:
                 if (
                     isinstance(node, Mapping)
                     and node.get("node") == "c_import"
+                    and node.get("header") == "std/time/time_runtime.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "ocean_time_now",
+                            "ocean_time_now_ns",
+                            "ocean_time_unix",
+                            "ocean_time_monotonic",
+                            "ocean_time_monotonic_ns",
+                            "ocean_time_process",
+                            "ocean_time_process_ns",
+                            "ocean_time_sleep",
+                            "ocean_time_sleep_ms",
+                            "ocean_time_sleep_us",
+                            "ocean_time_format_local",
+                            "ocean_time_format_utc",
+                        }
+                    )
+
+                if (
+                    isinstance(node, Mapping)
+                    and node.get("node") == "c_import"
                     and node.get("header") == "std/multiprocessing/thread_backend.h"
                 ):
                     self.external_c_functions.update(

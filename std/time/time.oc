@@ -1,0 +1,100 @@
+cimport <std/time/time_runtime.h>
+
+
+class DateTime:
+    def __init__(self, timestamp: int64, utc: bool):
+        self.timestamp = timestamp
+        self.utc = utc
+
+    def unix(self) -> int64:
+        return self.timestamp
+
+    def is_utc(self) -> bool:
+        return self.utc
+
+    def format(self, pattern: str) -> str:
+        if self.utc:
+            return ocean_time_format_utc(self.timestamp, pattern)
+        return ocean_time_format_local(self.timestamp, pattern)
+
+    def iso(self) -> str:
+        if self.utc:
+            return ocean_time_format_utc(self.timestamp, "%Y-%m-%dT%H:%M:%SZ")
+        return ocean_time_format_local(self.timestamp, "%Y-%m-%dT%H:%M:%S%z")
+
+    def date(self) -> str:
+        if self.utc:
+            return ocean_time_format_utc(self.timestamp, "%Y-%m-%d")
+        return ocean_time_format_local(self.timestamp, "%Y-%m-%d")
+
+    def clock(self) -> str:
+        if self.utc:
+            return ocean_time_format_utc(self.timestamp, "%H:%M:%S")
+        return ocean_time_format_local(self.timestamp, "%H:%M:%S")
+
+
+class Time:
+    @staticmethod
+    def time() -> float64:
+        return ocean_time_now()
+
+    @staticmethod
+    def time_ns() -> int64:
+        return ocean_time_now_ns()
+
+    @staticmethod
+    def unix() -> int64:
+        return ocean_time_unix()
+
+    @staticmethod
+    def monotonic() -> float64:
+        return ocean_time_monotonic()
+
+    @staticmethod
+    def monotonic_ns() -> int64:
+        return ocean_time_monotonic_ns()
+
+    @staticmethod
+    def process() -> float64:
+        return ocean_time_process()
+
+    @staticmethod
+    def process_ns() -> int64:
+        return ocean_time_process_ns()
+
+    @staticmethod
+    def sleep(seconds: float64) -> None:
+        ocean_time_sleep(seconds)
+        return None
+
+    @staticmethod
+    def sleep_ms(milliseconds: int64) -> None:
+        ocean_time_sleep_ms(milliseconds)
+        return None
+
+    @staticmethod
+    def sleep_us(microseconds: int64) -> None:
+        ocean_time_sleep_us(microseconds)
+        return None
+
+    @staticmethod
+    def now() -> DateTime:
+        var timestamp: int64 = ocean_time_unix()
+        var result: DateTime = DateTime(timestamp, False)
+        return result
+
+    @staticmethod
+    def utc_now() -> DateTime:
+        var timestamp: int64 = ocean_time_unix()
+        var result: DateTime = DateTime(timestamp, True)
+        return result
+
+    @staticmethod
+    def from_unix(timestamp: int64) -> DateTime:
+        var result: DateTime = DateTime(timestamp, False)
+        return result
+
+    @staticmethod
+    def utc_from_unix(timestamp: int64) -> DateTime:
+        var result: DateTime = DateTime(timestamp, True)
+        return result

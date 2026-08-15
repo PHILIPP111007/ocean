@@ -1,0 +1,20 @@
+import <std/time/time.oc>
+
+
+def main() -> int:
+    var start: float64 = Time.monotonic()
+
+    Time.sleep_ms(25)
+
+    var elapsed: float64 = Time.monotonic() - start
+
+    var local: DateTime = Time.now()
+    var utc: DateTime = Time.utc_now()
+
+    print(elapsed)
+    print(local.iso())
+    print(utc.iso())
+    print(Time.unix())
+    print(Time.time_ns())
+
+    return 0
