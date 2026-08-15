@@ -1,0 +1,107 @@
+cimport <std/os/os_runtime.h>
+
+
+class OS:
+    @staticmethod
+    def cwd() -> str:
+        return ocean_os_getcwd()
+
+    @staticmethod
+    def chdir(path: str) -> None:
+        ocean_os_chdir(path)
+        return None
+
+    @staticmethod
+    def mkdir(path: str) -> None:
+        ocean_os_mkdir(path)
+        return None
+
+    @staticmethod
+    def makedirs(path: str) -> None:
+        ocean_os_makedirs(path)
+        return None
+
+    @staticmethod
+    def remove(path: str) -> None:
+        ocean_os_remove(path)
+        return None
+
+    @staticmethod
+    def rmdir(path: str) -> None:
+        ocean_os_rmdir(path)
+        return None
+
+    @staticmethod
+    def rename(source: str, destination: str) -> None:
+        ocean_os_rename(source, destination)
+        return None
+
+    @staticmethod
+    def exists(path: str) -> bool:
+        return ocean_os_exists(path)
+
+    @staticmethod
+    def is_file(path: str) -> bool:
+        return ocean_os_is_file(path)
+
+    @staticmethod
+    def is_dir(path: str) -> bool:
+        return ocean_os_is_dir(path)
+
+    @staticmethod
+    def is_symlink(path: str) -> bool:
+        return ocean_os_is_symlink(path)
+
+    @staticmethod
+    def has_env(name: str) -> bool:
+        return ocean_os_has_env(name)
+
+    @staticmethod
+    def getenv(name: str, default_value: str) -> str:
+        return ocean_os_getenv_copy(name, default_value)
+
+    @staticmethod
+    def setenv(name: str, value: str, overwrite: bool) -> None:
+        ocean_os_setenv(name, value, overwrite)
+        return None
+
+    @staticmethod
+    def unsetenv(name: str) -> None:
+        ocean_os_unsetenv(name)
+        return None
+
+    @staticmethod
+    def pid() -> int64:
+        return ocean_os_pid()
+
+    @staticmethod
+    def ppid() -> int64:
+        return ocean_os_ppid()
+
+    @staticmethod
+    def cpu_count() -> int:
+        return ocean_os_cpu_count()
+
+    @staticmethod
+    def hostname() -> str:
+        return ocean_os_hostname()
+
+    @staticmethod
+    def platform() -> str:
+        return ocean_os_platform()
+
+    @staticmethod
+    def listdir(path: str) -> list[str]:
+        var result: list[str] = []
+
+        unsafe:
+            var handle: ocean_os_dir_list_t = ocean_os_listdir(path)
+            var count: int = ocean_os_dir_list_size(handle)
+
+            for i in range(0, count):
+                var entry: str = ocean_os_dir_list_get_copy(handle, i)
+                result.append(entry)
+
+            ocean_os_dir_list_release(handle)
+
+        return result

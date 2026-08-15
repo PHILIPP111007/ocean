@@ -369,6 +369,24 @@ class CallsMixin:
         method = model.direct_method(method_name)
         return method.return_type if method else ""
 
+    def _static_method_return_type_for_print(self, node: Dict) -> str:
+        """Resolve static/class method result type through ClassRegistry."""
+        class_name = (
+            node.get("class_name", "")
+            or node.get("class_type", "")
+            or node.get("object", "")
+        )
+        class_name = class_name.split("[", 1)[0]
+
+        method_name = node.get("method", "")
+
+        model = self.class_registry.get(class_name)
+        if not model:
+            return ""
+
+        method = model.direct_method(method_name)
+        return method.return_type if method else ""
+
     def generate_builtin_function_call(self, node: Dict):
         """Генерирует вызов встроенной функции"""
         func_name = node.get("function", "")
@@ -488,6 +506,28 @@ class CallsMixin:
                         elif method_name == "get":
                             format_parts.append("%f")
                             value_parts.append(expr)
+                        else:
+                            format_parts.append("%d")
+                            value_parts.append(expr)
+                    elif arg.get("type") == "static_method_call":
+                        expr = self.generate_expression(arg)
+                        return_type = self._static_method_return_type_for_print(arg)
+
+                        if return_type:
+                            normalized_return_type = self.strip_borrow_type(return_type)
+
+                            if normalized_return_type == "str":
+                                temporary = f"ocean_print_tmp_{self.temp_var_counter}"
+                                self.temp_var_counter += 1
+                                self.add_line(f"char* {temporary} = {expr};")
+                                expr = temporary
+                                temporary_cleanup.append(temporary)
+
+                            printf_format, printf_expr = self._printf_value_for_type(
+                                return_type, expr
+                            )
+                            format_parts.append(printf_format or "%d")
+                            value_parts.append(printf_expr)
                         else:
                             format_parts.append("%d")
                             value_parts.append(expr)

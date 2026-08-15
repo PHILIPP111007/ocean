@@ -232,6 +232,40 @@ class Validator:
                 if (
                     isinstance(node, Mapping)
                     and node.get("node") == "c_import"
+                    and node.get("header") == "std/os/os_runtime.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "ocean_os_getcwd",
+                            "ocean_os_chdir",
+                            "ocean_os_mkdir",
+                            "ocean_os_makedirs",
+                            "ocean_os_remove",
+                            "ocean_os_rmdir",
+                            "ocean_os_rename",
+                            "ocean_os_exists",
+                            "ocean_os_is_file",
+                            "ocean_os_is_dir",
+                            "ocean_os_is_symlink",
+                            "ocean_os_has_env",
+                            "ocean_os_getenv_copy",
+                            "ocean_os_setenv",
+                            "ocean_os_unsetenv",
+                            "ocean_os_pid",
+                            "ocean_os_ppid",
+                            "ocean_os_cpu_count",
+                            "ocean_os_hostname",
+                            "ocean_os_platform",
+                            "ocean_os_listdir",
+                            "ocean_os_dir_list_size",
+                            "ocean_os_dir_list_get_copy",
+                            "ocean_os_dir_list_release",
+                        }
+                    )
+
+                if (
+                    isinstance(node, Mapping)
+                    and node.get("node") == "c_import"
                     and node.get("header") == "std/multiprocessing/thread_backend.h"
                 ):
                     self.external_c_functions.update(

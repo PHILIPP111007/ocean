@@ -1,0 +1,13 @@
+import <std/os/os.oc>
+
+
+def main() -> int:
+    print("cwd:", OS.cwd())
+    print("platform:", OS.platform())
+    print("hostname:", OS.hostname())
+    print("pid:", OS.pid())
+    print("ppid:", OS.ppid())
+    print("cpus:", OS.cpu_count())
+    print("exists:", OS.exists("."))
+    print("env:", OS.getenv("THIS_ENV_SHOULD_NOT_EXIST", "fallback"))
+    return 0

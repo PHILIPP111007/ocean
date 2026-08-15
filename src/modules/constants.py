@@ -86,6 +86,7 @@ KNOWN_C_TYPES = set(
         "ocean_tensor_handle_t",
         "ocean_file_handle_t",
         "ocean_json_handle_t",
+        "ocean_os_dir_list_t",
     ]
 )
 

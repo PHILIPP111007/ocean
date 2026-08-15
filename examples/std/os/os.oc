@@ -1,0 +1,27 @@
+import <std/os/os.oc>
+
+
+def main() -> int:
+    print("cwd:", OS.cwd())
+    print("platform:", OS.platform())
+    print("hostname:", OS.hostname())
+    print("pid:", OS.pid())
+    print("ppid:", OS.ppid())
+    print("cpu_count:", OS.cpu_count())
+
+    OS.makedirs("examples/os_demo/nested")
+
+    print("exists:", OS.exists("examples/os_demo"))
+    print("is_dir:", OS.is_dir("examples/os_demo"))
+
+    OS.setenv("OCEAN_OS_DEMO", "works", True)
+    print("env:", OS.getenv("OCEAN_OS_DEMO", "missing"))
+    OS.unsetenv("OCEAN_OS_DEMO")
+
+    var entries: list[str] = OS.listdir("examples")
+    print("examples entries:", len(entries))
+
+    OS.rmdir("examples/os_demo/nested")
+    OS.rmdir("examples/os_demo")
+
+    return 0
