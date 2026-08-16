@@ -83,6 +83,13 @@ class OrchestratorMixin:
         # types, so it also precedes helper emission.
         self.collect_imports_and_declarations(scopes)
         self.generate_c_imports()
+
+        # Generic containers may contain class references.
+        for class_name in sorted(self.class_types):
+            self.add_line(f"typedef struct {class_name} {class_name};")
+        if self.class_types:
+            self.add_empty_line()
+
         self.generate_helpers_section()
 
         # Class layouts depend on the generated generic type declarations.

@@ -1,0 +1,19 @@
+import <std/ml/nn.oc>
+
+
+class SGD:
+    def __init__(self, parameters: list[Parameter], learning_rate: float64) -> None:
+        self.parameters: list[Parameter] = parameters
+        self.learning_rate: float64 = learning_rate
+
+    def zero_grad(self) -> None:
+        for parameter in self.parameters:
+            parameter.zero_grad()
+
+        return None
+
+    def step(self) -> None:
+        for parameter in self.parameters:
+            parameter.step(self.learning_rate)
+
+        return None

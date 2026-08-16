@@ -1,0 +1,35 @@
+import <std/tensor/tensor.oc>
+import <std/ml/nn.oc>
+import <std/ml/optim.oc>
+
+
+def main() -> int:
+    var x: Tensor[float32] = Tensor.from_list([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], "cpu")
+    var y: Tensor[float32] = Tensor.from_list([[1.0], [3.0], [4.0], [6.0]], "cpu")
+
+    var model: Linear = Linear(2, 1)
+    var criterion: MSELoss = MSELoss()
+    var optimizer: SGD = SGD(model.parameters(), 0.08)
+
+    var initial_prediction: Tensor[float32] = model.forward(x)
+    var initial_loss: Tensor[float32] = criterion.forward(initial_prediction, y)
+    print("initial loss =", initial_loss.item())
+
+    for epoch in range(120):
+        optimizer.zero_grad()
+        var prediction: Tensor[float32] = model.forward(x)
+        var loss: Tensor[float32] = criterion.forward(prediction, y)
+        print("loss =", loss.item())
+        loss.backward()
+        optimizer.step()
+
+    var final_prediction: Tensor[float32] = model.forward(x)
+    var final_loss: Tensor[float32] = criterion.forward(final_prediction, y)
+
+    print("final loss =", final_loss.item())
+    print("pred[0] =", final_prediction[0, 0])
+    print("pred[1] =", final_prediction[1, 0])
+    print("pred[2] =", final_prediction[2, 0])
+    print("pred[3] =", final_prediction[3, 0])
+
+    return 0

@@ -428,8 +428,11 @@ class ExpressionsMixin:
             logger.debug(f"Found literal: {value} (type: {data_type})")
             if data_type == "str":
                 return self._c_string_literal(value)
-            else:
-                return str(value)
+            if data_type == "bool" or value in {True, False, "True", "False"}:
+                return "true" if value in {True, "True"} else "false"
+            if value is None or value == "None":
+                return "NULL"
+            return str(value)
 
         elif node_type == "variable":
             # Поддерживаем оба формата: 'value' и 'name'
@@ -450,6 +453,30 @@ class ExpressionsMixin:
                 for argument in ast.get("arguments", [])
             ]
             return f"create_{class_name}({', '.join(arguments)})"
+
+        elif node_type == "function_call":
+            function_name = ast.get("function", "")
+            if function_name.startswith("@"):
+                function_name = function_name[1:]
+            arguments = [
+                self._generate_expression_from_ast_for_init(argument, param_names)
+                if isinstance(argument, dict)
+                else ("NULL" if str(argument) == "None" else str(argument))
+                for argument in ast.get("arguments", [])
+            ]
+            return f"{function_name}({', '.join(arguments)})"
+
+        elif node_type == "c_call":
+            function_name = ast.get("function", "") or ast.get("name", "")
+            if function_name.startswith("@"):
+                function_name = function_name[1:]
+            arguments = [
+                self._generate_expression_from_ast_for_init(argument, param_names)
+                if isinstance(argument, dict)
+                else ("NULL" if str(argument) == "None" else str(argument))
+                for argument in ast.get("arguments", [])
+            ]
+            return f"{function_name}({', '.join(arguments)})"
 
         elif node_type == "method_call":
             raise RuntimeError(

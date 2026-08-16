@@ -1,4 +1,5 @@
 cimport <std/tensor/tensor_runtime.h>
+cimport <std/tensor/autograd_runtime.h>
 
 
 # Public device-aware Tensor facade.  The C handle is intentionally opaque;
@@ -6,6 +7,37 @@ cimport <std/tensor/tensor_runtime.h>
 class Tensor:
     def __init__(self, handle: ocean_tensor_handle_t):
         self.handle = handle
+
+    def raw_handle(self) -> ocean_tensor_handle_t:
+        return self.handle
+
+    def requires_grad_(self, value: bool) -> None:
+        ocean_autograd_set_requires_grad(self.handle, value)
+        return None
+
+    def requires_grad(self) -> bool:
+        return ocean_autograd_requires_grad(self.handle)
+
+    def has_grad(self) -> bool:
+        return ocean_autograd_has_grad(self.handle)
+
+    def grad(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_grad_copy(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def zero_grad(self) -> None:
+        ocean_autograd_zero_grad(self.handle)
+        return None
+
+    def backward(self) -> None:
+        ocean_autograd_backward(self.handle)
+        return None
+
+    def relu(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_relu(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
 
     @staticmethod
     def zeros(rows: int, cols: int, device: str) -> Tensor:
@@ -42,47 +74,47 @@ class Tensor:
         return value
 
     def matmul(self, other: &Tensor) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_matmul(self.handle, other.handle)
+        var handle: ocean_tensor_handle_t = ocean_autograd_matmul(self.handle, other.handle)
         var value: Tensor = Tensor(handle)
         return value
 
     def add(self, other: &Tensor) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 0)
+        var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 0)
         var value: Tensor = Tensor(handle)
         return value
 
     def sub(self, other: &Tensor) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 1)
+        var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 1)
         var value: Tensor = Tensor(handle)
         return value
 
     def mul(self, other: &Tensor) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 2)
+        var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 2)
         var value: Tensor = Tensor(handle)
         return value
 
     def div(self, other: &Tensor) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 3)
+        var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 3)
         var value: Tensor = Tensor(handle)
         return value
 
     def add_scalar(self, value: float64) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 0)
+        var handle: ocean_tensor_handle_t = ocean_autograd_scalar(self.handle, value, 0)
         var result: Tensor = Tensor(handle)
         return result
 
     def sub_scalar(self, value: float64) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 1)
+        var handle: ocean_tensor_handle_t = ocean_autograd_scalar(self.handle, value, 1)
         var result: Tensor = Tensor(handle)
         return result
 
     def mul_scalar(self, value: float64) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 2)
+        var handle: ocean_tensor_handle_t = ocean_autograd_scalar(self.handle, value, 2)
         var result: Tensor = Tensor(handle)
         return result
 
     def div_scalar(self, value: float64) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 3)
+        var handle: ocean_tensor_handle_t = ocean_autograd_scalar(self.handle, value, 3)
         var result: Tensor = Tensor(handle)
         return result
 
@@ -92,7 +124,7 @@ class Tensor:
         return value
 
     def transpose(self) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_transpose(self.handle)
+        var handle: ocean_tensor_handle_t = ocean_autograd_transpose(self.handle)
         var value: Tensor = Tensor(handle)
         return value
 

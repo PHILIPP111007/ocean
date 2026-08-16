@@ -1,0 +1,117 @@
+import <std/tensor/tensor.oc>
+cimport <std/tensor/autograd_runtime.h>
+
+
+class Parameter:
+    def __init__(self, data: Tensor[float32]) -> None:
+        self.data: Tensor[float32] = data
+        self.data.requires_grad_(True)
+
+    @staticmethod
+    def zeros(rows: int, cols: int, device: str) -> Parameter:
+        var tensor: Tensor[float32] = Tensor.zeros(rows, cols, device)
+        var parameter: Parameter = Parameter(tensor)
+        return parameter
+
+    @staticmethod
+    def uniform(rows: int, cols: int, scale: float64, device: str) -> Parameter:
+        var handle: ocean_tensor_handle_t = ocean_autograd_parameter_uniform(rows, cols, scale, device)
+        var tensor: Tensor[float32] = Tensor(handle)
+        var parameter: Parameter = Parameter(tensor)
+        return parameter
+
+    def tensor(self) -> Tensor[float32]:
+        return self.data
+
+    def grad(self) -> Tensor[float32]:
+        return self.data.grad()
+
+    def has_grad(self) -> bool:
+        return self.data.has_grad()
+
+    def zero_grad(self) -> None:
+        self.data.zero_grad()
+        return None
+
+    def step(self, learning_rate: float64) -> None:
+        var handle: ocean_tensor_handle_t = self.data.raw_handle()
+        ocean_autograd_sgd_step(handle, learning_rate)
+        return None
+
+
+class Module:
+    def __init__(self) -> None:
+        self.training: bool = True
+
+    def train(self) -> None:
+        self.training = True
+        return None
+
+    def eval(self) -> None:
+        self.training = False
+        return None
+
+    def is_training(self) -> bool:
+        return self.training
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = []
+        return result
+
+
+def relu(input: &Tensor[float32]) -> Tensor[float32]:
+    var input_handle: ocean_tensor_handle_t = input.raw_handle()
+    var handle: ocean_tensor_handle_t = ocean_autograd_relu(input_handle)
+    var result: Tensor[float32] = Tensor(handle)
+    return result
+
+
+def mse_loss(prediction: &Tensor[float32], target: &Tensor[float32]) -> Tensor[float32]:
+    var prediction_handle: ocean_tensor_handle_t = prediction.raw_handle()
+    var target_handle: ocean_tensor_handle_t = target.raw_handle()
+    var handle: ocean_tensor_handle_t = ocean_autograd_mse_loss(prediction_handle, target_handle)
+    var result: Tensor[float32] = Tensor(handle)
+    return result
+
+
+class Linear(Module):
+    def __init__(self, in_features: int, out_features: int) -> None:
+        self.training: bool = True
+        self.in_features: int = in_features
+        self.out_features: int = out_features
+        var weight_handle: ocean_tensor_handle_t = ocean_autograd_parameter_uniform(out_features, in_features, 0.1, "cpu")
+        var weight_tensor: Tensor[float32] = Tensor(weight_handle)
+        var weight_parameter: Parameter = Parameter(weight_tensor)
+        self.weight: Parameter = weight_parameter
+
+        var bias_tensor: Tensor[float32] = Tensor.zeros(1, out_features, "cpu")
+        var bias_parameter: Parameter = Parameter(bias_tensor)
+        self.bias: Parameter = bias_parameter
+
+    def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
+        var weight: Tensor[float32] = self.weight.tensor()
+        var weight_t: Tensor[float32] = weight.transpose()
+        var output: Tensor[float32] = input.matmul(weight_t)
+        var bias: Tensor[float32] = self.bias.tensor()
+        var result: Tensor[float32] = output.add(bias)
+        return result
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.weight, self.bias]
+        return result
+
+
+class ReLU(Module):
+    def __init__(self) -> None:
+        self.training: bool = True
+
+    def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
+        return relu(input)
+
+
+class MSELoss(Module):
+    def __init__(self) -> None:
+        self.training: bool = True
+
+    def forward(self, prediction: &Tensor[float32], target: &Tensor[float32]) -> Tensor[float32]:
+        return mse_loss(prediction, target)

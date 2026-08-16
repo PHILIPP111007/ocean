@@ -149,6 +149,30 @@ class Validator:
                 if (
                     isinstance(node, Mapping)
                     and node.get("node") == "c_import"
+                    and node.get("header") == "std/tensor/autograd_runtime.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "ocean_autograd_set_requires_grad",
+                            "ocean_autograd_requires_grad",
+                            "ocean_autograd_has_grad",
+                            "ocean_autograd_grad_copy",
+                            "ocean_autograd_zero_grad",
+                            "ocean_autograd_backward",
+                            "ocean_autograd_binary",
+                            "ocean_autograd_scalar",
+                            "ocean_autograd_matmul",
+                            "ocean_autograd_transpose",
+                            "ocean_autograd_relu",
+                            "ocean_autograd_mse_loss",
+                            "ocean_autograd_parameter_uniform",
+                            "ocean_autograd_sgd_step",
+                        }
+                    )
+
+                if (
+                    isinstance(node, Mapping)
+                    and node.get("node") == "c_import"
                     and node.get("header") == "std/io/file_runtime.h"
                 ):
                     self.external_c_functions.update(
