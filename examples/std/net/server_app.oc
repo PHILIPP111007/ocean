@@ -1,33 +1,57 @@
+import <std/json/json.oc>
 import <std/net/web.oc>
 
-def index(request: ocean_web_request_t) -> ocean_web_response_t:
+
+def index(request: Request) -> Response:
     return Response.text("Hello from Ocean!")
 
-def hello(request: ocean_web_request_t) -> ocean_web_response_t:
+def hello(request: Request) -> Response:
     var name: str = Request.path_param(request, "name", "world")
     return Response.text("Hello, " + name + "!")
 
-def search(request: ocean_web_request_t) -> ocean_web_response_t:
+def search(request: Request) -> Response:
     var query: str = Request.query_param(request, "q", "")
-    return Response.json("{\"query\":\"" + query + "\"}")
+    return Response.json("{\"query\":\"" + "hello" + "\"}")
 
-def create_user(request: ocean_web_request_t) -> ocean_web_response_t:
+def create_user(request: Request) -> Response:
     var body: str = Request.body(request)
-    var response: ocean_web_response_t = Response.json_status(201, body)
+    var response: Response = Response.json_status(201, body)
     Response.add_header(response, "X-Ocean-Framework", "std/web")
     return response
 
-def update_user(request: ocean_web_request_t) -> ocean_web_response_t:
+def update_user(request: Request) -> Response:
     var user_id: str = Request.path_param(request, "id", "")
     var body: str = Request.body(request)
     return Response.json("{\"id\":\"" + user_id + "\",\"body\":" + body + "}")
 
-def patch_user(request: ocean_web_request_t) -> ocean_web_response_t:
+def patch_user(request: Request) -> Response:
     var user_id: str = Request.path_param(request, "id", "")
     return Response.text("patched user " + user_id)
 
-def delete_user(request: ocean_web_request_t) -> ocean_web_response_t:
+def delete_user(request: Request) -> Response:
     return Response.empty(204)
+
+def get_json(request: Request) -> Response:
+    var root: Json = Json.object()
+
+    var name: Json = Json.str("Ocean")
+    var version: Json = Json.int(1)
+    var enabled: Json = Json.bool(True)
+    var values: Json = Json.arr()
+
+    var first: Json = Json.int(10)
+    var second: Json = Json.int(20)
+
+    values.append(first)
+    values.append(second)
+
+    root.set("name", name)
+    root.set("version", version)
+    root.set("enabled", enabled)
+    root.set("values", values)
+
+    return root
+
 
 def main() -> int:
     var app: App = App.create()
@@ -39,5 +63,6 @@ def main() -> int:
     app.put("/users/{id}", update_user)
     app.patch("/users/{id}", patch_user)
     app.delete("/users/{id}", delete_user)
+    # app.get("/get_json", get_json)
     app.serve("127.0.0.1", 8080)
     return 0

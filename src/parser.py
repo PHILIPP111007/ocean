@@ -1,3 +1,4 @@
+import ast
 import re
 import os
 
@@ -2452,6 +2453,36 @@ class Parser:
 
         return True
 
+    def _is_complete_string_literal(self, expression: str) -> bool:
+        """Return True only when the entire expression is one quoted literal.
+
+        Expressions such as ``"a" + name + "b"`` start and end with quotes
+        but are binary expressions, not a single literal.
+        """
+        if not isinstance(expression, str) or len(expression) < 2:
+            return False
+
+        quote = expression[0]
+        if quote not in {"\"", "'"} or expression[-1] != quote:
+            return False
+
+        escaped = False
+        for index in range(1, len(expression)):
+            char = expression[index]
+
+            if escaped:
+                escaped = False
+                continue
+
+            if char == "\\":
+                escaped = True
+                continue
+
+            if char == quote:
+                return index == len(expression) - 1
+
+        return False
+
     def parse_expression_to_ast(self, expression: str) -> dict:
         """Parse an expression into the transitional Phils AST."""
         expression = expression.strip()
@@ -2495,11 +2526,11 @@ class Parser:
                     "source": self.parse_expression_to_ast(inner),
                 }
 
-        if (expression.startswith('"') and expression.endswith('"')) or (
-            expression.startswith("'") and expression.endswith("'")
-        ):
-            content = expression[1:-1]
-            content = content.replace('\\"', '"').replace("\\'", "'")
+        if self._is_complete_string_literal(expression):
+            try:
+                content = ast.literal_eval(expression)
+            except (SyntaxError, ValueError):
+                content = expression[1:-1]
             return {"type": "literal", "value": content, "data_type": "str"}
 
         if re.match(r"^-?\d+$", expression):

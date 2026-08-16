@@ -8,6 +8,23 @@ from src.modules.constants import DEFAULT_C_IMPORTS, INITIAL_LIST_CAPACITY, KNOW
 from src.modules.logger import logger
 
 class ExpressionsMixin:
+    def _c_string_literal(self, value) -> str:
+        """Encode one decoded Ocean string value as a valid C literal."""
+        text = "" if value is None else str(value)
+
+        escaped = (
+            text
+            .replace("\\", "\\\\")
+            .replace('"', '\\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+            .replace("\b", "\\b")
+            .replace("\f", "\\f")
+        )
+
+        return '"' + escaped + '"'
+
     def generate_expression(self, ast: Dict) -> str:
         """Генерирует C выражение из AST с поддержкой tuple и list"""
         if not ast:
@@ -70,7 +87,7 @@ class ExpressionsMixin:
             data_type = ast.get("data_type", "")
 
             if data_type == "str":
-                return f'"{value}"'
+                return self._c_string_literal(value)
             elif data_type == "bool":
                 return "true" if value else "false"
             elif data_type == "None":
@@ -95,7 +112,7 @@ class ExpressionsMixin:
             data_type = ast.get("data_type", "")
 
             if data_type == "str":
-                return f'"{value}"'
+                return self._c_string_literal(value)
             elif data_type == "bool":
                 return "true" if value else "false"
             elif data_type == "None":
@@ -410,7 +427,7 @@ class ExpressionsMixin:
             data_type = ast.get("data_type", "")
             logger.debug(f"Found literal: {value} (type: {data_type})")
             if data_type == "str":
-                return f'"{value}"'
+                return self._c_string_literal(value)
             else:
                 return str(value)
 
@@ -538,7 +555,7 @@ class ExpressionsMixin:
             data_type = ast.get("data_type", "")
             logger.debug(f"Found literal: {value} (type: {data_type})")
             if data_type == "str":
-                return f'"{value}"'
+                return self._c_string_literal(value)
             else:
                 return str(value)
 

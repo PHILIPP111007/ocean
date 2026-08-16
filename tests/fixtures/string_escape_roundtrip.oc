@@ -1,0 +1,9 @@
+def main() -> int:
+    var name: str = "Ocean"
+    var hello: str = "Hello, " + name + "!"
+    var json: str = "{\"query\":\"" + name + "\"}"
+    var path: str = "C:\\tmp\\file.txt"
+    print(hello)
+    print(json)
+    print(path)
+    return 0
