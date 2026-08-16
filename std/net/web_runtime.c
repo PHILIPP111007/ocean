@@ -747,3 +747,225 @@ void ocean_web_serve(ocean_web_app_t app, const char *host, int port) {
         queue_push(&queue, &c);
     }
 }
+
+
+/* Ocean Router: private-layout-independent implementation. */
+
+typedef struct ocean_router_route {
+    char *method;
+    char *path;
+    ocean_web_handler_t handler;
+} ocean_router_route;
+
+struct ocean_web_router {
+    char *prefix;
+    ocean_router_route *routes;
+    size_t count;
+    size_t capacity;
+};
+
+static void *ocean_router_malloc(size_t size) {
+    void *ptr = malloc(size);
+    if (!ptr) {
+        fprintf(stderr, "Ocean Router: out of memory\n");
+        exit(1);
+    }
+    return ptr;
+}
+
+static void *ocean_router_realloc(void *ptr, size_t size) {
+    void *next = realloc(ptr, size);
+    if (!next) {
+        fprintf(stderr, "Ocean Router: out of memory\n");
+        exit(1);
+    }
+    return next;
+}
+
+static char *ocean_router_strndup(const char *src, size_t length) {
+    char *copy = ocean_router_malloc(length + 1);
+    memcpy(copy, src, length);
+    copy[length] = '\0';
+    return copy;
+}
+
+static char *ocean_router_strdup(const char *src) {
+    if (!src) {
+        src = "";
+    }
+    return ocean_router_strndup(src, strlen(src));
+}
+
+static void ocean_router_fail(const char *message) {
+    fprintf(stderr, "Ocean Router error: %s\n", message);
+    exit(1);
+}
+
+static char *ocean_router_normalize_prefix(const char *prefix) {
+    if (!prefix || prefix[0] == '\0' || strcmp(prefix, "/") == 0) {
+        return ocean_router_strdup("");
+    }
+
+    if (prefix[0] != '/') {
+        ocean_router_fail("prefix must start with '/'");
+    }
+
+    size_t length = strlen(prefix);
+
+    while (length > 1 && prefix[length - 1] == '/') {
+        --length;
+    }
+
+    return ocean_router_strndup(prefix, length);
+}
+
+static char *ocean_router_join_path(
+    const char *prefix,
+    const char *path
+) {
+    if (!path || path[0] == '\0') {
+        path = "/";
+    }
+
+    if (path[0] != '/') {
+        ocean_router_fail("route path must start with '/'");
+    }
+
+    if (!prefix || prefix[0] == '\0') {
+        return ocean_router_strdup(path);
+    }
+
+    if (strcmp(path, "/") == 0) {
+        return ocean_router_strdup(prefix);
+    }
+
+    size_t prefix_length = strlen(prefix);
+    size_t path_length = strlen(path);
+
+    char *result = ocean_router_malloc(
+        prefix_length + path_length + 1
+    );
+
+    memcpy(result, prefix, prefix_length);
+    memcpy(result + prefix_length, path, path_length + 1);
+
+    return result;
+}
+
+static void ocean_router_reserve(ocean_web_router_t router) {
+    if (router->count < router->capacity) {
+        return;
+    }
+
+    size_t next_capacity = router->capacity
+        ? router->capacity * 2
+        : 8;
+
+    router->routes = ocean_router_realloc(
+        router->routes,
+        next_capacity * sizeof(ocean_router_route)
+    );
+
+    router->capacity = next_capacity;
+}
+
+ocean_web_router_t ocean_web_router_create(const char *prefix) {
+    ocean_web_router_t router = ocean_router_malloc(
+        sizeof(struct ocean_web_router)
+    );
+
+    router->prefix = ocean_router_normalize_prefix(prefix);
+    router->routes = NULL;
+    router->count = 0;
+    router->capacity = 0;
+
+    return router;
+}
+
+void ocean_web_router_release(ocean_web_router_t router) {
+    if (!router) {
+        return;
+    }
+
+    for (size_t i = 0; i < router->count; ++i) {
+        free(router->routes[i].method);
+        free(router->routes[i].path);
+    }
+
+    free(router->routes);
+    free(router->prefix);
+    free(router);
+}
+
+void ocean_web_router_route(
+    ocean_web_router_t router,
+    const char *method,
+    const char *path,
+    ocean_web_handler_t handler
+) {
+    if (!router || !method || !path || !handler) {
+        ocean_router_fail("Router.route() received an invalid argument");
+    }
+
+    if (path[0] != '/') {
+        ocean_router_fail("Router route path must start with '/'");
+    }
+
+    ocean_router_reserve(router);
+
+    ocean_router_route *entry =
+        &router->routes[router->count++];
+
+    entry->method = ocean_router_strdup(method);
+    entry->path = ocean_router_strdup(path);
+    entry->handler = handler;
+}
+
+#define OCEAN_ROUTER_METHOD(function_name, method_name) \
+    void function_name( \
+        ocean_web_router_t router, \
+        const char *path, \
+        ocean_web_handler_t handler \
+    ) { \
+        ocean_web_router_route(router, method_name, path, handler); \
+    }
+
+OCEAN_ROUTER_METHOD(ocean_web_router_get, "GET")
+OCEAN_ROUTER_METHOD(ocean_web_router_post, "POST")
+OCEAN_ROUTER_METHOD(ocean_web_router_put, "PUT")
+OCEAN_ROUTER_METHOD(ocean_web_router_patch, "PATCH")
+OCEAN_ROUTER_METHOD(ocean_web_router_delete, "DELETE")
+OCEAN_ROUTER_METHOD(ocean_web_router_options, "OPTIONS")
+OCEAN_ROUTER_METHOD(ocean_web_router_head, "HEAD")
+OCEAN_ROUTER_METHOD(ocean_web_router_any, "*")
+
+#undef OCEAN_ROUTER_METHOD
+
+void ocean_web_include_router(
+    ocean_web_app_t app,
+    ocean_web_router_t router
+) {
+    if (!app || !router) {
+        ocean_router_fail("App.include() requires a valid Router");
+    }
+
+    for (size_t i = 0; i < router->count; ++i) {
+        ocean_router_route *entry =
+            &router->routes[i];
+
+        char *full_path = ocean_router_join_path(
+            router->prefix,
+            entry->path
+        );
+
+        ocean_web_route(
+            app,
+            entry->method,
+            full_path,
+            entry->handler
+        );
+
+        free(full_path);
+    }
+}
+

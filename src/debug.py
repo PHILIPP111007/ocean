@@ -392,6 +392,18 @@ class Validator:
                 ):
                     self.external_c_functions.update(
                         {
+                            "ocean_web_router_create",
+                            "ocean_web_router_release",
+                            "ocean_web_router_route",
+                            "ocean_web_router_get",
+                            "ocean_web_router_post",
+                            "ocean_web_router_put",
+                            "ocean_web_router_patch",
+                            "ocean_web_router_delete",
+                            "ocean_web_router_options",
+                            "ocean_web_router_head",
+                            "ocean_web_router_any",
+                            "ocean_web_include_router",
                             "ocean_web_app_create",
                             "ocean_web_app_release",
                             "ocean_web_route",

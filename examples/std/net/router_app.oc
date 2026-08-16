@@ -1,0 +1,33 @@
+import <std/json/json.oc>
+import <std/net/web.oc>
+
+
+def get_user(request: Request) -> Response:
+    var user_id: str = Request.path_param(request, "id", "")
+
+    var root: Json = Json.object()
+    var id_value: Json = Json.str(user_id)
+
+    root.set("id", id_value)
+
+    return Response.json_value(root)
+
+
+def create_user(request: Request) -> Response:
+    var body: Json = Request.json(request)
+    return Response.json_value_status(201, body)
+
+
+def main() -> int:
+    var app: App = App.create()
+
+    var api: Router = Router.create("/api/v1")
+
+    api.get("/users/{id}", get_user)
+    api.post("/users", create_user)
+
+    app.include(api)
+
+    app.serve("127.0.0.1", 8080)
+
+    return 0
