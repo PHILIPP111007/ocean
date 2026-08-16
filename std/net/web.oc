@@ -170,12 +170,88 @@ class Next:
         return Response(response_handle)
 
 
+
+class Router:
+    def __init__(self, handle: ocean_web_router_t):
+        self.handle = handle
+
+    @staticmethod
+    def create(prefix: str) -> Router:
+        unsafe:
+            var handle: ocean_web_router_t = @ocean_web_router_create(prefix)
+        return Router(handle)
+
+    def raw_handle(self) -> ocean_web_router_t:
+        return self.handle
+
+    def route(self, method: str, path: str, handler: ocean_web_handler_t) -> None:
+        unsafe:
+            var router_handle: ocean_web_router_t = self.raw_handle()
+            @ocean_web_router_route(router_handle, method, path, handler)
+        return None
+
+    def get(self, path: str, handler: ocean_web_handler_t) -> None:
+        unsafe:
+            var router_handle: ocean_web_router_t = self.raw_handle()
+            @ocean_web_router_get(router_handle, path, handler)
+        return None
+
+    def post(self, path: str, handler: ocean_web_handler_t) -> None:
+        unsafe:
+            var router_handle: ocean_web_router_t = self.raw_handle()
+            @ocean_web_router_post(router_handle, path, handler)
+        return None
+
+    def put(self, path: str, handler: ocean_web_handler_t) -> None:
+        unsafe:
+            var router_handle: ocean_web_router_t = self.raw_handle()
+            @ocean_web_router_put(router_handle, path, handler)
+        return None
+
+    def patch(self, path: str, handler: ocean_web_handler_t) -> None:
+        unsafe:
+            var router_handle: ocean_web_router_t = self.raw_handle()
+            @ocean_web_router_patch(router_handle, path, handler)
+        return None
+
+    def delete(self, path: str, handler: ocean_web_handler_t) -> None:
+        unsafe:
+            var router_handle: ocean_web_router_t = self.raw_handle()
+            @ocean_web_router_delete(router_handle, path, handler)
+        return None
+
+    def options(self, path: str, handler: ocean_web_handler_t) -> None:
+        unsafe:
+            var router_handle: ocean_web_router_t = self.raw_handle()
+            @ocean_web_router_options(router_handle, path, handler)
+        return None
+
+    def head(self, path: str, handler: ocean_web_handler_t) -> None:
+        unsafe:
+            var router_handle: ocean_web_router_t = self.raw_handle()
+            @ocean_web_router_head(router_handle, path, handler)
+        return None
+
+    def any(self, path: str, handler: ocean_web_handler_t) -> None:
+        unsafe:
+            var router_handle: ocean_web_router_t = self.raw_handle()
+            @ocean_web_router_any(router_handle, path, handler)
+        return None
+
+
 class App:
     def __init__(self, handle: ocean_web_app_t):
         self.handle = handle
 
     def raw_handle(self) -> ocean_web_app_t:
         return self.handle
+
+    def include(self, router: Router) -> None:
+        unsafe:
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            var router_handle: ocean_web_router_t = router.raw_handle()
+            @ocean_web_include_router(app_handle, router_handle)
+        return None
 
     @staticmethod
     def create() -> App:

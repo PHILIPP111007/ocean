@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 typedef struct ocean_web_app *ocean_web_app_t;
+typedef struct ocean_web_router *ocean_web_router_t;
 typedef struct ocean_web_request *ocean_web_request_t;
 typedef struct ocean_web_response *ocean_web_response_t;
 typedef struct ocean_web_next *ocean_web_next_t;
@@ -18,6 +19,20 @@ typedef ocean_Response *(*ocean_web_middleware_t)(ocean_Request *request, ocean_
 ocean_Request *ocean_create_Request(ocean_web_request_t handle);
 ocean_Next *ocean_create_Next(ocean_web_next_t handle);
 ocean_web_response_t ocean_Response_take_handle(ocean_Response *response);
+
+
+ocean_web_router_t ocean_web_router_create(const char *prefix);
+void ocean_web_router_release(ocean_web_router_t router);
+void ocean_web_router_route(ocean_web_router_t router, const char *method, const char *path_pattern, ocean_web_handler_t handler);
+void ocean_web_router_get(ocean_web_router_t router, const char *path_pattern, ocean_web_handler_t handler);
+void ocean_web_router_post(ocean_web_router_t router, const char *path_pattern, ocean_web_handler_t handler);
+void ocean_web_router_put(ocean_web_router_t router, const char *path_pattern, ocean_web_handler_t handler);
+void ocean_web_router_patch(ocean_web_router_t router, const char *path_pattern, ocean_web_handler_t handler);
+void ocean_web_router_delete(ocean_web_router_t router, const char *path_pattern, ocean_web_handler_t handler);
+void ocean_web_router_options(ocean_web_router_t router, const char *path_pattern, ocean_web_handler_t handler);
+void ocean_web_router_head(ocean_web_router_t router, const char *path_pattern, ocean_web_handler_t handler);
+void ocean_web_router_any(ocean_web_router_t router, const char *path_pattern, ocean_web_handler_t handler);
+void ocean_web_include_router(ocean_web_app_t app, ocean_web_router_t router);
 
 ocean_web_app_t ocean_web_app_create(void);
 void ocean_web_app_release(ocean_web_app_t app);
