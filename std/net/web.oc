@@ -1,151 +1,208 @@
+import <std/json/json.oc>
 cimport <std/net/web_runtime.h>
 
+
 class Request:
+    def __init__(self, handle: ocean_web_request_t):
+        self.handle = handle
+
     @staticmethod
-    def method(request: ocean_web_request_t) -> str:
+    def method(request: Request) -> str:
         unsafe:
-            var result: str = @ocean_web_request_method_copy(request)
-        return result
-    @staticmethod
-    def path(request: ocean_web_request_t) -> str:
-        unsafe:
-            var result: str = @ocean_web_request_path_copy(request)
-        return result
-    @staticmethod
-    def query(request: ocean_web_request_t) -> str:
-        unsafe:
-            var result: str = @ocean_web_request_query_copy(request)
-        return result
-    @staticmethod
-    def body(request: ocean_web_request_t) -> str:
-        unsafe:
-            var result: str = @ocean_web_request_body_copy(request)
-        return result
-    @staticmethod
-    def remote(request: ocean_web_request_t) -> str:
-        unsafe:
-            var result: str = @ocean_web_request_remote_copy(request)
-        return result
-    @staticmethod
-    def header(request: ocean_web_request_t, name: str, default_value: str) -> str:
-        unsafe:
-            var result: str = @ocean_web_request_header_copy(request, name, default_value)
-        return result
-    @staticmethod
-    def query_param(request: ocean_web_request_t, name: str, default_value: str) -> str:
-        unsafe:
-            var result: str = @ocean_web_request_query_param_copy(request, name, default_value)
-        return result
-    @staticmethod
-    def path_param(request: ocean_web_request_t, name: str, default_value: str) -> str:
-        unsafe:
-            var result: str = @ocean_web_request_path_param_copy(request, name, default_value)
+            var result: str = @ocean_web_request_method_copy(request.handle)
         return result
 
+    @staticmethod
+    def path(request: Request) -> str:
+        unsafe:
+            var result: str = @ocean_web_request_path_copy(request.handle)
+        return result
+
+    @staticmethod
+    def query(request: Request) -> str:
+        unsafe:
+            var result: str = @ocean_web_request_query_copy(request.handle)
+        return result
+
+    @staticmethod
+    def body(request: Request) -> str:
+        unsafe:
+            var result: str = @ocean_web_request_body_copy(request.handle)
+        return result
+
+    @staticmethod
+    def json(request: Request) -> Json:
+        var body: str = Request.body(request)
+        return Json.parse(body)
+
+    @staticmethod
+    def remote(request: Request) -> str:
+        unsafe:
+            var result: str = @ocean_web_request_remote_copy(request.handle)
+        return result
+
+    @staticmethod
+    def header(request: Request, name: str, default_value: str) -> str:
+        unsafe:
+            var result: str = @ocean_web_request_header_copy(request.handle, name, default_value)
+        return result
+
+    @staticmethod
+    def query_param(request: Request, name: str, default_value: str) -> str:
+        unsafe:
+            var result: str = @ocean_web_request_query_param_copy(request.handle, name, default_value)
+        return result
+
+    @staticmethod
+    def path_param(request: Request, name: str, default_value: str) -> str:
+        unsafe:
+            var result: str = @ocean_web_request_path_param_copy(request.handle, name, default_value)
+        return result
+
+
 class Response:
+    def __init__(self, handle: ocean_web_response_t):
+        self.handle = handle
+
+    def raw_handle(self) -> ocean_web_response_t:
+        return self.handle
+
     @staticmethod
-    def text(body: str) -> ocean_web_response_t:
+    def text(body: str) -> Response:
         unsafe:
-            var response: ocean_web_response_t = @ocean_web_response_text(200, body)
-        return response
+            var handle: ocean_web_response_t = @ocean_web_response_text(200, body)
+        return Response(handle)
+
     @staticmethod
-    def text_status(status: int, body: str) -> ocean_web_response_t:
+    def text_status(status: int, body: str) -> Response:
         unsafe:
-            var response: ocean_web_response_t = @ocean_web_response_text(status, body)
-        return response
+            var handle: ocean_web_response_t = @ocean_web_response_text(status, body)
+        return Response(handle)
+
     @staticmethod
-    def json(body: str) -> ocean_web_response_t:
+    def json(body: str) -> Response:
         unsafe:
-            var response: ocean_web_response_t = @ocean_web_response_json(200, body)
-        return response
+            var handle: ocean_web_response_t = @ocean_web_response_json(200, body)
+        return Response(handle)
+
     @staticmethod
-    def json_status(status: int, body: str) -> ocean_web_response_t:
+    def json_status(status: int, body: str) -> Response:
         unsafe:
-            var response: ocean_web_response_t = @ocean_web_response_json(status, body)
-        return response
+            var handle: ocean_web_response_t = @ocean_web_response_json(status, body)
+        return Response(handle)
+
     @staticmethod
-    def html(body: str) -> ocean_web_response_t:
-        unsafe:
-            var response: ocean_web_response_t = @ocean_web_response_html(200, body)
-        return response
+    def json_value(value: &Json) -> Response:
+        var body: str = value.stringify(0)
+        return Response.json(body)
+
     @staticmethod
-    def html_status(status: int, body: str) -> ocean_web_response_t:
-        unsafe:
-            var response: ocean_web_response_t = @ocean_web_response_html(status, body)
-        return response
+    def json_value_status(status: int, value: &Json) -> Response:
+        var body: str = value.stringify(0)
+        return Response.json_status(status, body)
+
     @staticmethod
-    def empty(status: int) -> ocean_web_response_t:
+    def html(body: str) -> Response:
         unsafe:
-            var response: ocean_web_response_t = @ocean_web_response_empty(status)
-        return response
+            var handle: ocean_web_response_t = @ocean_web_response_html(200, body)
+        return Response(handle)
+
     @staticmethod
-    def redirect(location: str) -> ocean_web_response_t:
+    def html_status(status: int, body: str) -> Response:
         unsafe:
-            var response: ocean_web_response_t = @ocean_web_response_redirect(302, location)
-        return response
+            var handle: ocean_web_response_t = @ocean_web_response_html(status, body)
+        return Response(handle)
+
     @staticmethod
-    def redirect_status(status: int, location: str) -> ocean_web_response_t:
+    def empty(status: int) -> Response:
         unsafe:
-            var response: ocean_web_response_t = @ocean_web_response_redirect(status, location)
-        return response
+            var handle: ocean_web_response_t = @ocean_web_response_empty(status)
+        return Response(handle)
+
     @staticmethod
-    def add_header(response: ocean_web_response_t, name: str, value: str) -> None:
+    def redirect(location: str) -> Response:
         unsafe:
-            @ocean_web_response_add_header(response, name, value)
+            var handle: ocean_web_response_t = @ocean_web_response_redirect(302, location)
+        return Response(handle)
+
+    @staticmethod
+    def redirect_status(status: int, location: str) -> Response:
+        unsafe:
+            var handle: ocean_web_response_t = @ocean_web_response_redirect(status, location)
+        return Response(handle)
+
+    @staticmethod
+    def add_header(response: Response, name: str, value: str) -> None:
+        unsafe:
+            @ocean_web_response_add_header(response.handle, name, value)
         return None
+
 
 class App:
     def __init__(self, handle: ocean_web_app_t):
         self.handle = handle
+
     @staticmethod
     def create() -> App:
         unsafe:
             var handle: ocean_web_app_t = @ocean_web_app_create()
         return App(handle)
+
     def route(self, method: str, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
             @ocean_web_route(self.handle, method, path, handler)
         return None
+
     def get(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
             @ocean_web_get(self.handle, path, handler)
         return None
+
     def post(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
             @ocean_web_post(self.handle, path, handler)
         return None
+
     def put(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
             @ocean_web_put(self.handle, path, handler)
         return None
+
     def patch(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
             @ocean_web_patch(self.handle, path, handler)
         return None
+
     def delete(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
             @ocean_web_delete(self.handle, path, handler)
         return None
+
     def options(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
             @ocean_web_options(self.handle, path, handler)
         return None
+
     def head(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
             @ocean_web_head(self.handle, path, handler)
         return None
+
     def any(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
             @ocean_web_any(self.handle, path, handler)
         return None
+
     def set_server_header(self, value: str) -> None:
         unsafe:
             @ocean_web_set_server_header(self.handle, value)
         return None
+
     def set_max_body_bytes(self, value: int) -> None:
         unsafe:
             @ocean_web_set_max_body_bytes(self.handle, value)
         return None
+
     def serve(self, host: str, port: int) -> None:
         unsafe:
             @ocean_web_serve(self.handle, host, port)

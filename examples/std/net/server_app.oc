@@ -5,13 +5,19 @@ import <std/net/web.oc>
 def index(request: Request) -> Response:
     return Response.text("Hello from Ocean!")
 
+
 def hello(request: Request) -> Response:
     var name: str = Request.path_param(request, "name", "world")
     return Response.text("Hello, " + name + "!")
 
+
 def search(request: Request) -> Response:
     var query: str = Request.query_param(request, "q", "")
-    return Response.json("{\"query\":\"" + "hello" + "\"}")
+    var root: Json = Json.object()
+    var value: Json = Json.str(query)
+    root.set("query", value)
+    return Response.json_value(root)
+
 
 def create_user(request: Request) -> Response:
     var body: str = Request.body(request)
@@ -19,17 +25,28 @@ def create_user(request: Request) -> Response:
     Response.add_header(response, "X-Ocean-Framework", "std/web")
     return response
 
+
 def update_user(request: Request) -> Response:
     var user_id: str = Request.path_param(request, "id", "")
-    var body: str = Request.body(request)
-    return Response.json("{\"id\":\"" + user_id + "\",\"body\":" + body + "}")
+    var body: Json = Request.json(request)
+
+    var root: Json = Json.object()
+    var id_value: Json = Json.str(user_id)
+
+    root.set("id", id_value)
+    root.set("body", body)
+
+    return Response.json_value(root)
+
 
 def patch_user(request: Request) -> Response:
     var user_id: str = Request.path_param(request, "id", "")
     return Response.text("patched user " + user_id)
 
+
 def delete_user(request: Request) -> Response:
     return Response.empty(204)
+
 
 def get_json(request: Request) -> Response:
     var root: Json = Json.object()
@@ -50,12 +67,14 @@ def get_json(request: Request) -> Response:
     root.set("enabled", enabled)
     root.set("values", values)
 
-    return root
+    return Response.json_value(root)
 
 
 def main() -> int:
     var app: App = App.create()
+
     app.set_server_header("Ocean/0.1")
+
     app.get("/", index)
     app.get("/hello/{name}", hello)
     app.get("/search", search)
@@ -63,6 +82,7 @@ def main() -> int:
     app.put("/users/{id}", update_user)
     app.patch("/users/{id}", patch_user)
     app.delete("/users/{id}", delete_user)
-    # app.get("/get_json", get_json)
+    app.get("/get_json", get_json)
+
     app.serve("127.0.0.1", 8080)
     return 0
