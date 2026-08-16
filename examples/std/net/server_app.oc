@@ -1,0 +1,43 @@
+import <std/net/web.oc>
+
+def index(request: ocean_web_request_t) -> ocean_web_response_t:
+    return Response.text("Hello from Ocean!")
+
+def hello(request: ocean_web_request_t) -> ocean_web_response_t:
+    var name: str = Request.path_param(request, "name", "world")
+    return Response.text("Hello, " + name + "!")
+
+def search(request: ocean_web_request_t) -> ocean_web_response_t:
+    var query: str = Request.query_param(request, "q", "")
+    return Response.json("{\"query\":\"" + query + "\"}")
+
+def create_user(request: ocean_web_request_t) -> ocean_web_response_t:
+    var body: str = Request.body(request)
+    var response: ocean_web_response_t = Response.json_status(201, body)
+    Response.add_header(response, "X-Ocean-Framework", "std/web")
+    return response
+
+def update_user(request: ocean_web_request_t) -> ocean_web_response_t:
+    var user_id: str = Request.path_param(request, "id", "")
+    var body: str = Request.body(request)
+    return Response.json("{\"id\":\"" + user_id + "\",\"body\":" + body + "}")
+
+def patch_user(request: ocean_web_request_t) -> ocean_web_response_t:
+    var user_id: str = Request.path_param(request, "id", "")
+    return Response.text("patched user " + user_id)
+
+def delete_user(request: ocean_web_request_t) -> ocean_web_response_t:
+    return Response.empty(204)
+
+def main() -> int:
+    var app: App = App.create()
+    app.set_server_header("Ocean/0.1")
+    app.get("/", index)
+    app.get("/hello/{name}", hello)
+    app.get("/search", search)
+    app.post("/users", create_user)
+    app.put("/users/{id}", update_user)
+    app.patch("/users/{id}", patch_user)
+    app.delete("/users/{id}", delete_user)
+    app.serve("127.0.0.1", 8080)
+    return 0

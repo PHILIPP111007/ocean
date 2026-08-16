@@ -45,14 +45,19 @@ class HelpersMixin:
                     if isinstance(indices, (list, tuple)) and indices:
                         self.tensor_index_ranks.add(len(indices))
 
-                if method == "sort":
-                    self.runtime_needs_sort_helpers = True
-                if method in self._STRING_RUNTIME_METHODS:
-                    self.runtime_needs_string_helpers = True
-                if function == "str":
-                    self.runtime_needs_string_helpers = True
-                if function == "int":
-                    self.runtime_needs_int_helpers = True
+                # AST fields named method/function may contain nested AST dicts.
+                # Runtime feature detection only cares about textual names.
+                if isinstance(method, str):
+                    if method == "sort":
+                        self.runtime_needs_sort_helpers = True
+                    if method in self._STRING_RUNTIME_METHODS:
+                        self.runtime_needs_string_helpers = True
+
+                if isinstance(function, str):
+                    if function == "str":
+                        self.runtime_needs_string_helpers = True
+                    if function == "int":
+                        self.runtime_needs_int_helpers = True
                 if isinstance(var_type, str):
                     kind = self.memory_kind_for_type(var_type)
                     if kind in {self.MEMORY_ARC, self.MEMORY_STRING}:

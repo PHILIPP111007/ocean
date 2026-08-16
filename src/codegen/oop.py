@@ -202,6 +202,8 @@ class OopMixin:
                 self.add_line(f"ocean_socket_release({access});")
             elif field_type == "ocean_http_response_t":
                 self.add_line(f"ocean_http_response_release({access});")
+            elif field_type == "ocean_web_app_t":
+                self.add_line(f"ocean_web_app_release({access});")
         self.add_line("free(self);")
         self.indent_level -= 1
         self.add_line("}")

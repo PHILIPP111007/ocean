@@ -385,6 +385,45 @@ class Validator:
                         }
                     )
 
+                if (
+                    isinstance(node, Mapping)
+                    and node.get("node") == "c_import"
+                    and node.get("header") == "std/web/web_runtime.h"
+                ):
+                    self.external_c_functions.update(
+                        {
+                            "ocean_web_app_create",
+                            "ocean_web_app_release",
+                            "ocean_web_route",
+                            "ocean_web_get",
+                            "ocean_web_post",
+                            "ocean_web_put",
+                            "ocean_web_patch",
+                            "ocean_web_delete",
+                            "ocean_web_options",
+                            "ocean_web_head",
+                            "ocean_web_any",
+                            "ocean_web_set_server_header",
+                            "ocean_web_set_max_body_bytes",
+                            "ocean_web_serve",
+                            "ocean_web_request_method_copy",
+                            "ocean_web_request_path_copy",
+                            "ocean_web_request_query_copy",
+                            "ocean_web_request_body_copy",
+                            "ocean_web_request_remote_copy",
+                            "ocean_web_request_header_copy",
+                            "ocean_web_request_query_param_copy",
+                            "ocean_web_request_path_param_copy",
+                            "ocean_web_response_text",
+                            "ocean_web_response_json",
+                            "ocean_web_response_html",
+                            "ocean_web_response_empty",
+                            "ocean_web_response_redirect",
+                            "ocean_web_response_add_header",
+                            "ocean_web_response_release",
+                        }
+                    )
+
             level = scope.get("level", 0)
 
             if isinstance(scope.get("symbol_table"), Mapping) and scope["symbol_table"]:
