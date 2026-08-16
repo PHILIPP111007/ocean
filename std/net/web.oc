@@ -155,9 +155,27 @@ class Response:
         return None
 
 
+class Next:
+    def __init__(self, handle: ocean_web_next_t):
+        self.handle = handle
+
+    def raw_handle(self) -> ocean_web_next_t:
+        return self.handle
+
+    def call(self, request: Request) -> Response:
+        unsafe:
+            var next_handle: ocean_web_next_t = self.raw_handle()
+            var request_handle: ocean_web_request_t = request.raw_handle()
+            var response_handle: ocean_web_response_t = @ocean_web_next_call(next_handle, request_handle)
+        return Response(response_handle)
+
+
 class App:
     def __init__(self, handle: ocean_web_app_t):
         self.handle = handle
+
+    def raw_handle(self) -> ocean_web_app_t:
+        return self.handle
 
     @staticmethod
     def create() -> App:
@@ -167,60 +185,102 @@ class App:
 
     def route(self, method: str, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
-            @ocean_web_route(self.handle, method, path, handler)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_route(app_handle, method, path, handler)
         return None
 
     def get(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
-            @ocean_web_get(self.handle, path, handler)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_get(app_handle, path, handler)
         return None
 
     def post(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
-            @ocean_web_post(self.handle, path, handler)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_post(app_handle, path, handler)
         return None
 
     def put(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
-            @ocean_web_put(self.handle, path, handler)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_put(app_handle, path, handler)
         return None
 
     def patch(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
-            @ocean_web_patch(self.handle, path, handler)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_patch(app_handle, path, handler)
         return None
 
     def delete(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
-            @ocean_web_delete(self.handle, path, handler)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_delete(app_handle, path, handler)
         return None
 
     def options(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
-            @ocean_web_options(self.handle, path, handler)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_options(app_handle, path, handler)
         return None
 
     def head(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
-            @ocean_web_head(self.handle, path, handler)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_head(app_handle, path, handler)
         return None
 
     def any(self, path: str, handler: ocean_web_handler_t) -> None:
         unsafe:
-            @ocean_web_any(self.handle, path, handler)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_any(app_handle, path, handler)
+        return None
+
+    def middleware(self, middleware: ocean_web_middleware_t) -> None:
+        unsafe:
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_middleware(app_handle, middleware)
+        return None
+
+    def workers(self, value: int) -> None:
+        unsafe:
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_set_workers(app_handle, value)
+        return None
+
+    def queue_size(self, value: int) -> None:
+        unsafe:
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_set_queue_size(app_handle, value)
+        return None
+
+    def keep_alive(self, timeout_ms: int) -> None:
+        unsafe:
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_set_keep_alive_timeout(app_handle, timeout_ms)
+        return None
+
+    def max_keep_alive_requests(self, value: int) -> None:
+        unsafe:
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_set_max_keep_alive_requests(app_handle, value)
         return None
 
     def set_server_header(self, value: str) -> None:
         unsafe:
-            @ocean_web_set_server_header(self.handle, value)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_set_server_header(app_handle, value)
         return None
 
     def set_max_body_bytes(self, value: int) -> None:
         unsafe:
-            @ocean_web_set_max_body_bytes(self.handle, value)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_set_max_body_bytes(app_handle, value)
         return None
 
     def serve(self, host: str, port: int) -> None:
         unsafe:
-            @ocean_web_serve(self.handle, host, port)
+            var app_handle: ocean_web_app_t = self.raw_handle()
+            @ocean_web_serve(app_handle, host, port)
         return None

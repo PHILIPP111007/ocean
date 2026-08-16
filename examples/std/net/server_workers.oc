@@ -1,0 +1,59 @@
+import <std/json/json.oc>
+import <std/net/web.oc>
+
+
+def request_log(request: Request, call_next: Next) -> Response:
+    var method: str = Request.method(request)
+    var path: str = Request.path(request)
+
+    print("-> ", method, " ", path)
+
+    var response: Response = call_next.call(request)
+
+    print("<- ", method, " ", path)
+
+    return response
+
+
+def powered_by(request: Request, call_next: Next) -> Response:
+    var response: Response = call_next.call(request)
+    Response.add_header(response, "X-Powered-By", "Ocean")
+    return response
+
+
+def index(request: Request) -> Response:
+    return Response.text("Hello from Ocean!")
+
+
+def get_user(request: Request) -> Response:
+    var user_id: str = Request.path_param(request, "id", "")
+
+    var root: Json = Json.object()
+    var id_value: Json = Json.str(user_id)
+
+    root.set("id", id_value)
+
+    return Response.json_value(root)
+
+
+def main() -> int:
+    var app: App = App.create()
+
+    # Middleware выполняются в порядке регистрации.
+    app.middleware(request_log)
+    app.middleware(powered_by)
+
+    # Внутренний HTTP worker pool.
+    app.workers(8)
+    app.queue_size(256)
+
+    # HTTP/1.1 keep-alive.
+    app.keep_alive(5000)
+    app.max_keep_alive_requests(100)
+
+    app.get("/", index)
+    app.get("/users/{id}", get_user)
+
+    app.serve("127.0.0.1", 8080)
+
+    return 0
