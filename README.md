@@ -2,7 +2,7 @@
 
 > Python-like syntax. Native C11 output. Explicit ownership for systems and ML-oriented code.
 
-<img src="images/ocean.jpg" alt="Ocean project illustration" width="560" />
+<img src="images/ocean.jpg" alt="Ocean project illustration" width="100%" height="500px" />
 
 Ocean is an experimental programming language and compiler for people who want the readability of
 Python with a direct path to C. Ocean lowers source code to readable C11, adds ownership and borrow
