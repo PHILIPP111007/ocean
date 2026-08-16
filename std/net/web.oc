@@ -6,28 +6,35 @@ class Request:
     def __init__(self, handle: ocean_web_request_t):
         self.handle = handle
 
+    def raw_handle(self) -> ocean_web_request_t:
+        return self.handle
+
     @staticmethod
     def method(request: Request) -> str:
         unsafe:
-            var result: str = @ocean_web_request_method_copy(request.handle)
+            var handle: ocean_web_request_t = request.raw_handle()
+            var result: str = @ocean_web_request_method_copy(handle)
         return result
 
     @staticmethod
     def path(request: Request) -> str:
         unsafe:
-            var result: str = @ocean_web_request_path_copy(request.handle)
+            var handle: ocean_web_request_t = request.raw_handle()
+            var result: str = @ocean_web_request_path_copy(handle)
         return result
 
     @staticmethod
     def query(request: Request) -> str:
         unsafe:
-            var result: str = @ocean_web_request_query_copy(request.handle)
+            var handle: ocean_web_request_t = request.raw_handle()
+            var result: str = @ocean_web_request_query_copy(handle)
         return result
 
     @staticmethod
     def body(request: Request) -> str:
         unsafe:
-            var result: str = @ocean_web_request_body_copy(request.handle)
+            var handle: ocean_web_request_t = request.raw_handle()
+            var result: str = @ocean_web_request_body_copy(handle)
         return result
 
     @staticmethod
@@ -38,25 +45,29 @@ class Request:
     @staticmethod
     def remote(request: Request) -> str:
         unsafe:
-            var result: str = @ocean_web_request_remote_copy(request.handle)
+            var handle: ocean_web_request_t = request.raw_handle()
+            var result: str = @ocean_web_request_remote_copy(handle)
         return result
 
     @staticmethod
     def header(request: Request, name: str, default_value: str) -> str:
         unsafe:
-            var result: str = @ocean_web_request_header_copy(request.handle, name, default_value)
+            var handle: ocean_web_request_t = request.raw_handle()
+            var result: str = @ocean_web_request_header_copy(handle, name, default_value)
         return result
 
     @staticmethod
     def query_param(request: Request, name: str, default_value: str) -> str:
         unsafe:
-            var result: str = @ocean_web_request_query_param_copy(request.handle, name, default_value)
+            var handle: ocean_web_request_t = request.raw_handle()
+            var result: str = @ocean_web_request_query_param_copy(handle, name, default_value)
         return result
 
     @staticmethod
     def path_param(request: Request, name: str, default_value: str) -> str:
         unsafe:
-            var result: str = @ocean_web_request_path_param_copy(request.handle, name, default_value)
+            var handle: ocean_web_request_t = request.raw_handle()
+            var result: str = @ocean_web_request_path_param_copy(handle, name, default_value)
         return result
 
 
@@ -66,6 +77,11 @@ class Response:
 
     def raw_handle(self) -> ocean_web_response_t:
         return self.handle
+
+    def take_handle(self) -> ocean_web_response_t:
+        var handle: ocean_web_response_t = self.handle
+        self.handle = None
+        return handle
 
     @staticmethod
     def text(body: str) -> Response:
@@ -134,7 +150,8 @@ class Response:
     @staticmethod
     def add_header(response: Response, name: str, value: str) -> None:
         unsafe:
-            @ocean_web_response_add_header(response.handle, name, value)
+            var handle: ocean_web_response_t = response.raw_handle()
+            @ocean_web_response_add_header(handle, name, value)
         return None
 
 
