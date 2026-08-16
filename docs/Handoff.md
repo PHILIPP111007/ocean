@@ -1,10 +1,10 @@
 # Handoff — Phils Language / Ocean backend
 
-> Обновлено: 2026-08-13. Этот документ описывает фактическое состояние
+> Обновлено: 2026-08-16. Этот документ описывает фактическое состояние
 > репозитория после перехода на Typed IR, удаления legacy tensor/JSON-пути,
-> добавления OpenMP/OpenCL, File IO и NumPy `.npy`. Исторические разделы ниже
-> сохранены для контекста; актуальный статус и следующий план находятся в
-> разделах 33–39.
+> добавления OpenMP/OpenCL, File IO, NumPy `.npy` и развития `std/net`/web backend.
+> Исторические разделы ниже сохранены для контекста; актуальный статус и следующий
+> план находятся в разделах 33–41.
 
 ## 1. Цель проекта
 
@@ -1616,3 +1616,575 @@ Python-like syntax
 Не следует возвращаться к Tensor через `list[list[T]]`, отключать bounds checks
 через `NDEBUG`, добавлять handwritten generic SIMD без dtype/layout доказательств
 или снова смешивать backend semantics с C emission.
+
+# 41. `std/net` и HTTP/Web backend
+
+`std/net` развивается как Python-like backend stack поверх C11/POSIX runtime.
+
+Актуальная структура:
+
+```text
+std/net/
+├── socket.oc
+├── http.oc
+├── web.oc
+├── net_runtime.h
+├── net_runtime.c
+├── web_runtime.h
+├── web_runtime.c
+└── README.md
+```
+
+Низкоуровневый слой предоставляет TCP sockets и HTTP client. Web-слой должен
+скрывать opaque C handles от обычного Ocean-кода и использовать публичные
+Ocean-типы:
+
+```python
+def handler(request: Request) -> Response:
+    ...
+```
+
+## Typed `Request` / `Response`
+
+`Request` и `Response` являются обычными Ocean class objects, внутри которых
+хранятся opaque handles:
+
+```text
+Request  -> ocean_web_request_t
+Response -> ocean_web_response_t
+App      -> ocean_web_app_t
+```
+
+Основной API request:
+
+```text
+Request.method(request)
+Request.path(request)
+Request.query(request)
+Request.body(request)
+Request.json(request)
+Request.remote(request)
+Request.header(request, name, default)
+Request.query_param(request, name, default)
+Request.path_param(request, name, default)
+```
+
+Основной API response:
+
+```text
+Response.text(...)
+Response.text_status(...)
+Response.json(...)
+Response.json_status(...)
+Response.json_value(Json)
+Response.json_value_status(status, Json)
+Response.html(...)
+Response.empty(status)
+Response.redirect(...)
+Response.add_header(...)
+```
+
+`Request.json()` и `Response.json_value()` связывают `std/net` с существующим
+`std/json`, поэтому JSON не нужно собирать конкатенацией строк:
+
+```python
+def get_user(request: Request) -> Response:
+    var root: Json = Json.object()
+    var name: Json = Json.str("Ocean")
+
+    root.set("name", name)
+
+    return Response.json_value(root)
+```
+
+## Важный ABI naming rule
+
+Ocean classes lowering’ятся с `ocean_` prefix:
+
+```text
+class Request
+    -> ocean_Request
+    -> ocean_create_Request(...)
+    -> ocean_Request_raw_handle(...)
+
+class Response
+    -> ocean_Response
+    -> ocean_create_Response(...)
+    -> ocean_Response_take_handle(...)
+```
+
+Нельзя объявлять callback ABI через:
+
+```c
+struct Request
+struct Response
+```
+
+Реальные generated C types называются:
+
+```c
+ocean_Request
+ocean_Response
+```
+
+Правильный handler ABI:
+
+```c
+typedef struct ocean_Request ocean_Request;
+typedef struct ocean_Response ocean_Response;
+
+typedef ocean_Response *(*ocean_web_handler_t)(
+    ocean_Request *request
+);
+```
+
+## Критическая FFI-грабля: `.handle` внутри `@C-call`
+
+На текущем backend нельзя надёжно писать:
+
+```python
+@ocean_web_next_call(self.handle, request_handle)
+@ocean_web_get(self.handle, path, handler)
+```
+
+Attribute access внутри аргумента raw C call может быть emitted буквально как:
+
+```c
+self.handle
+```
+
+вместо:
+
+```c
+self->handle
+```
+
+и C compilation падает.
+
+Устойчивый stdlib pattern:
+
+```python
+def raw_handle(self) -> ocean_web_next_t:
+    return self.handle
+
+
+def call(self, request: Request) -> Response:
+    unsafe:
+        var next_handle: ocean_web_next_t = self.raw_handle()
+        var request_handle: ocean_web_request_t = request.raw_handle()
+        var response_handle: ocean_web_response_t = @ocean_web_next_call(next_handle, request_handle)
+
+    return Response(response_handle)
+```
+
+Тот же pattern следует использовать для `App`, `Router` и других stdlib
+wrappers:
+
+```text
+Ocean method call
+    ↓
+local C-typed handle
+    ↓
+@raw_c_call(...)
+```
+
+Долгосрочно это надо исправить в compiler lowering для C-call arguments, а не
+полагаться только на workaround stdlib.
+
+## Worker thread pool
+
+Подготовлена архитектура fixed-size HTTP worker pool:
+
+```text
+accept thread
+    ↓
+bounded connection queue
+    ↓
+worker #1
+worker #2
+...
+worker #N
+```
+
+Python-like configuration API:
+
+```python
+var app: App = App.create()
+
+app.workers(8)
+app.queue_size(256)
+```
+
+Worker владеет connection на время обработки и выполняет route handler вместе
+с middleware chain.
+
+Это предпочтительнее thread-per-request:
+
+```text
+thread-per-request
+    -> potentially unbounded pthread count
+
+fixed worker pool
+    -> bounded pthread count
+    -> predictable memory usage
+```
+
+Web runtime, использующий pthread pool, должен автоматически получать
+`-pthread` в CLI build path так же, как `std/multiprocessing/thread_backend.c`.
+
+## HTTP/1.1 keep-alive
+
+Подготовлен keep-alive API:
+
+```python
+app.keep_alive(5000)
+app.max_keep_alive_requests(100)
+```
+
+Один TCP connection может обслужить несколько последовательных HTTP requests:
+
+```text
+TCP connect
+    ↓
+GET /a
+    ↓
+GET /b
+    ↓
+POST /c
+    ↓
+TCP close
+```
+
+Runtime должен учитывать:
+
+```http
+HTTP/1.1
+Connection: keep-alive
+```
+
+и:
+
+```http
+Connection: close
+```
+
+а также автоматически выставлять:
+
+```text
+Content-Length
+Connection
+Keep-Alive
+```
+
+Текущий целевой режим — последовательный HTTP/1.1 keep-alive.
+
+Пока не являются частью runtime:
+
+```text
+HTTP pipelining
+HTTP/2
+HTTP/3
+```
+
+При connection-oriented worker pool один keep-alive connection остаётся
+закреплён за worker до закрытия или timeout. Поэтому слишком длинный idle timeout
+может снижать доступную concurrency.
+
+## Middleware
+
+Целевой middleware API сделан в Python/Starlette-like стиле:
+
+```python
+def request_log(
+    request: Request,
+    call_next: Next
+) -> Response:
+    print("before")
+
+    var response: Response = call_next.call(request)
+
+    print("after")
+
+    return response
+
+
+app.middleware(request_log)
+```
+
+Middleware chain:
+
+```text
+request
+    ↓
+middleware #1 before
+    ↓
+middleware #2 before
+    ↓
+route handler
+    ↓
+middleware #2 after
+    ↓
+middleware #1 after
+    ↓
+response
+```
+
+Это должно стать общей основой для:
+
+```text
+CORS
+access logging
+request-id
+auth
+timing
+recovery/error handling
+rate limiting
+```
+
+`Next` является Ocean wrapper над внутренним `ocean_web_next_t`; raw handle не
+должен попадать в пользовательские handlers.
+
+## Thread safety web handlers
+
+Текущий ARC non-atomic.
+
+Поэтому HTTP runtime должен придерживаться правила:
+
+> Managed objects одного request должны оставаться thread-confined одному worker.
+
+Локальные:
+
+```text
+Request
+Response
+Json
+str
+list
+class instances
+```
+
+можно использовать в пределах одного handler/middleware chain при отсутствии
+межпоточного alias.
+
+Нельзя считать безопасным общий mutable managed object, который несколько
+workers одновременно читают или изменяют.
+
+Для полноценного shared application state в будущем нужны:
+
+```text
+Shared[T]
+atomic ARC
+Send/Sync-like rules
+thread-safe containers
+locks/synchronization primitives
+```
+
+## `Router` и route groups
+
+Целевой Python-way API:
+
+```python
+var app: App = App.create()
+
+var api: Router = Router.create("/api/v1")
+
+api.get("/users/{id}", get_user)
+api.post("/users", create_user)
+
+app.include(api)
+```
+
+Результат:
+
+```text
+GET  /api/v1/users/{id}
+POST /api/v1/users
+```
+
+`Router` поддерживает основные методы:
+
+```text
+route
+get
+post
+put
+patch
+delete
+options
+head
+any
+```
+
+Архитектурно Router не должен знать private layout `ocean_web_app` или
+внутренний тип route table.
+
+Первая попытка Router installer зависела от конкретных внутренних имён:
+
+```text
+route_t / findroute(...)
+```
+
+против:
+
+```text
+ocean_web_route_entry / find_route(...)
+```
+
+и поэтому оказалась хрупкой.
+
+Принято более устойчивое устройство:
+
+```text
+Router runtime
+    owns prefix
+    owns private router_route[]
+        ↓
+App.include(router)
+        ↓
+for each route
+        ↓
+public ocean_web_route(...)
+```
+
+То есть Router должен зависеть только от публичного web runtime ABI и не должен
+обращаться к:
+
+```c
+app->routes
+```
+
+или другим private полям `ocean_web_app`.
+
+На момент этого handoff:
+
+```text
+web.oc
+web_runtime.h
+```
+
+Router API уже был подготовлен локальными patch installers.
+
+Layout-independent Router runtime v3 подготовлен, но его всё ещё нужно прогнать
+в пользовательской рабочей копии и затем перенести изменения из installer
+patches в tracked source files.
+
+Проверка:
+
+```bash
+python install_std_net_router_v3.py
+
+python -m py_compile \
+    src/debug.py \
+    src/modules/constants.py \
+    src/codegen/oop.py
+
+ocean run ./examples/std/net/router_app.oc
+```
+
+После успешной проверки Router должен получить normal regression tests.
+
+## Что проверять для `std/net`
+
+Минимальный regression suite:
+
+```text
+GET / -> 200
+unknown route -> 404
+known path + wrong method -> 405
+HEAD fallback to GET
+
+path params
+query params
+
+POST JSON body
+Response.json_value(Json)
+
+custom response headers
+
+middleware order before/after
+middleware response mutation
+
+multiple concurrent connections
+
+keep-alive:
+    two sequential requests on one socket
+    Connection: close
+    max request count
+    idle timeout
+
+worker queue saturation behavior
+
+Router prefix
+Router path params after include
+Router GET
+Router POST
+Router PUT
+Router PATCH
+Router DELETE
+```
+
+C runtime полезно отдельно собирать строго:
+
+```bash
+gcc \
+    -std=c11 \
+    -pthread \
+    -Wall \
+    -Wextra \
+    -Wpedantic \
+    -Werror \
+    -I. \
+    -c std/net/web_runtime.c
+```
+
+Для memory bugs нужны ASan/UBSan server smoke tests.
+
+## Следующий web roadmap
+
+После стабилизации:
+
+```text
+worker pool
+keep-alive
+middleware
+Router
+```
+
+приоритетен следующий developer-experience слой:
+
+1. nested routers:
+
+```python
+var api: Router = Router.create("/api")
+var users: Router = Router.create("/users")
+
+users.get("/{id}", get_user)
+
+api.include(users)
+app.include(api)
+```
+
+2. typed path/query helpers:
+
+```python
+Request.path_int(...)
+Request.query_int(...)
+Request.query_bool(...)
+```
+
+3. `Request.state` / request context для middleware;
+4. готовый CORS middleware;
+5. structured HTTP errors;
+6. graceful shutdown по `SIGINT`/`SIGTERM`;
+7. cookies;
+8. multipart/form-data и uploads;
+9. `FileResponse` / `sendfile()`;
+10. streaming responses;
+11. TLS/HTTPS отдельным `std/net/tls` слоем;
+12. WebSocket;
+13. OpenAPI/schema/model validation.
+
+Async/await пока не является приоритетом.
+
+До стабилизации ownership и shared state fixed worker thread pool проще,
+предсказуемее и достаточно полезен для реального backend-кода.
