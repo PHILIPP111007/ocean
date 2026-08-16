@@ -82,6 +82,8 @@ static void ocean_tensor_write_scalar(
     size_t index,
     long double value
 );
+static uint16_t ocean_tensor_float_to_half(float value);
+
 static void ocean_tensor_fill_cpu(ocean_tensor_handle_t tensor, double value);
 static void ocean_tensor_fill_opencl(ocean_tensor_handle_t tensor, double value);
 
@@ -251,6 +253,20 @@ static ocean_tensor_handle_t ocean_tensor_alloc_zeros(
     backend->zero(tensor);
     return tensor;
 }
+
+static ocean_tensor_handle_t ocean_tensor_alloc_uninitialized(
+    const size_t *shape,
+    size_t ndim,
+    ocean_tensor_dtype dtype,
+    int device
+) {
+    ocean_tensor_handle_t tensor = ocean_tensor_alloc(shape, ndim, dtype, device);
+    const ocean_tensor_backend_ops *backend =
+        ocean_tensor_backend_for_device((ocean_tensor_backend_kind)device);
+    backend->allocate(tensor);
+    return tensor;
+}
+
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
 static const char *ocean_tensor_matmul_kernel_source =
@@ -575,14 +591,42 @@ static void ocean_tensor_gpu_write(
     ocean_tensor_opencl_wait_event(event, "clWaitForEvents(write)");
 }
 
-static void ocean_tensor_gpu_zero(ocean_tensor_handle_t tensor) {
+static void ocean_tensor_gpu_zero(
+    ocean_tensor_handle_t tensor
+) {
     size_t bytes = ocean_tensor_bytes(tensor);
     if (!bytes) return;
+
+#if defined(CL_VERSION_1_2)
+    const unsigned char zero = 0;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueFillBuffer(
+            ocean_tensor_opencl.queue,
+            tensor->gpu_data,
+            &zero,
+            sizeof(zero),
+            0,
+            bytes,
+            0,
+            NULL,
+            &event
+        ),
+        "clEnqueueFillBuffer"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue),
+        "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+#else
     void *zeros = calloc(1, bytes);
     if (!zeros) ocean_tensor_fail("out of memory zeroing GPU Tensor");
     ocean_tensor_gpu_write(tensor, zeros);
     free(zeros);
+#endif
 }
+
 
 static void ocean_tensor_gpu_read(
     ocean_tensor_handle_t tensor,
@@ -802,45 +846,115 @@ ocean_tensor_handle_t ocean_tensor_from_cpu_strided(
     const char *dtype,
     const char *device
 ) {
-    if (!shape || !strides) ocean_tensor_fail("Tensor metadata cannot be null");
+    if (!shape || !strides) {
+        ocean_tensor_fail("Tensor metadata cannot be null");
+    }
+
     ocean_tensor_dtype parsed_dtype = ocean_tensor_parse_dtype(dtype);
-    ocean_tensor_handle_t host = ocean_tensor_alloc_zeros(
+    ocean_tensor_handle_t host = ocean_tensor_alloc_uninitialized(
         shape, ndim, parsed_dtype, OCEAN_TENSOR_CPU
     );
-    size_t item_size = host->item_size;
-    unsigned char *destination = (unsigned char *)host->cpu_data;
-    const unsigned char *source = (const unsigned char *)data;
 
     if (host->size && !data) {
+        ocean_tensor_release(host);
         ocean_tensor_fail("Tensor data cannot be null for a non-empty Tensor");
     }
 
-    for (size_t linear = 0; linear < host->size; ++linear) {
-        size_t remaining = linear;
-        size_t source_offset = 0;
-        for (size_t axis = ndim; axis-- > 0;) {
-            size_t coordinate = shape[axis] ? remaining % shape[axis] : 0;
-            remaining = shape[axis] ? remaining / shape[axis] : 0;
-            source_offset += coordinate * strides[axis];
+    unsigned char *destination = (unsigned char *)host->cpu_data;
+    const unsigned char *source = (const unsigned char *)data;
+    size_t item_size = host->item_size;
+
+    bool contiguous = true;
+    size_t expected = 1;
+
+    for (size_t axis = ndim; axis-- > 0;) {
+        if (strides[axis] != expected) {
+            contiguous = false;
+            break;
         }
-        if (destination && source) {
-            memcpy(destination + linear * item_size,
-                   source + source_offset * item_size, item_size);
+        if (shape[axis] != 0 && expected > SIZE_MAX / shape[axis]) {
+            contiguous = false;
+            break;
+        }
+        expected *= shape[axis];
+    }
+
+    if (host->size && contiguous) {
+        memcpy(destination, source, ocean_tensor_bytes(host));
+    } else {
+        for (size_t linear = 0; linear < host->size; ++linear) {
+            size_t remaining = linear;
+            size_t source_offset = 0;
+
+            for (size_t axis = ndim; axis-- > 0;) {
+                size_t coordinate = shape[axis]
+                    ? remaining % shape[axis]
+                    : 0;
+                remaining = shape[axis]
+                    ? remaining / shape[axis]
+                    : 0;
+                source_offset += coordinate * strides[axis];
+            }
+
+            memcpy(
+                destination + linear * item_size,
+                source + source_offset * item_size,
+                item_size
+            );
         }
     }
 
     int target = ocean_tensor_parse_device(device);
-    if (target == OCEAN_TENSOR_CPU) return host;
+    if (target == OCEAN_TENSOR_CPU) {
+        return host;
+    }
+
     ocean_tensor_handle_t result = ocean_tensor_to(host, device);
     ocean_tensor_release(host);
     return result;
 }
 
-static void ocean_tensor_fill_cpu(ocean_tensor_handle_t tensor, double value) {
-    for (size_t index = 0; index < tensor->size; ++index) {
-        ocean_tensor_write_scalar(tensor, index, (long double)value);
+
+static void ocean_tensor_fill_cpu(
+    ocean_tensor_handle_t tensor,
+    double value
+) {
+    if (tensor->size == 0) return;
+
+    if (value == 0.0) {
+        memset(tensor->cpu_data, 0, ocean_tensor_bytes(tensor));
+        return;
     }
+
+    size_t size = tensor->size;
+
+#define OCEAN_FILL(type, converted) \
+    do { \
+        type v = (converted); \
+        type *restrict data = (type *)tensor->cpu_data; \
+        for (size_t i = 0; i < size; ++i) data[i] = v; \
+    } while (0)
+
+    switch (tensor->dtype) {
+        case OCEAN_TENSOR_BOOL: OCEAN_FILL(bool, value != 0.0); break;
+        case OCEAN_TENSOR_INT8: OCEAN_FILL(int8_t, (int8_t)value); break;
+        case OCEAN_TENSOR_INT16: OCEAN_FILL(int16_t, (int16_t)value); break;
+        case OCEAN_TENSOR_INT32: OCEAN_FILL(int32_t, (int32_t)value); break;
+        case OCEAN_TENSOR_INT64: OCEAN_FILL(int64_t, (int64_t)value); break;
+        case OCEAN_TENSOR_UINT8: OCEAN_FILL(uint8_t, (uint8_t)value); break;
+        case OCEAN_TENSOR_UINT16: OCEAN_FILL(uint16_t, (uint16_t)value); break;
+        case OCEAN_TENSOR_UINT32: OCEAN_FILL(uint32_t, (uint32_t)value); break;
+        case OCEAN_TENSOR_UINT64: OCEAN_FILL(uint64_t, (uint64_t)value); break;
+        case OCEAN_TENSOR_FLOAT16:
+            OCEAN_FILL(uint16_t, ocean_tensor_float_to_half((float)value));
+            break;
+        case OCEAN_TENSOR_FLOAT32: OCEAN_FILL(float, (float)value); break;
+        case OCEAN_TENSOR_FLOAT64: OCEAN_FILL(double, value); break;
+    }
+
+#undef OCEAN_FILL
 }
+
 
 ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor) {
     if (!tensor) ocean_tensor_fail("cannot copy a null Tensor");
@@ -982,6 +1096,7 @@ static void ocean_tensor_write_scalar(
     ocean_tensor_fail("invalid Tensor scalar type");
 }
 
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
 static bool ocean_tensor_contains_zero(const ocean_tensor_handle_t tensor) {
     ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
         ? tensor : ocean_tensor_to(tensor, "cpu");
@@ -995,6 +1110,7 @@ static bool ocean_tensor_contains_zero(const ocean_tensor_handle_t tensor) {
     if (cpu != tensor) ocean_tensor_release(cpu);
     return found;
 }
+#endif
 
 enum {
     OCEAN_TENSOR_ADD = 0,
@@ -1080,9 +1196,115 @@ static ocean_tensor_handle_t ocean_tensor_binary_cpu(
     size_t *shape = NULL;
     size_t ndim = 0;
     ocean_tensor_broadcast_shape(left, right, &shape, &ndim);
-    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+    if (shape == NULL || ndim == 0) {
+        ocean_tensor_fail(
+            "Tensor broadcast produced invalid metadata"
+        );
+    }
+
+
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
         shape, ndim, left->dtype, OCEAN_TENSOR_CPU
     );
+
+    bool same_shape = left->ndim == right->ndim && left->ndim == ndim;
+    if (same_shape) {
+        for (size_t axis = 0; axis < ndim; ++axis) {
+            if (left->shape[axis] != right->shape[axis]) {
+                same_shape = false;
+                break;
+            }
+        }
+    }
+
+    if (same_shape && left->dtype == OCEAN_TENSOR_FLOAT32) {
+        const float *restrict a = (const float *)left->cpu_data;
+        const float *restrict b = (const float *)right->cpu_data;
+        float *restrict out = (float *)result->cpu_data;
+        size_t size = result->size;
+
+        switch (operation) {
+            case OCEAN_TENSOR_ADD:
+                for (size_t i = 0; i < size; ++i) out[i] = a[i] + b[i];
+                break;
+            case OCEAN_TENSOR_SUB:
+                for (size_t i = 0; i < size; ++i) out[i] = a[i] - b[i];
+                break;
+            case OCEAN_TENSOR_MUL:
+                for (size_t i = 0; i < size; ++i) out[i] = a[i] * b[i];
+                break;
+            case OCEAN_TENSOR_DIV:
+                for (size_t i = 0; i < size; ++i) {
+                    if (b[i] == 0.0f) {
+                        free(shape);
+                        ocean_tensor_release(result);
+                        ocean_tensor_fail("Tensor division by zero");
+                    }
+                    out[i] = a[i] / b[i];
+                }
+                break;
+            default:
+                free(shape);
+                ocean_tensor_release(result);
+                ocean_tensor_fail("invalid Tensor binary operation");
+        }
+
+        free(shape);
+        return result;
+    }
+
+    if (same_shape && left->dtype == OCEAN_TENSOR_FLOAT64) {
+        const double *restrict a = (const double *)left->cpu_data;
+        const double *restrict b = (const double *)right->cpu_data;
+        double *restrict out = (double *)result->cpu_data;
+        size_t size = result->size;
+
+        switch (operation) {
+            case OCEAN_TENSOR_ADD:
+                for (size_t i = 0; i < size; ++i) out[i] = a[i] + b[i];
+                break;
+            case OCEAN_TENSOR_SUB:
+                for (size_t i = 0; i < size; ++i) out[i] = a[i] - b[i];
+                break;
+            case OCEAN_TENSOR_MUL:
+                for (size_t i = 0; i < size; ++i) out[i] = a[i] * b[i];
+                break;
+            case OCEAN_TENSOR_DIV:
+                for (size_t i = 0; i < size; ++i) {
+                    if (b[i] == 0.0) {
+                        free(shape);
+                        ocean_tensor_release(result);
+                        ocean_tensor_fail("Tensor division by zero");
+                    }
+                    out[i] = a[i] / b[i];
+                }
+                break;
+            default:
+                free(shape);
+                ocean_tensor_release(result);
+                ocean_tensor_fail("invalid Tensor binary operation");
+        }
+
+        free(shape);
+        return result;
+    }
+
+    if (same_shape) {
+        for (size_t linear = 0; linear < result->size; ++linear) {
+            ocean_tensor_write_scalar(
+                result,
+                linear,
+                ocean_tensor_apply_binary(
+                    ocean_tensor_read_scalar(left, linear),
+                    ocean_tensor_read_scalar(right, linear),
+                    operation
+                )
+            );
+        }
+        free(shape);
+        return result;
+    }
+
     for (size_t linear = 0; linear < result->size; ++linear) {
         size_t left_index = ocean_tensor_broadcast_offset(
             left, shape, ndim, linear
@@ -1100,31 +1322,94 @@ static ocean_tensor_handle_t ocean_tensor_binary_cpu(
             )
         );
     }
+
     free(shape);
     return result;
 }
+
 
 static ocean_tensor_handle_t ocean_tensor_scalar_cpu(
     const ocean_tensor_handle_t tensor,
     double scalar,
     int operation
 ) {
-    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
         tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_CPU
     );
-    for (size_t linear = 0; linear < tensor->size; ++linear) {
+    size_t size = tensor->size;
+
+    if (tensor->dtype == OCEAN_TENSOR_FLOAT32) {
+        const float *restrict input = (const float *)tensor->cpu_data;
+        float *restrict out = (float *)result->cpu_data;
+        float s = (float)scalar;
+
+        switch (operation) {
+            case OCEAN_TENSOR_ADD:
+                for (size_t i = 0; i < size; ++i) out[i] = input[i] + s;
+                break;
+            case OCEAN_TENSOR_SUB:
+                for (size_t i = 0; i < size; ++i) out[i] = input[i] - s;
+                break;
+            case OCEAN_TENSOR_MUL:
+                for (size_t i = 0; i < size; ++i) out[i] = input[i] * s;
+                break;
+            case OCEAN_TENSOR_DIV:
+                if (s == 0.0f) {
+                    ocean_tensor_release(result);
+                    ocean_tensor_fail("Tensor division by zero");
+                }
+                for (size_t i = 0; i < size; ++i) out[i] = input[i] / s;
+                break;
+            default:
+                ocean_tensor_release(result);
+                ocean_tensor_fail("invalid Tensor binary operation");
+        }
+        return result;
+    }
+
+    if (tensor->dtype == OCEAN_TENSOR_FLOAT64) {
+        const double *restrict input = (const double *)tensor->cpu_data;
+        double *restrict out = (double *)result->cpu_data;
+
+        switch (operation) {
+            case OCEAN_TENSOR_ADD:
+                for (size_t i = 0; i < size; ++i) out[i] = input[i] + scalar;
+                break;
+            case OCEAN_TENSOR_SUB:
+                for (size_t i = 0; i < size; ++i) out[i] = input[i] - scalar;
+                break;
+            case OCEAN_TENSOR_MUL:
+                for (size_t i = 0; i < size; ++i) out[i] = input[i] * scalar;
+                break;
+            case OCEAN_TENSOR_DIV:
+                if (scalar == 0.0) {
+                    ocean_tensor_release(result);
+                    ocean_tensor_fail("Tensor division by zero");
+                }
+                for (size_t i = 0; i < size; ++i) out[i] = input[i] / scalar;
+                break;
+            default:
+                ocean_tensor_release(result);
+                ocean_tensor_fail("invalid Tensor binary operation");
+        }
+        return result;
+    }
+
+    for (size_t i = 0; i < size; ++i) {
         ocean_tensor_write_scalar(
             result,
-            linear,
+            i,
             ocean_tensor_apply_binary(
-                ocean_tensor_read_scalar(tensor, linear),
+                ocean_tensor_read_scalar(tensor, i),
                 (long double)scalar,
                 operation
             )
         );
     }
+
     return result;
 }
+
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
 static int ocean_tensor_same_shape(
@@ -1249,7 +1534,7 @@ static ocean_tensor_handle_t ocean_tensor_binary_opencl(
     }
     if ((left->dtype == OCEAN_TENSOR_FLOAT32 || left->dtype == OCEAN_TENSOR_INT32) &&
         ocean_tensor_same_shape(left, right)) {
-        ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+        ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
             left->shape, left->ndim, left->dtype, OCEAN_TENSOR_GPU
         );
         cl_kernel kernel = ocean_tensor_opencl_get_kernel(
@@ -1303,7 +1588,7 @@ static ocean_tensor_handle_t ocean_tensor_scalar_opencl(
 ) {
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (tensor->dtype == OCEAN_TENSOR_FLOAT32 || tensor->dtype == OCEAN_TENSOR_INT32) {
-        ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+        ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
             tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_GPU
         );
         cl_kernel kernel = ocean_tensor_opencl_get_kernel(
@@ -1351,22 +1636,22 @@ ocean_tensor_handle_t ocean_tensor_reshape(
     const size_t *shape,
     size_t ndim
 ) {
-    if (!tensor || !shape) ocean_tensor_fail("Tensor reshape received null metadata");
+    if (!tensor || !shape) {
+        ocean_tensor_fail("Tensor reshape received null metadata");
+    }
     if (ocean_tensor_elements_from_shape(shape, ndim) != tensor->size) {
         ocean_tensor_fail("Tensor reshape must preserve the number of elements");
     }
-    ocean_tensor_handle_t cpu_source = tensor->device == OCEAN_TENSOR_CPU
-        ? ocean_tensor_copy(tensor) : ocean_tensor_to(tensor, "cpu");
-    ocean_tensor_handle_t cpu_result = ocean_tensor_alloc_zeros(
-        shape, ndim, tensor->dtype, OCEAN_TENSOR_CPU
+
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        shape, ndim, tensor->dtype, tensor->device
     );
-    if (tensor->size) memcpy(cpu_result->cpu_data, cpu_source->cpu_data, ocean_tensor_bytes(tensor));
-    ocean_tensor_handle_t result = tensor->device == OCEAN_TENSOR_CPU
-        ? cpu_result : ocean_tensor_to(cpu_result, "gpu");
-    ocean_tensor_release(cpu_source);
-    if (tensor->device != OCEAN_TENSOR_CPU) ocean_tensor_release(cpu_result);
+    const ocean_tensor_backend_ops *backend =
+        ocean_tensor_backend_for_device(tensor->device);
+    backend->copy(result, tensor);
     return result;
 }
+
 
 ocean_tensor_handle_t ocean_tensor_reshape_2d(
     ocean_tensor_handle_t tensor,
@@ -1618,18 +1903,114 @@ void ocean_tensor_fill(ocean_tensor_handle_t tensor, double value) {
     ocean_tensor_backend_for_device(tensor->device)->fill(tensor, value);
 }
 
-static void ocean_tensor_fill_opencl(ocean_tensor_handle_t tensor, double value) {
+static void ocean_tensor_fill_opencl(
+    ocean_tensor_handle_t tensor,
+    double value
+) {
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    size_t bytes = ocean_tensor_bytes(tensor);
+    if (!bytes) return;
+
+#if defined(CL_VERSION_1_2)
+    unsigned char pattern[8] = {0};
+    size_t pattern_size = tensor->item_size;
+
+    switch (tensor->dtype) {
+        case OCEAN_TENSOR_BOOL: {
+            bool v = value != 0.0;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_INT8: {
+            int8_t v = (int8_t)value;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_INT16: {
+            int16_t v = (int16_t)value;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_INT32: {
+            int32_t v = (int32_t)value;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_INT64: {
+            int64_t v = (int64_t)value;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_UINT8: {
+            uint8_t v = (uint8_t)value;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_UINT16: {
+            uint16_t v = (uint16_t)value;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_UINT32: {
+            uint32_t v = (uint32_t)value;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_UINT64: {
+            uint64_t v = (uint64_t)value;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_FLOAT16: {
+            uint16_t v = ocean_tensor_float_to_half((float)value);
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_FLOAT32: {
+            float v = (float)value;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+        case OCEAN_TENSOR_FLOAT64: {
+            double v = value;
+            memcpy(pattern, &v, sizeof(v));
+            break;
+        }
+    }
+
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueFillBuffer(
+            ocean_tensor_opencl.queue,
+            tensor->gpu_data,
+            pattern,
+            pattern_size,
+            0,
+            bytes,
+            0,
+            NULL,
+            &event
+        ),
+        "clEnqueueFillBuffer(fill)"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue),
+        "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+#else
     ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
     ocean_tensor_fill_cpu(cpu, value);
     ocean_tensor_gpu_write(tensor, cpu->cpu_data);
     ocean_tensor_release(cpu);
+#endif
 #else
     (void)tensor;
     (void)value;
     ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
 #endif
 }
+
 
 static size_t ocean_tensor_index_offset(
     const ocean_tensor_handle_t tensor,
@@ -1719,38 +2100,68 @@ static ocean_tensor_handle_t ocean_tensor_matmul_cpu(
         shape, 2, left->dtype, OCEAN_TENSOR_CPU
     );
 
-    /*
-     * The normal Tensor constructors produce contiguous row-major storage.
-     * Keep this hot path independent of the generic scalar accessors: those
-     * accessors intentionally support every dtype, but converting every
-     * element through long double dominates small and medium CPU matmuls.
-     * The i-k-j order also streams through rows of B and C instead of reading
-     * B one cache-unfriendly column at a time.
-     */
-    bool left_contiguous = left->strides[1] == 1 &&
-        left->strides[0] == left->shape[1];
-    bool right_contiguous = right->strides[1] == 1 &&
-        right->strides[0] == right->shape[1];
+    bool left_contiguous =
+        left->strides[1] == 1 && left->strides[0] == left->shape[1];
+    bool right_contiguous =
+        right->strides[1] == 1 && right->strides[0] == right->shape[1];
+
     if (left_contiguous && right_contiguous) {
         size_t rows = left->shape[0];
         size_t inner = left->shape[1];
         size_t cols = right->shape[1];
+
         if (rows == 0 || inner == 0 || cols == 0) return result;
 
+        const size_t block_rows = 32;
+        const size_t block_inner = 64;
+        const size_t block_cols = 128;
+
         if (left->dtype == OCEAN_TENSOR_FLOAT32) {
-            const float *restrict left_data =
-                (const float *)left->cpu_data;
-            const float *restrict right_data =
-                (const float *)right->cpu_data;
-            float *restrict result_data = (float *)result->cpu_data;
-            for (size_t row = 0; row < rows; ++row) {
-                float *result_row = result_data + row * cols;
-                const float *left_row = left_data + row * inner;
-                for (size_t k = 0; k < inner; ++k) {
-                    float left_value = left_row[k];
-                    const float *right_row = right_data + k * cols;
-                    for (size_t col = 0; col < cols; ++col) {
-                        result_row[col] += left_value * right_row[col];
+            const float *restrict a = (const float *)left->cpu_data;
+            const float *restrict b = (const float *)right->cpu_data;
+            float *restrict c = (float *)result->cpu_data;
+
+            if (rows < 16 || inner < 32 || cols < 64) {
+                for (size_t row = 0; row < rows; ++row) {
+                    float *restrict c_row = c + row * cols;
+                    const float *restrict a_row = a + row * inner;
+
+                    for (size_t k = 0; k < inner; ++k) {
+                        float av = a_row[k];
+                        const float *restrict b_row = b + k * cols;
+                        for (size_t col = 0; col < cols; ++col) {
+                            c_row[col] += av * b_row[col];
+                        }
+                    }
+                }
+                return result;
+            }
+
+            for (size_t row0 = 0; row0 < rows; row0 += block_rows) {
+                size_t row_end = row0 + block_rows < rows
+                    ? row0 + block_rows : rows;
+
+                for (size_t k0 = 0; k0 < inner; k0 += block_inner) {
+                    size_t k_end = k0 + block_inner < inner
+                        ? k0 + block_inner : inner;
+
+                    for (size_t col0 = 0; col0 < cols; col0 += block_cols) {
+                        size_t col_end = col0 + block_cols < cols
+                            ? col0 + block_cols : cols;
+
+                        for (size_t row = row0; row < row_end; ++row) {
+                            float *restrict c_row = c + row * cols;
+                            const float *restrict a_row = a + row * inner;
+
+                            for (size_t k = k0; k < k_end; ++k) {
+                                float av = a_row[k];
+                                const float *restrict b_row = b + k * cols;
+
+                                for (size_t col = col0; col < col_end; ++col) {
+                                    c_row[col] += av * b_row[col];
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1758,19 +2169,51 @@ static ocean_tensor_handle_t ocean_tensor_matmul_cpu(
         }
 
         if (left->dtype == OCEAN_TENSOR_FLOAT64) {
-            const double *restrict left_data =
-                (const double *)left->cpu_data;
-            const double *restrict right_data =
-                (const double *)right->cpu_data;
-            double *restrict result_data = (double *)result->cpu_data;
-            for (size_t row = 0; row < rows; ++row) {
-                double *result_row = result_data + row * cols;
-                const double *left_row = left_data + row * inner;
-                for (size_t k = 0; k < inner; ++k) {
-                    double left_value = left_row[k];
-                    const double *right_row = right_data + k * cols;
-                    for (size_t col = 0; col < cols; ++col) {
-                        result_row[col] += left_value * right_row[col];
+            const double *restrict a = (const double *)left->cpu_data;
+            const double *restrict b = (const double *)right->cpu_data;
+            double *restrict c = (double *)result->cpu_data;
+
+            if (rows < 16 || inner < 32 || cols < 64) {
+                for (size_t row = 0; row < rows; ++row) {
+                    double *restrict c_row = c + row * cols;
+                    const double *restrict a_row = a + row * inner;
+
+                    for (size_t k = 0; k < inner; ++k) {
+                        double av = a_row[k];
+                        const double *restrict b_row = b + k * cols;
+                        for (size_t col = 0; col < cols; ++col) {
+                            c_row[col] += av * b_row[col];
+                        }
+                    }
+                }
+                return result;
+            }
+
+            for (size_t row0 = 0; row0 < rows; row0 += block_rows) {
+                size_t row_end = row0 + block_rows < rows
+                    ? row0 + block_rows : rows;
+
+                for (size_t k0 = 0; k0 < inner; k0 += block_inner) {
+                    size_t k_end = k0 + block_inner < inner
+                        ? k0 + block_inner : inner;
+
+                    for (size_t col0 = 0; col0 < cols; col0 += block_cols) {
+                        size_t col_end = col0 + block_cols < cols
+                            ? col0 + block_cols : cols;
+
+                        for (size_t row = row0; row < row_end; ++row) {
+                            double *restrict c_row = c + row * cols;
+                            const double *restrict a_row = a + row * inner;
+
+                            for (size_t k = k0; k < k_end; ++k) {
+                                double av = a_row[k];
+                                const double *restrict b_row = b + k * cols;
+
+                                for (size_t col = col0; col < col_end; ++col) {
+                                    c_row[col] += av * b_row[col];
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1781,19 +2224,28 @@ static ocean_tensor_handle_t ocean_tensor_matmul_cpu(
     for (size_t row = 0; row < left->shape[0]; ++row) {
         for (size_t col = 0; col < right->shape[1]; ++col) {
             long double sum = 0.0L;
+
             for (size_t k = 0; k < left->shape[1]; ++k) {
-                size_t left_index = row * left->strides[0] + k * left->strides[1];
-                size_t right_index = k * right->strides[0] + col * right->strides[1];
+                size_t left_index =
+                    row * left->strides[0] + k * left->strides[1];
+                size_t right_index =
+                    k * right->strides[0] + col * right->strides[1];
+
                 sum += ocean_tensor_read_scalar(left, left_index)
                     * ocean_tensor_read_scalar(right, right_index);
             }
+
             ocean_tensor_write_scalar(
-                result, row * result->strides[0] + col * result->strides[1], sum
+                result,
+                row * result->strides[0] + col * result->strides[1],
+                sum
             );
         }
     }
+
     return result;
 }
+
 
 static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
     ocean_tensor_handle_t left,
@@ -1814,7 +2266,7 @@ static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
     }
 
     size_t shape[2] = {left->shape[0], right->shape[1]};
-    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
         shape, 2, left->dtype, OCEAN_TENSOR_GPU
     );
     if (left->shape[0] == 0 || right->shape[1] == 0) {
