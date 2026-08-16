@@ -54,15 +54,15 @@ Ocean:
 ```bash
 hyperfine "./matmul" -w 5
 Benchmark 1: ./matmul
-  Time (mean ± σ):      1.395 s ±  0.103 s    [User: 1.394 s, System: 0.001 s]
-  Range (min … max):    1.317 s …  1.673 s    10 runs
+  Time (mean ± σ):     965.6 ms ±  84.7 ms    [User: 964.5 ms, System: 0.8 ms]
+  Range (min … max):   864.7 ms … 1058.2 ms    10 runs
 ```
 
 Ocean + -O3 flag
 
 ```bash
-hyperfine "./matmul" -w 20
+hyperfine "./matmul" -w 5
 Benchmark 1: ./matmul
-  Time (mean ± σ):     102.9 ms ±  20.2 ms    [User: 102.2 ms, System: 0.7 ms]
-  Range (min … max):    69.3 ms … 142.8 ms    33 runs
+  Time (mean ± σ):      77.4 ms ±   4.1 ms    [User: 76.4 ms, System: 0.9 ms]
+  Range (min … max):    71.9 ms …  86.1 ms    39 runs
 ```
