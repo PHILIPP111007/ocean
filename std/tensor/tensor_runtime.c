@@ -1852,9 +1852,14 @@ double ocean_tensor_min(ocean_tensor_handle_t tensor) {
 }
 
 double ocean_tensor_item(ocean_tensor_handle_t tensor) {
-    if (!tensor) ocean_tensor_fail("Tensor item on null handle");
-    if (tensor->size != 1) ocean_tensor_fail("Tensor item requires exactly one element");
-    return ocean_tensor_get_nd(tensor, (size_t[]){0}, 1);
+    if (!tensor) {
+        ocean_tensor_fail("Tensor item received a null Tensor");
+    }
+    if (ocean_tensor_size(tensor) != 1) {
+        ocean_tensor_fail("Tensor item requires exactly one element");
+    }
+
+    return ocean_tensor_get_flat(tensor, 0);
 }
 
 char *ocean_tensor_dtype_name(ocean_tensor_handle_t tensor) {
@@ -2018,6 +2023,7 @@ static size_t ocean_tensor_index_offset(
     size_t ndim
 ) {
     if (!tensor || !indices || ndim != tensor->ndim) {
+        fprintf(stderr, "[MLDIAG] rank mismatch: tensor_ndim=%zu indices_ndim=%zu\n", tensor->ndim, ndim);
         ocean_tensor_fail("Tensor index rank does not match Tensor rank");
     }
     size_t offset = 0;

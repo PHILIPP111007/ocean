@@ -7,13 +7,23 @@ class SGD:
         self.learning_rate: float64 = learning_rate
 
     def zero_grad(self) -> None:
-        for parameter in self.parameters:
+        var parameters: list[Parameter] = self.parameters
+        var index: int = 0
+
+        while index < len(parameters):
+            var parameter: Parameter = parameters[index]
             parameter.zero_grad()
+            index = index + 1
 
         return None
 
     def step(self) -> None:
-        for parameter in self.parameters:
+        var parameters: list[Parameter] = self.parameters
+        var index: int = 0
+
+        while index < len(parameters):
+            var parameter: Parameter = parameters[index]
             parameter.step(self.learning_rate)
+            index = index + 1
 
         return None

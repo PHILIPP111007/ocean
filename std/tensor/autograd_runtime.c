@@ -527,7 +527,10 @@ ocean_tensor_handle_t ocean_autograd_binary(
     ocean_tensor_handle_t right,
     int operation
 ) {
+    fprintf(stderr, "[MLDIAG] binary op=%d L ndim=%d R ndim=%d\n",
+        operation, ocean_tensor_ndim(left), ocean_tensor_ndim(right));
     ocean_tensor_handle_t result = ocean_tensor_binary(left, right, operation);
+    fprintf(stderr, "[MLDIAG] binary result ndim=%d\n", ocean_tensor_ndim(result));
 
     ocean_autograd_meta *left_meta = ocean_autograd_find(left);
     ocean_autograd_meta *right_meta = ocean_autograd_find(right);
@@ -547,7 +550,9 @@ ocean_tensor_handle_t ocean_autograd_binary(
         node->saved_right = ocean_tensor_copy(right);
     }
 
+    fprintf(stderr, "[MLDIAG] mse before attach\n");
     ocean_autograd_attach(result, node);
+    fprintf(stderr, "[MLDIAG] mse after attach\n");
     return result;
 }
 
@@ -573,7 +578,12 @@ ocean_tensor_handle_t ocean_autograd_matmul(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right
 ) {
+    fprintf(stderr, "[MLDIAG] matmul enter L(ndim=%d,%d,%d) R(ndim=%d,%d,%d)\n",
+        ocean_tensor_ndim(left), ocean_tensor_shape(left, 0), ocean_tensor_shape(left, 1),
+        ocean_tensor_ndim(right), ocean_tensor_shape(right, 0), ocean_tensor_shape(right, 1));
     ocean_tensor_handle_t result = ocean_tensor_matmul(left, right);
+    fprintf(stderr, "[MLDIAG] matmul result ndim=%d shape0=%d shape1=%d\n",
+        ocean_tensor_ndim(result), ocean_tensor_shape(result, 0), ocean_tensor_shape(result, 1));
     ocean_autograd_meta *left_meta = ocean_autograd_find(left);
     ocean_autograd_meta *right_meta = ocean_autograd_find(right);
     bool left_grad = left_meta && left_meta->requires_grad;
@@ -629,6 +639,8 @@ ocean_tensor_handle_t ocean_autograd_mse_loss(
     ocean_tensor_handle_t prediction,
     ocean_tensor_handle_t target
 ) {
+    fprintf(stderr, "[MLDIAG] mse enter prediction ndim=%d target ndim=%d\n",
+        ocean_tensor_ndim(prediction), ocean_tensor_ndim(target));
     ocean_autograd_require_float32(prediction);
     ocean_autograd_require_float32(target);
 
@@ -649,8 +661,12 @@ ocean_tensor_handle_t ocean_autograd_mse_loss(
     double mean = ocean_tensor_mean(squared);
 
     char *device = ocean_tensor_device(prediction);
+    fprintf(stderr, "[MLDIAG] mse before scalar zeros\n");
     ocean_tensor_handle_t scalar_cpu = ocean_tensor_zeros(1, 1, "cpu");
-    ocean_tensor_set_2d(scalar_cpu, 0, 0, mean);
+    fprintf(stderr, "[MLDIAG] mse scalar ndim=%d shape0=%d shape1=%d\n",
+        ocean_tensor_ndim(scalar_cpu), ocean_tensor_shape(scalar_cpu, 0), ocean_tensor_shape(scalar_cpu, 1));
+    ocean_tensor_fill(scalar_cpu, mean);
+    fprintf(stderr, "[MLDIAG] mse after fill\n");
 
     ocean_tensor_handle_t result = scalar_cpu;
     if (strcmp(device, "cpu") != 0) {
@@ -661,20 +677,29 @@ ocean_tensor_handle_t ocean_autograd_mse_loss(
     free(device);
     ocean_tensor_release(difference);
     ocean_tensor_release(squared);
+    fprintf(stderr, "[MLDIAG] mse after cleanup temporaries\n");
 
+    fprintf(stderr, "[MLDIAG] mse before autograd_find\n");
     ocean_autograd_meta *prediction_meta = ocean_autograd_find(prediction);
     ocean_autograd_meta *target_meta = ocean_autograd_find(target);
+    fprintf(stderr, "[MLDIAG] mse after autograd_find pred=%p target=%p\n", (void*)prediction_meta, (void*)target_meta);
     bool prediction_grad =
         prediction_meta && prediction_meta->requires_grad;
     bool target_grad = target_meta && target_meta->requires_grad;
 
     if (!prediction_grad && !target_grad) return result;
 
+    fprintf(stderr, "[MLDIAG] mse before node_new\n");
     ocean_autograd_node *node = ocean_autograd_node_new(OCEAN_AUTOGRAD_MSE);
+    fprintf(stderr, "[MLDIAG] mse after node_new\n");
     node->left = prediction_grad ? prediction_meta : NULL;
     node->right = target_grad ? target_meta : NULL;
+    fprintf(stderr, "[MLDIAG] mse before copy prediction\n");
     node->saved_left = ocean_tensor_copy(prediction);
+    fprintf(stderr, "[MLDIAG] mse after copy prediction\n");
+    fprintf(stderr, "[MLDIAG] mse before copy target\n");
     node->saved_right = ocean_tensor_copy(target);
+    fprintf(stderr, "[MLDIAG] mse after copy target\n");
     ocean_autograd_attach(result, node);
     return result;
 }
@@ -991,7 +1016,10 @@ ocean_tensor_handle_t ocean_autograd_parameter_uniform(
         ocean_tensor_fail("Parameter dimensions must be non-negative");
     }
 
+    fprintf(stderr, "[MLDIAG] parameter_uniform rows=%d cols=%d\n", rows, cols);
     ocean_tensor_handle_t cpu = ocean_tensor_zeros(rows, cols, "cpu");
+    fprintf(stderr, "[MLDIAG] parameter_uniform zeros ndim=%d shape0=%d shape1=%d\n",
+        ocean_tensor_ndim(cpu), ocean_tensor_shape(cpu, 0), ocean_tensor_shape(cpu, 1));
     static uint32_t state = 0x9e3779b9u;
 
     for (int row = 0; row < rows; ++row) {

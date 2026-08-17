@@ -21,6 +21,7 @@ class Parameter:
         return parameter
 
     def tensor(self) -> Tensor[float32]:
+        self.data.requires_grad_(True)
         return self.data
 
     def grad(self) -> Tensor[float32]:

@@ -452,8 +452,8 @@ class ExpressionsMixin:
             logger.debug(f"Found literal: {value} (type: {data_type})")
             if data_type == "str":
                 return self._c_string_literal(value)
-            if data_type == "bool" or value in {True, False, "True", "False"}:
-                return "true" if value in {True, "True"} else "false"
+            if data_type == "bool" or isinstance(value, bool) or value in {"True", "False"}:
+                return "true" if value is True or value == "True" else "false"
             if value is None or value == "None":
                 return "NULL"
             return str(value)
