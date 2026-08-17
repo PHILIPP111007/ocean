@@ -207,6 +207,7 @@ static ocean_tensor_handle_t ocean_autograd_sum_to_meta(
 
     size_t source_ndim = 0;
     size_t *source_shape = ocean_autograd_shape_copy(source, &source_ndim);
+
     if (target->ndim > source_ndim) {
         free(source_shape);
         ocean_tensor_fail("autograd cannot reduce gradient to a higher rank");
@@ -219,21 +220,33 @@ static ocean_tensor_handle_t ocean_autograd_sum_to_meta(
     ocean_tensor_handle_t source_cpu = source_is_cpu
         ? source
         : ocean_tensor_to(source, "cpu");
-    ocean_tensor_handle_t target_cpu = ocean_tensor_zeros_nd(
-        target->shape,
-        target->ndim,
-        "float32",
-        "cpu"
-    );
 
-    size_t *coordinates = (size_t *)calloc(source_ndim, sizeof(size_t));
-    size_t *target_indices = (size_t *)calloc(target->ndim, sizeof(size_t));
-    if (!coordinates || !target_indices) {
+    size_t target_size = 1;
+    for (size_t axis = 0; axis < target->ndim; ++axis) {
+        if (
+            target->shape[axis] != 0
+            && target_size > SIZE_MAX / target->shape[axis]
+        ) {
+            free(source_shape);
+            if (source_cpu != source) ocean_tensor_release(source_cpu);
+            ocean_tensor_fail("autograd reduction target shape is too large");
+        }
+        target_size *= target->shape[axis];
+    }
+
+    float *target_data = target_size
+        ? (float *)calloc(target_size, sizeof(float))
+        : NULL;
+
+    size_t *coordinates = source_ndim
+        ? (size_t *)calloc(source_ndim, sizeof(size_t))
+        : NULL;
+
+    if ((target_size && !target_data) || (source_ndim && !coordinates)) {
         free(source_shape);
+        free(target_data);
         free(coordinates);
-        free(target_indices);
         if (source_cpu != source) ocean_tensor_release(source_cpu);
-        ocean_tensor_release(target_cpu);
         ocean_tensor_fail("out of memory reducing broadcast gradient");
     }
 
@@ -242,41 +255,84 @@ static ocean_tensor_handle_t ocean_autograd_sum_to_meta(
 
     for (size_t linear = 0; linear < source_size; ++linear) {
         size_t remaining = linear;
+
         for (size_t axis = source_ndim; axis-- > 0;) {
             size_t dim = source_shape[axis];
             coordinates[axis] = dim ? remaining % dim : 0;
             remaining = dim ? remaining / dim : 0;
         }
 
+        size_t target_linear = 0;
+
         for (size_t axis = 0; axis < target->ndim; ++axis) {
             size_t coordinate = coordinates[leading + axis];
-            target_indices[axis] = target->shape[axis] == 1 ? 0 : coordinate;
+
+            if (target->shape[axis] == 1) {
+                coordinate = 0;
+            } else if (coordinate >= target->shape[axis]) {
+                free(source_shape);
+                free(target_data);
+                free(coordinates);
+                if (source_cpu != source) ocean_tensor_release(source_cpu);
+                ocean_tensor_fail(
+                    "autograd broadcast reduction shape mismatch"
+                );
+            }
+
+            target_linear =
+                target_linear * target->shape[axis] + coordinate;
         }
 
-        float previous = ocean_tensor_get_nd_f32(
-            target_cpu,
-            target_indices,
-            target->ndim
-        );
-        float value = ocean_tensor_get_flat_f32(source_cpu, linear);
-        ocean_tensor_set_nd_f32(
-            target_cpu,
-            target_indices,
-            target->ndim,
-            previous + value
-        );
+        target_data[target_linear] +=
+            ocean_tensor_get_flat_f32(source_cpu, linear);
     }
 
+    size_t *target_strides = target->ndim
+        ? (size_t *)malloc(target->ndim * sizeof(size_t))
+        : NULL;
+
+    if (target->ndim && !target_strides) {
+        free(source_shape);
+        free(target_data);
+        free(coordinates);
+        if (source_cpu != source) ocean_tensor_release(source_cpu);
+        ocean_tensor_fail("out of memory creating reduction strides");
+    }
+
+    if (target->ndim) {
+        target_strides[target->ndim - 1] = 1;
+
+        for (size_t axis = target->ndim - 1; axis > 0; --axis) {
+            target_strides[axis - 1] =
+                target_strides[axis] * target->shape[axis];
+        }
+    }
+
+    ocean_tensor_handle_t target_cpu = ocean_tensor_from_cpu_strided(
+        target_data,
+        target->shape,
+        target_strides,
+        target->ndim,
+        "float32",
+        "cpu"
+    );
+
     free(source_shape);
+    free(target_data);
+    free(target_strides);
     free(coordinates);
-    free(target_indices);
-    if (source_cpu != source) ocean_tensor_release(source_cpu);
+
+    if (source_cpu != source) {
+        ocean_tensor_release(source_cpu);
+    }
 
     if (strcmp(target->device, "cpu") == 0) {
         return target_cpu;
     }
 
-    ocean_tensor_handle_t result = ocean_tensor_to(target_cpu, target->device);
+    ocean_tensor_handle_t result =
+        ocean_tensor_to(target_cpu, target->device);
+
     ocean_tensor_release(target_cpu);
     return result;
 }

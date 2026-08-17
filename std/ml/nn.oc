@@ -79,8 +79,7 @@ class Linear(Module):
         self.training: bool = True
         self.in_features: int = in_features
         self.out_features: int = out_features
-        var weight_handle: ocean_tensor_handle_t = ocean_autograd_parameter_uniform(out_features, in_features, 0.1, "cpu")
-        var weight_tensor: Tensor[float32] = Tensor(weight_handle)
+        var weight_tensor: Tensor[float32] = Tensor(ocean_autograd_parameter_uniform(out_features, in_features, 0.1, "cpu"))
         var weight_parameter: Parameter = Parameter(weight_tensor)
         self.weight: Parameter = weight_parameter
 
