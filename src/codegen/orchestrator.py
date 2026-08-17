@@ -138,6 +138,12 @@ class OrchestratorMixin:
         for index, line in enumerate(lines):
             stripped = line.strip()
 
+            # Forward declarations are emitted at C top level. A standalone
+            # call such as ocean_func(); is indented inside a function and
+            # must never be mistaken for a prototype.
+            if line != line.lstrip():
+                continue
+
             if (
                 not stripped.endswith(";")
                 or "(" not in stripped
