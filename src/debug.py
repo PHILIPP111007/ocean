@@ -3533,6 +3533,10 @@ class Validator:
 
             # Для арифметических операций
             if operator in ["+", "-", "*", "/", "//", "%", "**"]:
+                # String concatenation is the only arithmetic-style
+                # operation currently supported for strings.
+                if operator == "+" and left_type == "str" and right_type == "str":
+                    return "str"
                 if left_type == "float" or right_type == "float":
                     return "float"
                 elif left_type == "int" and right_type == "int":
@@ -3940,6 +3944,11 @@ class Validator:
         ]
 
         if operator in arithmetic_ops:
+            # ``+`` also implements string concatenation, but mixed
+            # string/numeric arithmetic remains a type error.
+            if operator == "+" and type1 == "str" and type2 == "str":
+                return True
+
             # Все встроенные целочисленные и floating-point типы могут
             # участвовать в арифметике.
             numeric_types = [

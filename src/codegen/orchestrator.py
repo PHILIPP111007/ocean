@@ -114,7 +114,47 @@ class OrchestratorMixin:
                 self.generate_function_scope(scope)
 
         c_code = "\n".join(self.output)
-        return self.apply_ocean_namespace(c_code, scopes)
+        c_code = self.apply_ocean_namespace(c_code, scopes)
+        return self._prune_redundant_function_prototypes(c_code)
+
+    def _prune_redundant_function_prototypes(self, c_code: str) -> str:
+        # Remove only top-level prototypes that are unnecessary in C.
+        for function_name in sorted(self.phils_function_names or set()):
+            if not function_name or function_name == "main":
+                continue
+
+            c_name = f"ocean_{function_name}"
+
+            prototype_pattern = re.compile(
+                rf"^[ \\t]*[A-Za-z_][A-Za-z0-9_ \\t\\*]*\\b"
+                rf"{re.escape(c_name)}\\s*\\([^{{}};]*\\)\\s*;[ \\t]*\\n?",
+                re.MULTILINE,
+            )
+            definition_pattern = re.compile(
+                rf"^[ \\t]*[A-Za-z_][A-Za-z0-9_ \\t\\*]*\\b"
+                rf"{re.escape(c_name)}\\s*\\([^;{{}}]*\\)\\s*\\{{",
+                re.MULTILINE,
+            )
+
+            prototype = prototype_pattern.search(c_code)
+            definition = definition_pattern.search(c_code)
+
+            if prototype is None or definition is None:
+                continue
+            if prototype.start() >= definition.start():
+                continue
+
+            prefix = (
+                c_code[: prototype.start()]
+                + c_code[prototype.end() : definition.start()]
+            )
+
+            if re.search(rf"\\b{re.escape(c_name)}\\s*\\(", prefix):
+                continue
+
+            c_code = c_code[: prototype.start()] + c_code[prototype.end() :]
+
+        return c_code
 
     def generate_temporary_var(self, var_type: str = "int") -> str:
         """Генерирует имя временной переменной"""
