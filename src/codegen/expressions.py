@@ -413,7 +413,31 @@ class ExpressionsMixin:
         target_type: str = "",
         target_name: str = "field",
     ) -> str:
-        """Генерирует выражение из AST для конструктора с подстановкой параметров"""
+        """Генерирует выражение из AST для конструктора с подстановкой параметров."""
+
+        if ast is None:
+            return "NULL"
+
+        # Typed IR wraps expression mappings in TypedExpression-like objects.
+        # Constructor lowering historically expected only raw dictionaries,
+        # which allowed repr(TypedExpression(...)) to leak directly into C.
+        # Normalize wrappers here so every constructor expression path shares
+        # one representation.
+        if not isinstance(ast, Mapping):
+            raw = getattr(ast, "raw", None)
+            fields = getattr(ast, "fields", None)
+
+            if isinstance(raw, Mapping):
+                ast = raw
+            elif isinstance(fields, Mapping):
+                ast = fields
+            else:
+                if isinstance(ast, bool):
+                    return "true" if ast else "false"
+                if str(ast) == "None":
+                    return "NULL"
+                return str(ast)
+
         if not ast:
             return ""
 
@@ -459,9 +483,10 @@ class ExpressionsMixin:
             if function_name.startswith("@"):
                 function_name = function_name[1:]
             arguments = [
-                self._generate_expression_from_ast_for_init(argument, param_names)
-                if isinstance(argument, dict)
-                else ("NULL" if str(argument) == "None" else str(argument))
+                self._generate_expression_from_ast_for_init(
+                    argument,
+                    param_names,
+                )
                 for argument in ast.get("arguments", [])
             ]
             return f"{function_name}({', '.join(arguments)})"
@@ -471,9 +496,10 @@ class ExpressionsMixin:
             if function_name.startswith("@"):
                 function_name = function_name[1:]
             arguments = [
-                self._generate_expression_from_ast_for_init(argument, param_names)
-                if isinstance(argument, dict)
-                else ("NULL" if str(argument) == "None" else str(argument))
+                self._generate_expression_from_ast_for_init(
+                    argument,
+                    param_names,
+                )
                 for argument in ast.get("arguments", [])
             ]
             return f"{function_name}({', '.join(arguments)})"
