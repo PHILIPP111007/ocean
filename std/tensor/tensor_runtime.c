@@ -2077,6 +2077,127 @@ void ocean_tensor_set_nd(
     ocean_tensor_release(cpu);
 }
 
+
+/*
+ * Typed scalar accessors required by tensor_runtime.h and autograd_runtime.c.
+ */
+#define OCEAN_DEFINE_TYPED_GET_FLAT(name, c_type) \
+c_type ocean_tensor_get_flat_##name( \
+    ocean_tensor_handle_t tensor, size_t index \
+) { \
+    if (!tensor) ocean_tensor_fail("Tensor get received a null Tensor"); \
+    if (index >= tensor->size) { \
+        ocean_tensor_fail("Tensor flat index is out of bounds"); \
+    } \
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU \
+        ? tensor : ocean_tensor_to(tensor, "cpu"); \
+    c_type result = (c_type)ocean_tensor_read_scalar(cpu, index); \
+    if (cpu != tensor) ocean_tensor_release(cpu); \
+    return result; \
+}
+
+OCEAN_DEFINE_TYPED_GET_FLAT(bool, bool)
+OCEAN_DEFINE_TYPED_GET_FLAT(i8, int8_t)
+OCEAN_DEFINE_TYPED_GET_FLAT(i16, int16_t)
+OCEAN_DEFINE_TYPED_GET_FLAT(i32, int32_t)
+OCEAN_DEFINE_TYPED_GET_FLAT(i64, int64_t)
+OCEAN_DEFINE_TYPED_GET_FLAT(u8, uint8_t)
+OCEAN_DEFINE_TYPED_GET_FLAT(u16, uint16_t)
+OCEAN_DEFINE_TYPED_GET_FLAT(u32, uint32_t)
+OCEAN_DEFINE_TYPED_GET_FLAT(u64, uint64_t)
+OCEAN_DEFINE_TYPED_GET_FLAT(f16, float)
+OCEAN_DEFINE_TYPED_GET_FLAT(f32, float)
+OCEAN_DEFINE_TYPED_GET_FLAT(f64, double)
+
+#undef OCEAN_DEFINE_TYPED_GET_FLAT
+
+#define OCEAN_DEFINE_TYPED_GET_ND(name, c_type) \
+c_type ocean_tensor_get_nd_##name( \
+    ocean_tensor_handle_t tensor, \
+    const size_t *indices, \
+    size_t ndim \
+) { \
+    if (!tensor) ocean_tensor_fail("Tensor get received a null Tensor"); \
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU \
+        ? tensor : ocean_tensor_to(tensor, "cpu"); \
+    size_t offset = ocean_tensor_index_offset(cpu, indices, ndim); \
+    c_type result = (c_type)ocean_tensor_read_scalar(cpu, offset); \
+    if (cpu != tensor) ocean_tensor_release(cpu); \
+    return result; \
+}
+
+OCEAN_DEFINE_TYPED_GET_ND(bool, bool)
+OCEAN_DEFINE_TYPED_GET_ND(i8, int8_t)
+OCEAN_DEFINE_TYPED_GET_ND(i16, int16_t)
+OCEAN_DEFINE_TYPED_GET_ND(i32, int32_t)
+OCEAN_DEFINE_TYPED_GET_ND(i64, int64_t)
+OCEAN_DEFINE_TYPED_GET_ND(u8, uint8_t)
+OCEAN_DEFINE_TYPED_GET_ND(u16, uint16_t)
+OCEAN_DEFINE_TYPED_GET_ND(u32, uint32_t)
+OCEAN_DEFINE_TYPED_GET_ND(u64, uint64_t)
+OCEAN_DEFINE_TYPED_GET_ND(f16, float)
+OCEAN_DEFINE_TYPED_GET_ND(f32, float)
+OCEAN_DEFINE_TYPED_GET_ND(f64, double)
+
+#undef OCEAN_DEFINE_TYPED_GET_ND
+
+static void ocean_tensor_set_nd_long_double(
+    ocean_tensor_handle_t tensor,
+    const size_t *indices,
+    size_t ndim,
+    long double value
+) {
+    if (!tensor) ocean_tensor_fail("Tensor set received a null Tensor");
+
+    if (tensor->device == OCEAN_TENSOR_CPU) {
+        size_t offset = ocean_tensor_index_offset(tensor, indices, ndim);
+        ocean_tensor_write_scalar(tensor, offset, value);
+        return;
+    }
+
+    ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
+    size_t offset = ocean_tensor_index_offset(cpu, indices, ndim);
+    ocean_tensor_write_scalar(cpu, offset, value);
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    ocean_tensor_gpu_write(tensor, cpu->cpu_data);
+#else
+    ocean_tensor_release(cpu);
+    ocean_tensor_fail(
+        "GPU backend is unavailable: rebuild with OpenCL support"
+    );
+#endif
+
+    ocean_tensor_release(cpu);
+}
+
+#define OCEAN_DEFINE_TYPED_SET_ND(name, c_type) \
+void ocean_tensor_set_nd_##name( \
+    ocean_tensor_handle_t tensor, \
+    const size_t *indices, \
+    size_t ndim, \
+    c_type value \
+) { \
+    ocean_tensor_set_nd_long_double( \
+        tensor, indices, ndim, (long double)value \
+    ); \
+}
+
+OCEAN_DEFINE_TYPED_SET_ND(bool, bool)
+OCEAN_DEFINE_TYPED_SET_ND(i8, int8_t)
+OCEAN_DEFINE_TYPED_SET_ND(i16, int16_t)
+OCEAN_DEFINE_TYPED_SET_ND(i32, int32_t)
+OCEAN_DEFINE_TYPED_SET_ND(i64, int64_t)
+OCEAN_DEFINE_TYPED_SET_ND(u8, uint8_t)
+OCEAN_DEFINE_TYPED_SET_ND(u16, uint16_t)
+OCEAN_DEFINE_TYPED_SET_ND(u32, uint32_t)
+OCEAN_DEFINE_TYPED_SET_ND(u64, uint64_t)
+OCEAN_DEFINE_TYPED_SET_ND(f16, float)
+OCEAN_DEFINE_TYPED_SET_ND(f32, float)
+OCEAN_DEFINE_TYPED_SET_ND(f64, double)
+
+#undef OCEAN_DEFINE_TYPED_SET_ND
+
 double ocean_tensor_get_2d(ocean_tensor_handle_t tensor, int row, int col) {
     if (row < 0 || col < 0) ocean_tensor_fail("Tensor get index is out of bounds");
     size_t indices[2] = {(size_t)row, (size_t)col};

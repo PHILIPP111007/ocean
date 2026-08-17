@@ -56,7 +56,7 @@ class ImportProcessor:
         # CWD is commonly the repository root for the CLI. Check it first, but
         # also walk the source/base ancestors so compilation remains robust
         # when invoked from another working directory.
-        for value in (os.getcwd(), current_file_path, self.base_path):
+        for value in (current_file_path, self.base_path, os.getcwd()):
             if not value:
                 continue
 

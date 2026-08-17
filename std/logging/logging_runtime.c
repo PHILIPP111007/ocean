@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 static atomic_int ocean_logging_global_level = ATOMIC_VAR_INIT(OCEAN_LOG_INFO);
 static atomic_bool ocean_logging_timestamps = ATOMIC_VAR_INIT(true);
@@ -224,7 +225,9 @@ void ocean_logging_write(
     const bool terminal_stream =
         stream == stdout || stream == stderr;
     const bool use_color =
-        terminal_stream && ocean_logging_get_colors();
+        terminal_stream
+        && ocean_logging_get_colors()
+        && isatty(fileno(stream));
 
     if (use_color) {
         fputs(ocean_logging_level_color(level), stream);

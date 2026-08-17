@@ -315,11 +315,18 @@ class CallsMixin:
         arg_strings = []
         for arg in args:
             if isinstance(arg, Mapping):
-                # Если аргумент - AST, генерируем выражение
-                arg_strings.append(self.generate_expression(arg))
+                arg_type = arg.get("type", "")
+                arg_value = arg.get("value", arg.get("name", ""))
+
+                if (
+                    arg_type in {"variable", "literal"}
+                    and str(arg_value) == "NULL"
+                ):
+                    arg_strings.append("NULL")
+                else:
+                    arg_strings.append(self.generate_expression(arg))
             else:
-                # Если это простая строка
-                arg_strings.append(str(arg))
+                arg_strings.append("NULL" if str(arg) == "NULL" else str(arg))
 
         args_str = ", ".join(arg_strings)
 
@@ -345,13 +352,15 @@ class CallsMixin:
             "uint8_t", "uint16_t", "uint32_t",
         }:
             return "%u", f"(unsigned int)({expression})"
+        if py_type == "int":
+            return "%d", expression
         if py_type in {
-            "int", "int8", "int16", "int32",
+            "int8", "int16", "int32",
             "int8_t", "int16_t", "int32_t",
         }:
             return "%d", f"(int)({expression})"
         if py_type in {"float", "float16", "float32", "float64", "double"}:
-            return "%f", f"(double)({expression})"
+            return "%f", expression
 
         return None, expression
 
