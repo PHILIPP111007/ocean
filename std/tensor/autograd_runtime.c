@@ -15,6 +15,10 @@ enum {
     OCEAN_AUTOGRAD_TRANSPOSE = 12,
     OCEAN_AUTOGRAD_RELU = 13,
     OCEAN_AUTOGRAD_MSE = 14,
+    OCEAN_AUTOGRAD_RESHAPE = 15,
+    OCEAN_AUTOGRAD_TRANSPOSE_DIMS = 16,
+    OCEAN_AUTOGRAD_SUM_DIM = 17,
+    OCEAN_AUTOGRAD_MEAN_DIM = 18,
 };
 
 typedef struct ocean_autograd_meta ocean_autograd_meta;
@@ -27,6 +31,9 @@ typedef struct ocean_autograd_node {
     ocean_tensor_handle_t saved_right;
     double scalar;
     int scalar_operation;
+    int dim0;
+    int dim1;
+    bool keepdim;
 } ocean_autograd_node;
 
 struct ocean_autograd_meta {
@@ -527,10 +534,8 @@ ocean_tensor_handle_t ocean_autograd_binary(
     ocean_tensor_handle_t right,
     int operation
 ) {
-    fprintf(stderr, "[MLDIAG] binary op=%d L ndim=%d R ndim=%d\n",
-        operation, ocean_tensor_ndim(left), ocean_tensor_ndim(right));
+
     ocean_tensor_handle_t result = ocean_tensor_binary(left, right, operation);
-    fprintf(stderr, "[MLDIAG] binary result ndim=%d\n", ocean_tensor_ndim(result));
 
     ocean_autograd_meta *left_meta = ocean_autograd_find(left);
     ocean_autograd_meta *right_meta = ocean_autograd_find(right);
@@ -550,9 +555,9 @@ ocean_tensor_handle_t ocean_autograd_binary(
         node->saved_right = ocean_tensor_copy(right);
     }
 
-    fprintf(stderr, "[MLDIAG] mse before attach\n");
+
     ocean_autograd_attach(result, node);
-    fprintf(stderr, "[MLDIAG] mse after attach\n");
+
     return result;
 }
 
@@ -578,23 +583,15 @@ ocean_tensor_handle_t ocean_autograd_matmul(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right
 ) {
-    fprintf(stderr, "[MLDIAG] matmul enter L(ndim=%d,%d,%d) R(ndim=%d,%d,%d)\n",
-        ocean_tensor_ndim(left), ocean_tensor_shape(left, 0), ocean_tensor_shape(left, 1),
-        ocean_tensor_ndim(right), ocean_tensor_shape(right, 0), ocean_tensor_shape(right, 1));
+
     ocean_tensor_handle_t result = ocean_tensor_matmul(left, right);
-    fprintf(stderr, "[MLDIAG] matmul result ndim=%d shape0=%d shape1=%d\n",
-        ocean_tensor_ndim(result), ocean_tensor_shape(result, 0), ocean_tensor_shape(result, 1));
+
     ocean_autograd_meta *left_meta = ocean_autograd_find(left);
     ocean_autograd_meta *right_meta = ocean_autograd_find(right);
     bool left_grad = left_meta && left_meta->requires_grad;
     bool right_grad = right_meta && right_meta->requires_grad;
 
     if (!left_grad && !right_grad) return result;
-
-    if (ocean_tensor_ndim(left) != 2 || ocean_tensor_ndim(right) != 2) {
-        ocean_tensor_release(result);
-        ocean_tensor_fail("ML v0.1 autograd matmul supports 2D Tensors only");
-    }
 
     ocean_autograd_node *node = ocean_autograd_node_new(OCEAN_AUTOGRAD_MATMUL);
     node->left = left_grad ? left_meta : NULL;
@@ -605,20 +602,7 @@ ocean_tensor_handle_t ocean_autograd_matmul(
     return result;
 }
 
-ocean_tensor_handle_t ocean_autograd_transpose(
-    ocean_tensor_handle_t tensor
-) {
-    ocean_tensor_handle_t result = ocean_tensor_transpose(tensor);
-    ocean_autograd_meta *parent = ocean_autograd_find(tensor);
-
-    if (!parent || !parent->requires_grad) return result;
-
-    ocean_autograd_node *node =
-        ocean_autograd_node_new(OCEAN_AUTOGRAD_TRANSPOSE);
-    node->left = parent;
-    ocean_autograd_attach(result, node);
-    return result;
-}
+ocean_tensor_handle_t ocean_autograd_transpose(ocean_tensor_handle_t tensor) { return ocean_autograd_transpose_dims(tensor,0,1); }
 
 ocean_tensor_handle_t ocean_autograd_relu(
     ocean_tensor_handle_t tensor
@@ -639,8 +623,7 @@ ocean_tensor_handle_t ocean_autograd_mse_loss(
     ocean_tensor_handle_t prediction,
     ocean_tensor_handle_t target
 ) {
-    fprintf(stderr, "[MLDIAG] mse enter prediction ndim=%d target ndim=%d\n",
-        ocean_tensor_ndim(prediction), ocean_tensor_ndim(target));
+
     ocean_autograd_require_float32(prediction);
     ocean_autograd_require_float32(target);
 
@@ -661,12 +644,10 @@ ocean_tensor_handle_t ocean_autograd_mse_loss(
     double mean = ocean_tensor_mean(squared);
 
     char *device = ocean_tensor_device(prediction);
-    fprintf(stderr, "[MLDIAG] mse before scalar zeros\n");
+
     ocean_tensor_handle_t scalar_cpu = ocean_tensor_zeros(1, 1, "cpu");
-    fprintf(stderr, "[MLDIAG] mse scalar ndim=%d shape0=%d shape1=%d\n",
-        ocean_tensor_ndim(scalar_cpu), ocean_tensor_shape(scalar_cpu, 0), ocean_tensor_shape(scalar_cpu, 1));
+
     ocean_tensor_fill(scalar_cpu, mean);
-    fprintf(stderr, "[MLDIAG] mse after fill\n");
 
     ocean_tensor_handle_t result = scalar_cpu;
     if (strcmp(device, "cpu") != 0) {
@@ -677,32 +658,81 @@ ocean_tensor_handle_t ocean_autograd_mse_loss(
     free(device);
     ocean_tensor_release(difference);
     ocean_tensor_release(squared);
-    fprintf(stderr, "[MLDIAG] mse after cleanup temporaries\n");
 
-    fprintf(stderr, "[MLDIAG] mse before autograd_find\n");
+
     ocean_autograd_meta *prediction_meta = ocean_autograd_find(prediction);
     ocean_autograd_meta *target_meta = ocean_autograd_find(target);
-    fprintf(stderr, "[MLDIAG] mse after autograd_find pred=%p target=%p\n", (void*)prediction_meta, (void*)target_meta);
+
     bool prediction_grad =
         prediction_meta && prediction_meta->requires_grad;
     bool target_grad = target_meta && target_meta->requires_grad;
 
     if (!prediction_grad && !target_grad) return result;
 
-    fprintf(stderr, "[MLDIAG] mse before node_new\n");
+
     ocean_autograd_node *node = ocean_autograd_node_new(OCEAN_AUTOGRAD_MSE);
-    fprintf(stderr, "[MLDIAG] mse after node_new\n");
+
     node->left = prediction_grad ? prediction_meta : NULL;
     node->right = target_grad ? target_meta : NULL;
-    fprintf(stderr, "[MLDIAG] mse before copy prediction\n");
+
     node->saved_left = ocean_tensor_copy(prediction);
-    fprintf(stderr, "[MLDIAG] mse after copy prediction\n");
-    fprintf(stderr, "[MLDIAG] mse before copy target\n");
+
+
     node->saved_right = ocean_tensor_copy(target);
-    fprintf(stderr, "[MLDIAG] mse after copy target\n");
+
     ocean_autograd_attach(result, node);
     return result;
 }
+
+
+/* ================= ND autograd v0.2 ================= */
+static int ocean_autograd_normalize_dim_v02(const ocean_autograd_meta *meta, int dim) {
+    long long rank=(long long)meta->ndim, d=(long long)dim; if (d<0) d+=rank;
+    if (d < 0 || d >= rank) {
+        ocean_tensor_fail("autograd dimension is out of bounds");
+    }
+    return (int)d;
+}
+
+static ocean_tensor_handle_t ocean_autograd_expand_reduction_v02(ocean_tensor_handle_t upstream, const ocean_autograd_meta *target, int dim, bool keepdim, double scale) {
+    size_t axis=(size_t)ocean_autograd_normalize_dim_v02(target,dim);
+    char *device=ocean_tensor_device(upstream);
+    ocean_tensor_handle_t uc=strcmp(device,"cpu")==0?upstream:ocean_tensor_to(upstream,"cpu");
+    size_t n=1; for(size_t i=0;i<target->ndim;++i)n*=target->shape[i];
+    float *data=n?malloc(n*sizeof(float)):NULL; size_t *coord=calloc(target->ndim,sizeof(size_t));
+    if ((n&&!data)||!coord) ocean_tensor_fail("out of memory expanding reduction gradient");
+    for(size_t linear=0;linear<n;++linear){
+        size_t rem=linear; for(size_t i=target->ndim;i-- >0;){size_t d=target->shape[i];coord[i]=d?rem%d:0;rem=d?rem/d:0;}
+        size_t ul=0;
+        if(keepdim){for(size_t i=0;i<target->ndim;++i){size_t d=(size_t)ocean_tensor_shape(uc,(int)i);ul=ul*d+(i==axis?0:coord[i]);}}
+        else if(target->ndim>1){size_t j=0;for(size_t i=0;i<target->ndim;++i)if(i!=axis){size_t d=(size_t)ocean_tensor_shape(uc,(int)j++);ul=ul*d+coord[i];}}
+        data[linear]=ocean_tensor_get_flat_f32(uc,ul)*(float)scale;
+    }
+    size_t *strides=malloc(target->ndim*sizeof(size_t)); if(!strides)ocean_tensor_fail("out of memory creating reduction gradient strides");
+    strides[target->ndim-1]=1; for(size_t i=target->ndim-1;i>0;--i)strides[i-1]=strides[i]*target->shape[i];
+    ocean_tensor_handle_t cpu=ocean_tensor_from_cpu_strided(data,target->shape,strides,target->ndim,"float32","cpu");
+    free(data);free(coord);free(strides);if(uc!=upstream)ocean_tensor_release(uc);
+    if(strcmp(device,"cpu")==0){free(device);return cpu;} ocean_tensor_handle_t out=ocean_tensor_to(cpu,device);ocean_tensor_release(cpu);free(device);return out;
+}
+
+ocean_tensor_handle_t ocean_autograd_reshape_3d(ocean_tensor_handle_t tensor,int d0,int d1,int d2){
+    ocean_tensor_handle_t out=ocean_tensor_reshape_3d(tensor,d0,d1,d2); ocean_autograd_meta *p=ocean_autograd_find(tensor); if(!p||!p->requires_grad)return out;
+    ocean_autograd_node *n=ocean_autograd_node_new(OCEAN_AUTOGRAD_RESHAPE);n->left=p;ocean_autograd_attach(out,n);return out;
+}
+ocean_tensor_handle_t ocean_autograd_reshape_4d(ocean_tensor_handle_t tensor,int d0,int d1,int d2,int d3){
+    ocean_tensor_handle_t out=ocean_tensor_reshape_4d(tensor,d0,d1,d2,d3); ocean_autograd_meta *p=ocean_autograd_find(tensor); if(!p||!p->requires_grad)return out;
+    ocean_autograd_node *n=ocean_autograd_node_new(OCEAN_AUTOGRAD_RESHAPE);n->left=p;ocean_autograd_attach(out,n);return out;
+}
+ocean_tensor_handle_t ocean_autograd_transpose_dims(ocean_tensor_handle_t tensor,int dim0,int dim1){
+    ocean_tensor_handle_t out=ocean_tensor_transpose_dims(tensor,dim0,dim1); ocean_autograd_meta *p=ocean_autograd_find(tensor); if(!p||!p->requires_grad)return out;
+    ocean_autograd_node *n=ocean_autograd_node_new(OCEAN_AUTOGRAD_TRANSPOSE_DIMS);n->left=p;n->dim0=dim0;n->dim1=dim1;ocean_autograd_attach(out,n);return out;
+}
+static ocean_tensor_handle_t ocean_autograd_reduce_dim_v02(ocean_tensor_handle_t tensor,int dim,bool keepdim,bool mean){
+    ocean_tensor_handle_t out=mean?ocean_tensor_mean_dim(tensor,dim,keepdim):ocean_tensor_sum_dim(tensor,dim,keepdim); ocean_autograd_meta *p=ocean_autograd_find(tensor); if(!p||!p->requires_grad)return out;
+    ocean_autograd_node *n=ocean_autograd_node_new(mean?OCEAN_AUTOGRAD_MEAN_DIM:OCEAN_AUTOGRAD_SUM_DIM);n->left=p;n->dim0=dim;n->keepdim=keepdim;ocean_autograd_attach(out,n);return out;
+}
+ocean_tensor_handle_t ocean_autograd_sum_dim(ocean_tensor_handle_t tensor,int dim,bool keepdim){return ocean_autograd_reduce_dim_v02(tensor,dim,keepdim,false);}
+ocean_tensor_handle_t ocean_autograd_mean_dim(ocean_tensor_handle_t tensor,int dim,bool keepdim){return ocean_autograd_reduce_dim_v02(tensor,dim,keepdim,true);}
 
 typedef struct ocean_autograd_topology {
     ocean_autograd_meta **items;
@@ -896,32 +926,16 @@ static void ocean_autograd_backward_node(ocean_autograd_meta *meta) {
         }
 
         case OCEAN_AUTOGRAD_MATMUL: {
-            if (node->left) {
-                ocean_tensor_handle_t right_t =
-                    ocean_tensor_transpose(node->saved_right);
-                ocean_tensor_handle_t contribution =
-                    ocean_tensor_matmul(upstream, right_t);
-                ocean_tensor_release(right_t);
-                ocean_autograd_accumulate(node->left, contribution);
-            }
-            if (node->right) {
-                ocean_tensor_handle_t left_t =
-                    ocean_tensor_transpose(node->saved_left);
-                ocean_tensor_handle_t contribution =
-                    ocean_tensor_matmul(left_t, upstream);
-                ocean_tensor_release(left_t);
-                ocean_autograd_accumulate(node->right, contribution);
-            }
+            if (node->left) { ocean_tensor_handle_t rt=ocean_tensor_transpose_dims(node->saved_right,-2,-1); ocean_tensor_handle_t raw=ocean_tensor_matmul(upstream,rt); ocean_tensor_handle_t red=ocean_autograd_sum_to_meta(raw,node->left); ocean_tensor_release(rt); ocean_tensor_release(raw); ocean_autograd_accumulate(node->left,red); }
+            if (node->right) { ocean_tensor_handle_t lt=ocean_tensor_transpose_dims(node->saved_left,-2,-1); ocean_tensor_handle_t raw=ocean_tensor_matmul(lt,upstream); ocean_tensor_handle_t red=ocean_autograd_sum_to_meta(raw,node->right); ocean_tensor_release(lt); ocean_tensor_release(raw); ocean_autograd_accumulate(node->right,red); }
             break;
         }
 
-        case OCEAN_AUTOGRAD_TRANSPOSE: {
-            ocean_autograd_accumulate(
-                node->left,
-                ocean_tensor_transpose(upstream)
-            );
-            break;
-        }
+        case OCEAN_AUTOGRAD_TRANSPOSE: { if(node->left)ocean_autograd_accumulate(node->left,ocean_tensor_transpose_dims(upstream,0,1)); break; }
+        case OCEAN_AUTOGRAD_TRANSPOSE_DIMS: { if(node->left)ocean_autograd_accumulate(node->left,ocean_tensor_transpose_dims(upstream,node->dim0,node->dim1)); break; }
+        case OCEAN_AUTOGRAD_RESHAPE: { if(node->left){ocean_tensor_handle_t r=ocean_tensor_reshape(upstream,node->left->shape,node->left->ndim);ocean_autograd_accumulate(node->left,r);} break; }
+        case OCEAN_AUTOGRAD_SUM_DIM:
+        case OCEAN_AUTOGRAD_MEAN_DIM: { if(node->left){int ax=ocean_autograd_normalize_dim_v02(node->left,node->dim0);double sc=node->operation==OCEAN_AUTOGRAD_MEAN_DIM?1.0/(double)node->left->shape[(size_t)ax]:1.0;ocean_tensor_handle_t g=ocean_autograd_expand_reduction_v02(upstream,node->left,node->dim0,node->keepdim,sc);ocean_autograd_accumulate(node->left,g);} break; }
 
         case OCEAN_AUTOGRAD_RELU: {
             ocean_autograd_accumulate(
@@ -1016,10 +1030,9 @@ ocean_tensor_handle_t ocean_autograd_parameter_uniform(
         ocean_tensor_fail("Parameter dimensions must be non-negative");
     }
 
-    fprintf(stderr, "[MLDIAG] parameter_uniform rows=%d cols=%d\n", rows, cols);
+
     ocean_tensor_handle_t cpu = ocean_tensor_zeros(rows, cols, "cpu");
-    fprintf(stderr, "[MLDIAG] parameter_uniform zeros ndim=%d shape0=%d shape1=%d\n",
-        ocean_tensor_ndim(cpu), ocean_tensor_shape(cpu, 0), ocean_tensor_shape(cpu, 1));
+
     static uint32_t state = 0x9e3779b9u;
 
     for (int row = 0; row < rows; ++row) {

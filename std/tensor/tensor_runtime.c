@@ -1667,29 +1667,8 @@ ocean_tensor_handle_t ocean_tensor_reshape_2d(
 
 ocean_tensor_handle_t ocean_tensor_transpose(ocean_tensor_handle_t tensor) {
     if (!tensor) ocean_tensor_fail("Tensor transpose on null handle");
-    if (tensor->ndim != 2) ocean_tensor_fail("Tensor transpose currently expects 2D Tensor");
-    size_t shape[2] = {tensor->shape[1], tensor->shape[0]};
-    ocean_tensor_handle_t cpu_source = tensor->device == OCEAN_TENSOR_CPU
-        ? ocean_tensor_copy(tensor) : ocean_tensor_to(tensor, "cpu");
-    ocean_tensor_handle_t cpu_result = ocean_tensor_alloc_zeros(
-        shape, 2, tensor->dtype, OCEAN_TENSOR_CPU
-    );
-    for (size_t row = 0; row < tensor->shape[0]; ++row) {
-        for (size_t col = 0; col < tensor->shape[1]; ++col) {
-            size_t source_index = row * cpu_source->strides[0] + col * cpu_source->strides[1];
-            size_t result_index = col * cpu_result->strides[0] + row * cpu_result->strides[1];
-            memcpy(
-                (unsigned char *)cpu_result->cpu_data + result_index * tensor->item_size,
-                (unsigned char *)cpu_source->cpu_data + source_index * tensor->item_size,
-                tensor->item_size
-            );
-        }
-    }
-    ocean_tensor_handle_t result = tensor->device == OCEAN_TENSOR_CPU
-        ? cpu_result : ocean_tensor_to(cpu_result, "gpu");
-    ocean_tensor_release(cpu_source);
-    if (tensor->device != OCEAN_TENSOR_CPU) ocean_tensor_release(cpu_result);
-    return result;
+    if (tensor->ndim != 2) ocean_tensor_fail("Tensor transpose() expects 2D; use transpose_dims() for ND Tensor");
+    return ocean_tensor_transpose_dims(tensor, 0, 1);
 }
 
 static ocean_tensor_handle_t ocean_tensor_restore_device(
@@ -2023,7 +2002,7 @@ static size_t ocean_tensor_index_offset(
     size_t ndim
 ) {
     if (!tensor || !indices || ndim != tensor->ndim) {
-        fprintf(stderr, "[MLDIAG] rank mismatch: tensor_ndim=%zu indices_ndim=%zu\n", tensor->ndim, ndim);
+
         ocean_tensor_fail("Tensor index rank does not match Tensor rank");
     }
     size_t offset = 0;
@@ -2459,24 +2438,164 @@ static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
 #endif
 }
 
-ocean_tensor_handle_t ocean_tensor_matmul(
-    ocean_tensor_handle_t left,
-    ocean_tensor_handle_t right
-) {
+
+/* ================= ND Tensor v0.2 ================= */
+static size_t ocean_tensor_normalize_dim_v02(const ocean_tensor_handle_t tensor, int dim) {
+    if (!tensor || tensor->ndim == 0) ocean_tensor_fail("Tensor dimension operation requires rank >= 1");
+    long long rank = (long long)tensor->ndim;
+    long long d = (long long)dim;
+    if (d < 0) d += rank;
+    if (d < 0 || d >= rank) ocean_tensor_fail("Tensor dimension is out of bounds");
+    return (size_t)d;
+}
+
+ocean_tensor_handle_t ocean_tensor_reshape_3d(ocean_tensor_handle_t tensor, int d0, int d1, int d2) {
+    if (d0 < 0 || d1 < 0 || d2 < 0) ocean_tensor_fail("Tensor reshape dimensions must be non-negative");
+    size_t shape[3] = {(size_t)d0, (size_t)d1, (size_t)d2};
+    return ocean_tensor_reshape(tensor, shape, 3);
+}
+
+ocean_tensor_handle_t ocean_tensor_reshape_4d(ocean_tensor_handle_t tensor, int d0, int d1, int d2, int d3) {
+    if (d0 < 0 || d1 < 0 || d2 < 0 || d3 < 0) ocean_tensor_fail("Tensor reshape dimensions must be non-negative");
+    size_t shape[4] = {(size_t)d0, (size_t)d1, (size_t)d2, (size_t)d3};
+    return ocean_tensor_reshape(tensor, shape, 4);
+}
+
+ocean_tensor_handle_t ocean_tensor_transpose_dims(ocean_tensor_handle_t tensor, int dim0, int dim1) {
+    if (!tensor) ocean_tensor_fail("Tensor transpose_dims on null handle");
+    size_t a = ocean_tensor_normalize_dim_v02(tensor, dim0);
+    size_t b = ocean_tensor_normalize_dim_v02(tensor, dim1);
+    if (a == b) return ocean_tensor_copy(tensor);
+
+    size_t *shape = malloc(tensor->ndim * sizeof(size_t));
+    if (!shape) ocean_tensor_fail("out of memory allocating transpose shape");
+    memcpy(shape, tensor->shape, tensor->ndim * sizeof(size_t));
+    size_t t = shape[a]; shape[a] = shape[b]; shape[b] = t;
+
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU ? tensor : ocean_tensor_to(tensor, "cpu");
+    ocean_tensor_handle_t out = ocean_tensor_alloc_zeros(shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_CPU);
+    free(shape);
+    size_t *coord = malloc(tensor->ndim * sizeof(size_t));
+    if (!coord) ocean_tensor_fail("out of memory transposing Tensor");
+
+    for (size_t linear = 0; linear < out->size; ++linear) {
+        size_t rem = linear;
+        for (size_t axis = out->ndim; axis-- > 0;) {
+            size_t d = out->shape[axis];
+            coord[axis] = d ? rem % d : 0;
+            rem = d ? rem / d : 0;
+        }
+        size_t c = coord[a]; coord[a] = coord[b]; coord[b] = c;
+        size_t src = 0;
+        for (size_t axis = 0; axis < cpu->ndim; ++axis) src += coord[axis] * cpu->strides[axis];
+        ocean_tensor_write_scalar(out, linear, ocean_tensor_read_scalar(cpu, src));
+    }
+    free(coord);
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return ocean_tensor_restore_device(tensor, out);
+}
+
+static ocean_tensor_handle_t ocean_tensor_reduce_dim_v02(ocean_tensor_handle_t tensor, int dim, bool keepdim, bool mean) {
+    if (!tensor) ocean_tensor_fail("Tensor reduction on null handle");
+    size_t axis = ocean_tensor_normalize_dim_v02(tensor, dim);
+    size_t out_ndim = keepdim ? tensor->ndim : (tensor->ndim > 1 ? tensor->ndim - 1 : 1);
+    size_t *shape = malloc(out_ndim * sizeof(size_t));
+    if (!shape) ocean_tensor_fail("out of memory allocating reduction shape");
+    if (keepdim) {
+        for (size_t i=0;i<tensor->ndim;++i) shape[i] = i==axis ? 1 : tensor->shape[i];
+    } else if (tensor->ndim == 1) {
+        shape[0] = 1;
+    } else {
+        size_t j=0; for (size_t i=0;i<tensor->ndim;++i) if (i!=axis) shape[j++] = tensor->shape[i];
+    }
+
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU ? tensor : ocean_tensor_to(tensor, "cpu");
+    ocean_tensor_handle_t out = ocean_tensor_alloc_zeros(shape, out_ndim, tensor->dtype, OCEAN_TENSOR_CPU);
+    free(shape);
+    size_t *coord = calloc(tensor->ndim, sizeof(size_t));
+    if (!coord) ocean_tensor_fail("out of memory reducing Tensor");
+
+    for (size_t linear=0; linear<cpu->size; ++linear) {
+        size_t rem=linear;
+        for (size_t i=cpu->ndim;i-- >0;) { size_t d=cpu->shape[i]; coord[i]=d?rem%d:0; rem=d?rem/d:0; }
+        size_t out_linear=0;
+        if (keepdim) {
+            for (size_t i=0;i<cpu->ndim;++i) out_linear = out_linear*out->shape[i] + (i==axis?0:coord[i]);
+        } else if (cpu->ndim > 1) {
+            size_t j=0; for (size_t i=0;i<cpu->ndim;++i) if (i!=axis) out_linear = out_linear*out->shape[j++] + coord[i];
+        }
+        ocean_tensor_write_scalar(out, out_linear, ocean_tensor_read_scalar(out,out_linear)+ocean_tensor_read_scalar(cpu,linear));
+    }
+    if (mean && tensor->shape[axis]) {
+        long double div=(long double)tensor->shape[axis];
+        for (size_t i=0;i<out->size;++i) ocean_tensor_write_scalar(out,i,ocean_tensor_read_scalar(out,i)/div);
+    }
+    free(coord);
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return ocean_tensor_restore_device(tensor, out);
+}
+
+ocean_tensor_handle_t ocean_tensor_sum_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim) { return ocean_tensor_reduce_dim_v02(tensor,dim,keepdim,false); }
+ocean_tensor_handle_t ocean_tensor_mean_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim) { return ocean_tensor_reduce_dim_v02(tensor,dim,keepdim,true); }
+
+static ocean_tensor_handle_t ocean_tensor_matmul_nd_cpu_v02(ocean_tensor_handle_t left, ocean_tensor_handle_t right) {
+    size_t out_ndim = left->ndim > right->ndim ? left->ndim : right->ndim;
+    size_t batch_ndim = out_ndim - 2;
+    size_t lb = left->ndim - 2, rb = right->ndim - 2;
+    size_t *shape = malloc(out_ndim * sizeof(size_t));
+    if (!shape) ocean_tensor_fail("out of memory allocating batched matmul shape");
+
+    for (size_t oa=0; oa<batch_ndim; ++oa) {
+        long long la=(long long)oa-(long long)(batch_ndim-lb);
+        long long ra=(long long)oa-(long long)(batch_ndim-rb);
+        size_t ld=la>=0?left->shape[(size_t)la]:1;
+        size_t rd=ra>=0?right->shape[(size_t)ra]:1;
+        if (ld!=rd && ld!=1 && rd!=1) { free(shape); ocean_tensor_fail("batched matmul batch dimensions are not broadcastable"); }
+        shape[oa]=ld>rd?ld:rd;
+    }
+    shape[out_ndim-2]=left->shape[left->ndim-2];
+    shape[out_ndim-1]=right->shape[right->ndim-1];
+    ocean_tensor_handle_t out=ocean_tensor_alloc_zeros(shape,out_ndim,left->dtype,OCEAN_TENSOR_CPU);
+    free(shape);
+    size_t *coord=calloc(out_ndim,sizeof(size_t));
+    if (!coord) ocean_tensor_fail("out of memory in batched matmul");
+    size_t inner=left->shape[left->ndim-1];
+
+    for (size_t linear=0;linear<out->size;++linear) {
+        size_t rem=linear;
+        for (size_t i=out_ndim;i-- >0;) { size_t d=out->shape[i]; coord[i]=d?rem%d:0; rem=d?rem/d:0; }
+        size_t row=coord[out_ndim-2], col=coord[out_ndim-1];
+        size_t lbase=0, rbase=0;
+        for (size_t i=0;i<lb;++i) { size_t oa=batch_ndim-lb+i; size_t c=left->shape[i]==1?0:coord[oa]; lbase+=c*left->strides[i]; }
+        for (size_t i=0;i<rb;++i) { size_t oa=batch_ndim-rb+i; size_t c=right->shape[i]==1?0:coord[oa]; rbase+=c*right->strides[i]; }
+        lbase += row*left->strides[left->ndim-2];
+        rbase += col*right->strides[right->ndim-1];
+        long double sum=0.0L;
+        for (size_t k=0;k<inner;++k) sum += ocean_tensor_read_scalar(left,lbase+k*left->strides[left->ndim-1]) * ocean_tensor_read_scalar(right,rbase+k*right->strides[right->ndim-2]);
+        ocean_tensor_write_scalar(out,linear,sum);
+    }
+    free(coord); return out;
+}
+
+
+ocean_tensor_handle_t ocean_tensor_matmul(ocean_tensor_handle_t left, ocean_tensor_handle_t right) {
     if (!left || !right) ocean_tensor_fail("matmul does not accept null Tensors");
-    if (left->ndim != 2 || right->ndim != 2) {
-        ocean_tensor_fail("matmul currently expects 2D Tensors");
+    if (left->ndim < 2 || right->ndim < 2) ocean_tensor_fail("matmul expects Tensor rank >= 2");
+    if (left->shape[left->ndim-1] != right->shape[right->ndim-2]) ocean_tensor_fail("matmul shape mismatch");
+    if (left->dtype != right->dtype) ocean_tensor_fail("matmul requires matching Tensor dtypes");
+    if (left->device != right->device) ocean_tensor_fail("matmul requires Tensors on the same device");
+    if (left->ndim == 2 && right->ndim == 2) return ocean_tensor_backend_for_device(left->device)->matmul(left,right);
+    ocean_tensor_handle_t lc = left->device==OCEAN_TENSOR_CPU ? left : ocean_tensor_to(left,"cpu");
+    ocean_tensor_handle_t rc = right->device==OCEAN_TENSOR_CPU ? right : ocean_tensor_to(right,"cpu");
+    ocean_tensor_handle_t cpu=ocean_tensor_matmul_nd_cpu_v02(lc,rc);
+    if (lc != left) {
+        ocean_tensor_release(lc);
     }
-    if (left->shape[1] != right->shape[0]) {
-        ocean_tensor_fail("matmul shape mismatch");
+    if (rc != right) {
+        ocean_tensor_release(rc);
     }
-    if (left->dtype != right->dtype) {
-        ocean_tensor_fail("matmul requires matching Tensor dtypes");
-    }
-    if (left->device != right->device) {
-        ocean_tensor_fail("matmul requires Tensors on the same device");
-    }
-    return ocean_tensor_backend_for_device(left->device)->matmul(left, right);
+    if (left->device==OCEAN_TENSOR_CPU) return cpu;
+    ocean_tensor_handle_t out=ocean_tensor_to(cpu,"gpu"); ocean_tensor_release(cpu); return out;
 }
 
 static bool ocean_tensor_host_is_little_endian(void) {

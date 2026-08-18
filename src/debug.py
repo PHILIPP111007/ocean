@@ -144,6 +144,11 @@ class Validator:
                             "ocean_tensor_size",
                             "ocean_tensor_device",
                             "ocean_tensor_release",
+                            "ocean_tensor_reshape_3d",
+                            "ocean_tensor_reshape_4d",
+                            "ocean_tensor_transpose_dims",
+                            "ocean_tensor_sum_dim",
+                            "ocean_tensor_mean_dim",
                         }
                     )
                 if (
@@ -167,6 +172,11 @@ class Validator:
                             "ocean_autograd_mse_loss",
                             "ocean_autograd_parameter_uniform",
                             "ocean_autograd_sgd_step",
+                            "ocean_autograd_reshape_3d",
+                            "ocean_autograd_reshape_4d",
+                            "ocean_autograd_transpose_dims",
+                            "ocean_autograd_sum_dim",
+                            "ocean_autograd_mean_dim",
                         }
                     )
 
