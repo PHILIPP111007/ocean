@@ -1310,8 +1310,6 @@ ocean_tensor_handle_t ocean_autograd_layer_norm(
     node->left = parent;
     node->dim0 = dim;
     node->scalar = epsilon;
-    node->saved_left = ocean_tensor_copy(tensor);
-    node->saved_right = ocean_tensor_copy(result);
     ocean_autograd_attach(result, node);
     return result;
 }
@@ -1590,8 +1588,8 @@ static void ocean_autograd_backward_node(ocean_autograd_meta *meta) {
                 ocean_tensor_handle_t contribution =
                     ocean_autograd_layer_norm_backward_v03(
                         upstream,
-                        node->saved_left,
-                        node->saved_right,
+                        node->left->tensor,
+                        NULL,
                         node->dim0,
                         node->scalar
                     );
