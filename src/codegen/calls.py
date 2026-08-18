@@ -49,6 +49,21 @@ class CallsMixin:
             if info and (info.get("is_deleted") or info.get("is_moved")):
                 raise RuntimeError(f"use of dead value '{object_name}'")
 
+        # Tensor has compiler intrinsics whose arguments cannot be lowered as
+        # ordinary Ocean values first. For example reshape([1, 2, 3, 4])
+        # must become a C size_t[] shape, not a temporary list object.
+        if self.is_device_tensor_type(obj_type):
+            tensor_intrinsic = self._device_tensor_instance_call(
+                node,
+                object_expression,
+                obj_type,
+            )
+            if tensor_intrinsic is not None:
+                if is_standalone:
+                    self.add_line(f"(void){tensor_intrinsic};")
+                    return None
+                return tensor_intrinsic
+
         arg_strings = [
             self.generate_expression(arg) if isinstance(arg, Mapping) else str(arg)
             for arg in args

@@ -191,6 +191,11 @@ class ExpressionsMixin:
             # local binding. Preserve the public Tensor method ABI there.
             resolved_type, resolved_object = self.resolve_object_path(object_name)
             if not var_info and self.is_device_tensor_type(resolved_type or ""):
+                tensor_intrinsic = self._device_tensor_instance_call(
+                    ast, resolved_object, resolved_type or ""
+                )
+                if tensor_intrinsic is not None:
+                    return tensor_intrinsic
                 arg_strings = [self.generate_expression(arg) for arg in args]
                 full_args = resolved_object
                 if arg_strings:
@@ -201,6 +206,11 @@ class ExpressionsMixin:
                 obj_type = var_info.get("py_type", "")
 
                 if self.is_device_tensor_type(obj_type):
+                    tensor_intrinsic = self._device_tensor_instance_call(
+                        ast, object_name, obj_type
+                    )
+                    if tensor_intrinsic is not None:
+                        return tensor_intrinsic
                     arg_strings = [self.generate_expression(arg) for arg in args]
                     full_args = object_name
                     if arg_strings:

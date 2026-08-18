@@ -68,4 +68,10 @@ ocean_tensor_handle_t ocean_autograd_transpose_dims(ocean_tensor_handle_t tensor
 ocean_tensor_handle_t ocean_autograd_sum_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim);
 ocean_tensor_handle_t ocean_autograd_mean_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim);
 
+ocean_tensor_handle_t ocean_autograd_reshape(
+    ocean_tensor_handle_t tensor,
+    const size_t *shape,
+    size_t ndim
+);
+
 #endif

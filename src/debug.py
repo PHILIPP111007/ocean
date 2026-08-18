@@ -173,6 +173,7 @@ class Validator:
                             "ocean_autograd_parameter_uniform",
                             "ocean_autograd_sgd_step",
                             "ocean_autograd_reshape_3d",
+                            "ocean_autograd_reshape",
                             "ocean_autograd_reshape_4d",
                             "ocean_autograd_transpose_dims",
                             "ocean_autograd_sum_dim",

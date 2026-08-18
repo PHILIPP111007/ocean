@@ -715,6 +715,23 @@ static ocean_tensor_handle_t ocean_autograd_expand_reduction_v02(ocean_tensor_ha
     if(strcmp(device,"cpu")==0){free(device);return cpu;} ocean_tensor_handle_t out=ocean_tensor_to(cpu,device);ocean_tensor_release(cpu);free(device);return out;
 }
 
+
+ocean_tensor_handle_t ocean_autograd_reshape(
+    ocean_tensor_handle_t tensor,
+    const size_t *shape,
+    size_t ndim
+) {
+    ocean_tensor_handle_t result = ocean_tensor_reshape(tensor, shape, ndim);
+    ocean_autograd_meta *parent = ocean_autograd_find(tensor);
+    if (!parent || !parent->requires_grad) return result;
+
+    ocean_autograd_node *node =
+        ocean_autograd_node_new(OCEAN_AUTOGRAD_RESHAPE);
+    node->left = parent;
+    ocean_autograd_attach(result, node);
+    return result;
+}
+
 ocean_tensor_handle_t ocean_autograd_reshape_3d(ocean_tensor_handle_t tensor,int d0,int d1,int d2){
     ocean_tensor_handle_t out=ocean_tensor_reshape_3d(tensor,d0,d1,d2); ocean_autograd_meta *p=ocean_autograd_find(tensor); if(!p||!p->requires_grad)return out;
     ocean_autograd_node *n=ocean_autograd_node_new(OCEAN_AUTOGRAD_RESHAPE);n->left=p;ocean_autograd_attach(out,n);return out;

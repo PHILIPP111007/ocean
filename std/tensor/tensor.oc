@@ -128,6 +128,22 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+
+    def transpose_dims(self, dim0: int, dim1: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_transpose_dims(self.handle, dim0, dim1)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def sum_dim(self, dim: int, keepdim: bool) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_sum_dim(self.handle, dim, keepdim)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def mean_dim(self, dim: int, keepdim: bool) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_mean_dim(self.handle, dim, keepdim)
+        var value: Tensor = Tensor(handle)
+        return value
+
     def row(self, row: int) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_row(self.handle, row)
         var value: Tensor = Tensor(handle)
