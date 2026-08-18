@@ -74,4 +74,22 @@ ocean_tensor_handle_t ocean_autograd_reshape(
     size_t ndim
 );
 
+/* Tensor/autograd v0.3 math */
+ocean_tensor_handle_t ocean_autograd_exp(ocean_tensor_handle_t tensor);
+ocean_tensor_handle_t ocean_autograd_log(ocean_tensor_handle_t tensor);
+ocean_tensor_handle_t ocean_autograd_sqrt(ocean_tensor_handle_t tensor);
+ocean_tensor_handle_t ocean_autograd_pow(
+    ocean_tensor_handle_t tensor,
+    double exponent
+);
+ocean_tensor_handle_t ocean_autograd_softmax(
+    ocean_tensor_handle_t tensor,
+    int dim
+);
+ocean_tensor_handle_t ocean_autograd_layer_norm(
+    ocean_tensor_handle_t tensor,
+    int dim,
+    double epsilon
+);
+
 #endif

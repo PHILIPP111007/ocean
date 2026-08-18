@@ -1,5 +1,6 @@
 cimport <std/tensor/tensor_runtime.h>
 cimport <std/tensor/autograd_runtime.h>
+cimport <math.h>
 
 
 # Public device-aware Tensor facade.  The C handle is intentionally opaque;
@@ -141,6 +142,37 @@ class Tensor:
 
     def mean_dim(self, dim: int, keepdim: bool) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_autograd_mean_dim(self.handle, dim, keepdim)
+        var value: Tensor = Tensor(handle)
+        return value
+
+
+    def exp(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_exp(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def log(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_log(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def sqrt(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_sqrt(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def pow(self, exponent: float64) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_pow(self.handle, exponent)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def softmax(self, dim: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_softmax(self.handle, dim)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def layer_norm(self, dim: int, epsilon: float64) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_layer_norm(self.handle, dim, epsilon)
         var value: Tensor = Tensor(handle)
         return value
 

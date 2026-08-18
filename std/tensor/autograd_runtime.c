@@ -1,5 +1,7 @@
 #include "std/tensor/autograd_runtime.h"
 
+#include <math.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +21,12 @@ enum {
     OCEAN_AUTOGRAD_TRANSPOSE_DIMS = 16,
     OCEAN_AUTOGRAD_SUM_DIM = 17,
     OCEAN_AUTOGRAD_MEAN_DIM = 18,
+    OCEAN_AUTOGRAD_EXP = 19,
+    OCEAN_AUTOGRAD_LOG = 20,
+    OCEAN_AUTOGRAD_SQRT = 21,
+    OCEAN_AUTOGRAD_POW = 22,
+    OCEAN_AUTOGRAD_SOFTMAX = 23,
+    OCEAN_AUTOGRAD_LAYER_NORM = 24,
 };
 
 typedef struct ocean_autograd_meta ocean_autograd_meta;
@@ -751,6 +759,563 @@ static ocean_tensor_handle_t ocean_autograd_reduce_dim_v02(ocean_tensor_handle_t
 ocean_tensor_handle_t ocean_autograd_sum_dim(ocean_tensor_handle_t tensor,int dim,bool keepdim){return ocean_autograd_reduce_dim_v02(tensor,dim,keepdim,false);}
 ocean_tensor_handle_t ocean_autograd_mean_dim(ocean_tensor_handle_t tensor,int dim,bool keepdim){return ocean_autograd_reduce_dim_v02(tensor,dim,keepdim,true);}
 
+
+/* ================= Tensor/autograd v0.3 math ================= */
+
+static int ocean_autograd_normalize_tensor_dim_v03(
+    ocean_tensor_handle_t tensor,
+    int dim
+) {
+    int rank = ocean_tensor_ndim(tensor);
+    if (rank <= 0) {
+        ocean_tensor_fail("Tensor dimension operation requires rank >= 1");
+    }
+    int normalized = dim < 0 ? dim + rank : dim;
+    if (normalized < 0 || normalized >= rank) {
+        ocean_tensor_fail("Tensor dimension is out of bounds");
+    }
+    return normalized;
+}
+
+static ocean_tensor_handle_t ocean_autograd_unary_cpu_v03(
+    ocean_tensor_handle_t tensor,
+    int operation,
+    double scalar
+) {
+    ocean_autograd_require_float32(tensor);
+
+    char *device = ocean_tensor_device(tensor);
+    ocean_tensor_handle_t cpu = strcmp(device, "cpu") == 0
+        ? tensor
+        : ocean_tensor_to(tensor, "cpu");
+
+    size_t size = ocean_tensor_size(cpu);
+    float *data = size ? (float *)malloc(size * sizeof(float)) : NULL;
+    if (size && !data) {
+        if (cpu != tensor) ocean_tensor_release(cpu);
+        free(device);
+        ocean_tensor_fail("out of memory in Tensor unary operation");
+    }
+
+    for (size_t index = 0; index < size; ++index) {
+        float value = ocean_tensor_get_flat_f32(cpu, index);
+        float result = 0.0f;
+
+        switch (operation) {
+            case OCEAN_AUTOGRAD_EXP:
+                result = expf(value);
+                break;
+            case OCEAN_AUTOGRAD_LOG:
+                if (!(value > 0.0f)) {
+                    free(data);
+                    if (cpu != tensor) ocean_tensor_release(cpu);
+                    free(device);
+                    ocean_tensor_fail("Tensor.log requires values > 0");
+                }
+                result = logf(value);
+                break;
+            case OCEAN_AUTOGRAD_SQRT:
+                if (value < 0.0f) {
+                    free(data);
+                    if (cpu != tensor) ocean_tensor_release(cpu);
+                    free(device);
+                    ocean_tensor_fail("Tensor.sqrt requires values >= 0");
+                }
+                result = sqrtf(value);
+                break;
+            case OCEAN_AUTOGRAD_POW:
+                result = powf(value, (float)scalar);
+                break;
+            default:
+                free(data);
+                if (cpu != tensor) ocean_tensor_release(cpu);
+                free(device);
+                ocean_tensor_fail("invalid Tensor unary operation");
+        }
+        data[index] = result;
+    }
+
+    ocean_tensor_handle_t result =
+        ocean_autograd_from_float_data_like(cpu, data);
+
+    if (strcmp(device, "cpu") != 0) {
+        ocean_tensor_handle_t moved = ocean_tensor_to(result, device);
+        ocean_tensor_release(result);
+        result = moved;
+    }
+
+    free(data);
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    free(device);
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_autograd_softmax_impl_v03(
+    ocean_tensor_handle_t tensor,
+    int dim
+) {
+    ocean_autograd_require_float32(tensor);
+    int axis = ocean_autograd_normalize_tensor_dim_v03(tensor, dim);
+    int rank = ocean_tensor_ndim(tensor);
+
+    char *device = ocean_tensor_device(tensor);
+    ocean_tensor_handle_t cpu = strcmp(device, "cpu") == 0
+        ? tensor
+        : ocean_tensor_to(tensor, "cpu");
+
+    size_t outer = 1;
+    size_t axis_size = (size_t)ocean_tensor_shape(cpu, axis);
+    size_t inner = 1;
+
+    for (int i = 0; i < axis; ++i) {
+        outer *= (size_t)ocean_tensor_shape(cpu, i);
+    }
+    for (int i = axis + 1; i < rank; ++i) {
+        inner *= (size_t)ocean_tensor_shape(cpu, i);
+    }
+
+    size_t size = ocean_tensor_size(cpu);
+    float *data = size ? (float *)malloc(size * sizeof(float)) : NULL;
+    if (size && !data) {
+        if (cpu != tensor) ocean_tensor_release(cpu);
+        free(device);
+        ocean_tensor_fail("out of memory in softmax");
+    }
+
+    for (size_t o = 0; o < outer; ++o) {
+        for (size_t in = 0; in < inner; ++in) {
+            float max_value = -INFINITY;
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                float value = ocean_tensor_get_flat_f32(cpu, index);
+                if (value > max_value) max_value = value;
+            }
+
+            double denominator = 0.0;
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                float value = ocean_tensor_get_flat_f32(cpu, index);
+                float e = expf(value - max_value);
+                data[index] = e;
+                denominator += (double)e;
+            }
+
+            if (!(denominator > 0.0)) {
+                free(data);
+                if (cpu != tensor) ocean_tensor_release(cpu);
+                free(device);
+                ocean_tensor_fail("softmax denominator is not positive");
+            }
+
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                data[index] = (float)((double)data[index] / denominator);
+            }
+        }
+    }
+
+    ocean_tensor_handle_t result =
+        ocean_autograd_from_float_data_like(cpu, data);
+
+    if (strcmp(device, "cpu") != 0) {
+        ocean_tensor_handle_t moved = ocean_tensor_to(result, device);
+        ocean_tensor_release(result);
+        result = moved;
+    }
+
+    free(data);
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    free(device);
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_autograd_softmax_backward_v03(
+    ocean_tensor_handle_t upstream,
+    ocean_tensor_handle_t output,
+    int dim
+) {
+    int axis = ocean_autograd_normalize_tensor_dim_v03(output, dim);
+    int rank = ocean_tensor_ndim(output);
+
+    char *device = ocean_tensor_device(output);
+    ocean_tensor_handle_t uc = strcmp(device, "cpu") == 0
+        ? upstream
+        : ocean_tensor_to(upstream, "cpu");
+    ocean_tensor_handle_t yc = strcmp(device, "cpu") == 0
+        ? output
+        : ocean_tensor_to(output, "cpu");
+
+    size_t outer = 1;
+    size_t axis_size = (size_t)ocean_tensor_shape(yc, axis);
+    size_t inner = 1;
+
+    for (int i = 0; i < axis; ++i) {
+        outer *= (size_t)ocean_tensor_shape(yc, i);
+    }
+    for (int i = axis + 1; i < rank; ++i) {
+        inner *= (size_t)ocean_tensor_shape(yc, i);
+    }
+
+    size_t size = ocean_tensor_size(yc);
+    float *data = size ? (float *)malloc(size * sizeof(float)) : NULL;
+    if (size && !data) {
+        if (uc != upstream) ocean_tensor_release(uc);
+        if (yc != output) ocean_tensor_release(yc);
+        free(device);
+        ocean_tensor_fail("out of memory in softmax backward");
+    }
+
+    for (size_t o = 0; o < outer; ++o) {
+        for (size_t in = 0; in < inner; ++in) {
+            double dot = 0.0;
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                dot +=
+                    (double)ocean_tensor_get_flat_f32(uc, index)
+                    * (double)ocean_tensor_get_flat_f32(yc, index);
+            }
+
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                float g = ocean_tensor_get_flat_f32(uc, index);
+                float y = ocean_tensor_get_flat_f32(yc, index);
+                data[index] = y * (g - (float)dot);
+            }
+        }
+    }
+
+    ocean_tensor_handle_t cpu_result =
+        ocean_autograd_from_float_data_like(yc, data);
+    ocean_tensor_handle_t result = cpu_result;
+
+    if (strcmp(device, "cpu") != 0) {
+        result = ocean_tensor_to(cpu_result, device);
+        ocean_tensor_release(cpu_result);
+    }
+
+    free(data);
+    if (uc != upstream) ocean_tensor_release(uc);
+    if (yc != output) ocean_tensor_release(yc);
+    free(device);
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_autograd_layer_norm_impl_v03(
+    ocean_tensor_handle_t tensor,
+    int dim,
+    double epsilon
+) {
+    ocean_autograd_require_float32(tensor);
+    if (!(epsilon > 0.0)) {
+        ocean_tensor_fail("LayerNorm epsilon must be positive");
+    }
+
+    int axis = ocean_autograd_normalize_tensor_dim_v03(tensor, dim);
+    int rank = ocean_tensor_ndim(tensor);
+
+    char *device = ocean_tensor_device(tensor);
+    ocean_tensor_handle_t cpu = strcmp(device, "cpu") == 0
+        ? tensor
+        : ocean_tensor_to(tensor, "cpu");
+
+    size_t outer = 1;
+    size_t axis_size = (size_t)ocean_tensor_shape(cpu, axis);
+    size_t inner = 1;
+
+    for (int i = 0; i < axis; ++i) {
+        outer *= (size_t)ocean_tensor_shape(cpu, i);
+    }
+    for (int i = axis + 1; i < rank; ++i) {
+        inner *= (size_t)ocean_tensor_shape(cpu, i);
+    }
+
+    if (axis_size == 0) {
+        if (cpu != tensor) ocean_tensor_release(cpu);
+        free(device);
+        ocean_tensor_fail("LayerNorm cannot normalize an empty dimension");
+    }
+
+    size_t size = ocean_tensor_size(cpu);
+    float *data = size ? (float *)malloc(size * sizeof(float)) : NULL;
+    if (size && !data) {
+        if (cpu != tensor) ocean_tensor_release(cpu);
+        free(device);
+        ocean_tensor_fail("out of memory in LayerNorm");
+    }
+
+    for (size_t o = 0; o < outer; ++o) {
+        for (size_t in = 0; in < inner; ++in) {
+            double mean = 0.0;
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                mean += (double)ocean_tensor_get_flat_f32(cpu, index);
+            }
+            mean /= (double)axis_size;
+
+            double variance = 0.0;
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                double delta =
+                    (double)ocean_tensor_get_flat_f32(cpu, index) - mean;
+                variance += delta * delta;
+            }
+            variance /= (double)axis_size;
+            double inverse_std = 1.0 / sqrt(variance + epsilon);
+
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                double value = (double)ocean_tensor_get_flat_f32(cpu, index);
+                data[index] = (float)((value - mean) * inverse_std);
+            }
+        }
+    }
+
+    ocean_tensor_handle_t result =
+        ocean_autograd_from_float_data_like(cpu, data);
+
+    if (strcmp(device, "cpu") != 0) {
+        ocean_tensor_handle_t moved = ocean_tensor_to(result, device);
+        ocean_tensor_release(result);
+        result = moved;
+    }
+
+    free(data);
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    free(device);
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_autograd_layer_norm_backward_v03(
+    ocean_tensor_handle_t upstream,
+    ocean_tensor_handle_t input,
+    ocean_tensor_handle_t normalized,
+    int dim,
+    double epsilon
+) {
+    (void)normalized;
+
+    int axis = ocean_autograd_normalize_tensor_dim_v03(input, dim);
+    int rank = ocean_tensor_ndim(input);
+
+    char *device = ocean_tensor_device(input);
+    ocean_tensor_handle_t gc = strcmp(device, "cpu") == 0
+        ? upstream
+        : ocean_tensor_to(upstream, "cpu");
+    ocean_tensor_handle_t xc = strcmp(device, "cpu") == 0
+        ? input
+        : ocean_tensor_to(input, "cpu");
+
+    size_t outer = 1;
+    size_t axis_size = (size_t)ocean_tensor_shape(xc, axis);
+    size_t inner = 1;
+
+    for (int i = 0; i < axis; ++i) {
+        outer *= (size_t)ocean_tensor_shape(xc, i);
+    }
+    for (int i = axis + 1; i < rank; ++i) {
+        inner *= (size_t)ocean_tensor_shape(xc, i);
+    }
+
+    if (axis_size == 0) {
+        if (gc != upstream) ocean_tensor_release(gc);
+        if (xc != input) ocean_tensor_release(xc);
+        free(device);
+        ocean_tensor_fail("LayerNorm backward cannot normalize an empty dimension");
+    }
+
+    size_t size = ocean_tensor_size(xc);
+    float *data = size ? (float *)malloc(size * sizeof(float)) : NULL;
+    if (size && !data) {
+        if (gc != upstream) ocean_tensor_release(gc);
+        if (xc != input) ocean_tensor_release(xc);
+        free(device);
+        ocean_tensor_fail("out of memory in LayerNorm backward");
+    }
+
+    for (size_t o = 0; o < outer; ++o) {
+        for (size_t in = 0; in < inner; ++in) {
+            double mean = 0.0;
+
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                mean += (double)ocean_tensor_get_flat_f32(xc, index);
+            }
+            mean /= (double)axis_size;
+
+            double variance = 0.0;
+            double sum_g = 0.0;
+            double sum_g_centered = 0.0;
+
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+
+                double x =
+                    (double)ocean_tensor_get_flat_f32(xc, index);
+                double g =
+                    (double)ocean_tensor_get_flat_f32(gc, index);
+                double centered = x - mean;
+
+                variance += centered * centered;
+                sum_g += g;
+                sum_g_centered += g * centered;
+            }
+
+            variance /= (double)axis_size;
+
+            double inverse_std =
+                1.0 / sqrt(variance + epsilon);
+            double inverse_variance =
+                inverse_std * inverse_std;
+
+            double mean_g =
+                sum_g / (double)axis_size;
+            double mean_g_centered =
+                sum_g_centered / (double)axis_size;
+
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+
+                double x =
+                    (double)ocean_tensor_get_flat_f32(xc, index);
+                double g =
+                    (double)ocean_tensor_get_flat_f32(gc, index);
+                double centered = x - mean;
+
+                data[index] = (float)(
+                    inverse_std
+                    * (
+                        g
+                        - mean_g
+                        - centered
+                            * inverse_variance
+                            * mean_g_centered
+                    )
+                );
+            }
+        }
+    }
+
+    ocean_tensor_handle_t cpu_result =
+        ocean_autograd_from_float_data_like(xc, data);
+    ocean_tensor_handle_t result = cpu_result;
+
+    if (strcmp(device, "cpu") != 0) {
+        result = ocean_tensor_to(cpu_result, device);
+        ocean_tensor_release(cpu_result);
+    }
+
+    free(data);
+    if (gc != upstream) ocean_tensor_release(gc);
+    if (xc != input) ocean_tensor_release(xc);
+    free(device);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_autograd_exp(ocean_tensor_handle_t tensor) {
+    ocean_tensor_handle_t result =
+        ocean_autograd_unary_cpu_v03(tensor, OCEAN_AUTOGRAD_EXP, 0.0);
+
+    ocean_autograd_meta *parent = ocean_autograd_find(tensor);
+    if (!parent || !parent->requires_grad) return result;
+
+    ocean_autograd_node *node =
+        ocean_autograd_node_new(OCEAN_AUTOGRAD_EXP);
+    node->left = parent;
+    node->saved_left = ocean_tensor_copy(result);
+    ocean_autograd_attach(result, node);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_autograd_log(ocean_tensor_handle_t tensor) {
+    ocean_tensor_handle_t result =
+        ocean_autograd_unary_cpu_v03(tensor, OCEAN_AUTOGRAD_LOG, 0.0);
+
+    ocean_autograd_meta *parent = ocean_autograd_find(tensor);
+    if (!parent || !parent->requires_grad) return result;
+
+    ocean_autograd_node *node =
+        ocean_autograd_node_new(OCEAN_AUTOGRAD_LOG);
+    node->left = parent;
+    node->saved_left = ocean_tensor_copy(tensor);
+    ocean_autograd_attach(result, node);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_autograd_sqrt(ocean_tensor_handle_t tensor) {
+    ocean_tensor_handle_t result =
+        ocean_autograd_unary_cpu_v03(tensor, OCEAN_AUTOGRAD_SQRT, 0.0);
+
+    ocean_autograd_meta *parent = ocean_autograd_find(tensor);
+    if (!parent || !parent->requires_grad) return result;
+
+    ocean_autograd_node *node =
+        ocean_autograd_node_new(OCEAN_AUTOGRAD_SQRT);
+    node->left = parent;
+    node->saved_left = ocean_tensor_copy(result);
+    ocean_autograd_attach(result, node);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_autograd_pow(
+    ocean_tensor_handle_t tensor,
+    double exponent
+) {
+    ocean_tensor_handle_t result =
+        ocean_autograd_unary_cpu_v03(tensor, OCEAN_AUTOGRAD_POW, exponent);
+
+    ocean_autograd_meta *parent = ocean_autograd_find(tensor);
+    if (!parent || !parent->requires_grad) return result;
+
+    ocean_autograd_node *node =
+        ocean_autograd_node_new(OCEAN_AUTOGRAD_POW);
+    node->left = parent;
+    node->scalar = exponent;
+    node->saved_left = ocean_tensor_copy(tensor);
+    ocean_autograd_attach(result, node);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_autograd_softmax(
+    ocean_tensor_handle_t tensor,
+    int dim
+) {
+    ocean_tensor_handle_t result =
+        ocean_autograd_softmax_impl_v03(tensor, dim);
+
+    ocean_autograd_meta *parent = ocean_autograd_find(tensor);
+    if (!parent || !parent->requires_grad) return result;
+
+    ocean_autograd_node *node =
+        ocean_autograd_node_new(OCEAN_AUTOGRAD_SOFTMAX);
+    node->left = parent;
+    node->dim0 = dim;
+    node->saved_left = ocean_tensor_copy(result);
+    ocean_autograd_attach(result, node);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_autograd_layer_norm(
+    ocean_tensor_handle_t tensor,
+    int dim,
+    double epsilon
+) {
+    ocean_tensor_handle_t result =
+        ocean_autograd_layer_norm_impl_v03(tensor, dim, epsilon);
+
+    ocean_autograd_meta *parent = ocean_autograd_find(tensor);
+    if (!parent || !parent->requires_grad) return result;
+
+    ocean_autograd_node *node =
+        ocean_autograd_node_new(OCEAN_AUTOGRAD_LAYER_NORM);
+    node->left = parent;
+    node->dim0 = dim;
+    node->scalar = epsilon;
+    node->saved_left = ocean_tensor_copy(tensor);
+    node->saved_right = ocean_tensor_copy(result);
+    ocean_autograd_attach(result, node);
+    return result;
+}
+
 typedef struct ocean_autograd_topology {
     ocean_autograd_meta **items;
     size_t count;
@@ -953,6 +1518,87 @@ static void ocean_autograd_backward_node(ocean_autograd_meta *meta) {
         case OCEAN_AUTOGRAD_RESHAPE: { if(node->left){ocean_tensor_handle_t r=ocean_tensor_reshape(upstream,node->left->shape,node->left->ndim);ocean_autograd_accumulate(node->left,r);} break; }
         case OCEAN_AUTOGRAD_SUM_DIM:
         case OCEAN_AUTOGRAD_MEAN_DIM: { if(node->left){int ax=ocean_autograd_normalize_dim_v02(node->left,node->dim0);double sc=node->operation==OCEAN_AUTOGRAD_MEAN_DIM?1.0/(double)node->left->shape[(size_t)ax]:1.0;ocean_tensor_handle_t g=ocean_autograd_expand_reduction_v02(upstream,node->left,node->dim0,node->keepdim,sc);ocean_autograd_accumulate(node->left,g);} break; }
+
+
+        case OCEAN_AUTOGRAD_EXP: {
+            if (node->left) {
+                ocean_tensor_handle_t contribution = ocean_tensor_binary(
+                    upstream, node->saved_left, OCEAN_AUTOGRAD_MUL
+                );
+                ocean_autograd_accumulate(node->left, contribution);
+            }
+            break;
+        }
+
+        case OCEAN_AUTOGRAD_LOG: {
+            if (node->left) {
+                ocean_tensor_handle_t contribution = ocean_tensor_binary(
+                    upstream, node->saved_left, OCEAN_AUTOGRAD_DIV
+                );
+                ocean_autograd_accumulate(node->left, contribution);
+            }
+            break;
+        }
+
+        case OCEAN_AUTOGRAD_SQRT: {
+            if (node->left) {
+                ocean_tensor_handle_t denominator = ocean_tensor_scalar(
+                    node->saved_left, 2.0, OCEAN_AUTOGRAD_MUL
+                );
+                ocean_tensor_handle_t contribution = ocean_tensor_binary(
+                    upstream, denominator, OCEAN_AUTOGRAD_DIV
+                );
+                ocean_tensor_release(denominator);
+                ocean_autograd_accumulate(node->left, contribution);
+            }
+            break;
+        }
+
+        case OCEAN_AUTOGRAD_POW: {
+            if (node->left) {
+                ocean_tensor_handle_t power = ocean_autograd_unary_cpu_v03(
+                    node->saved_left,
+                    OCEAN_AUTOGRAD_POW,
+                    node->scalar - 1.0
+                );
+                ocean_tensor_handle_t scaled = ocean_tensor_scalar(
+                    power, node->scalar, OCEAN_AUTOGRAD_MUL
+                );
+                ocean_tensor_handle_t contribution = ocean_tensor_binary(
+                    upstream, scaled, OCEAN_AUTOGRAD_MUL
+                );
+                ocean_tensor_release(power);
+                ocean_tensor_release(scaled);
+                ocean_autograd_accumulate(node->left, contribution);
+            }
+            break;
+        }
+
+        case OCEAN_AUTOGRAD_SOFTMAX: {
+            if (node->left) {
+                ocean_tensor_handle_t contribution =
+                    ocean_autograd_softmax_backward_v03(
+                        upstream, node->saved_left, node->dim0
+                    );
+                ocean_autograd_accumulate(node->left, contribution);
+            }
+            break;
+        }
+
+        case OCEAN_AUTOGRAD_LAYER_NORM: {
+            if (node->left) {
+                ocean_tensor_handle_t contribution =
+                    ocean_autograd_layer_norm_backward_v03(
+                        upstream,
+                        node->saved_left,
+                        node->saved_right,
+                        node->dim0,
+                        node->scalar
+                    );
+                ocean_autograd_accumulate(node->left, contribution);
+            }
+            break;
+        }
 
         case OCEAN_AUTOGRAD_RELU: {
             ocean_autograd_accumulate(
