@@ -7,6 +7,8 @@
 
 typedef struct ocean_tensor_handle *ocean_tensor_handle_t;
 
+
+
 _Noreturn void ocean_tensor_fail(const char *message);
 void ocean_tensor_validate_list_length(size_t actual, size_t expected);
 
@@ -36,6 +38,7 @@ void ocean_tensor_save_npy(
     const char *path
 );
 ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor);
+void ocean_tensor_copy_into(ocean_tensor_handle_t destination, ocean_tensor_handle_t source);
 ocean_tensor_handle_t ocean_tensor_to(ocean_tensor_handle_t tensor, const char *device);
 ocean_tensor_handle_t ocean_tensor_matmul(
     ocean_tensor_handle_t left,
@@ -62,6 +65,11 @@ ocean_tensor_handle_t ocean_tensor_reshape_2d(
     int cols
 );
 ocean_tensor_handle_t ocean_tensor_transpose(ocean_tensor_handle_t tensor);
+ocean_tensor_handle_t ocean_tensor_permute(
+    ocean_tensor_handle_t tensor,
+    const int *axes,
+    size_t ndim
+);
 ocean_tensor_handle_t ocean_tensor_row(ocean_tensor_handle_t tensor, int row);
 ocean_tensor_handle_t ocean_tensor_column(ocean_tensor_handle_t tensor, int column);
 ocean_tensor_handle_t ocean_tensor_slice(
@@ -184,6 +192,15 @@ int ocean_tensor_len(ocean_tensor_handle_t tensor);
 int ocean_tensor_ndim(ocean_tensor_handle_t tensor);
 size_t ocean_tensor_size(ocean_tensor_handle_t tensor);
 char *ocean_tensor_device(ocean_tensor_handle_t tensor);
+uint64_t ocean_tensor_identity(ocean_tensor_handle_t tensor);
 void ocean_tensor_release(ocean_tensor_handle_t tensor);
+
+
+/* ND Tensor v0.2 */
+ocean_tensor_handle_t ocean_tensor_reshape_3d(ocean_tensor_handle_t tensor, int d0, int d1, int d2);
+ocean_tensor_handle_t ocean_tensor_reshape_4d(ocean_tensor_handle_t tensor, int d0, int d1, int d2, int d3);
+ocean_tensor_handle_t ocean_tensor_transpose_dims(ocean_tensor_handle_t tensor, int dim0, int dim1);
+ocean_tensor_handle_t ocean_tensor_sum_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim);
+ocean_tensor_handle_t ocean_tensor_mean_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim);
 
 #endif

@@ -83,6 +83,13 @@ class OrchestratorMixin:
         # types, so it also precedes helper emission.
         self.collect_imports_and_declarations(scopes)
         self.generate_c_imports()
+
+        # Generic containers may contain class references.
+        for class_name in sorted(self.class_types):
+            self.add_line(f"typedef struct {class_name} {class_name};")
+        if self.class_types:
+            self.add_empty_line()
+
         self.generate_helpers_section()
 
         # Class layouts depend on the generated generic type declarations.
@@ -107,7 +114,112 @@ class OrchestratorMixin:
                 self.generate_function_scope(scope)
 
         c_code = "\n".join(self.output)
-        return self.apply_ocean_namespace(c_code, scopes)
+        c_code = self.apply_ocean_namespace(c_code, scopes)
+        return self._prune_redundant_function_prototypes(c_code)
+
+    def _prune_redundant_function_prototypes(self, c_code: str) -> str:
+        # Keep only forward declarations that are actually required before
+        # a top-level function definition. Preserve class-method prototypes.
+        lines = c_code.splitlines(keepends=True)
+
+        class_prefixes = tuple(
+            f"ocean_{class_name}_"
+            for class_name in sorted(self.class_types)
+        )
+
+        main_definition_index = None
+        for index, line in enumerate(lines):
+            if re.search(r"^\s*int\s+main\s*\([^;]*\)\s*\{", line):
+                main_definition_index = index
+                break
+
+        prototypes = []
+
+        for index, line in enumerate(lines):
+            stripped = line.strip()
+
+            # Forward declarations are emitted at C top level. A standalone
+            # call such as ocean_func(); is indented inside a function and
+            # must never be mistaken for a prototype.
+            if line != line.lstrip():
+                continue
+
+            if (
+                not stripped.endswith(";")
+                or "(" not in stripped
+                or ")" not in stripped
+            ):
+                continue
+
+            match = re.search(
+                r"\b(ocean_[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+                stripped,
+            )
+            if match is None:
+                continue
+
+            function_name = match.group(1)
+
+            if class_prefixes and function_name.startswith(class_prefixes):
+                continue
+
+            prototypes.append((index, function_name))
+
+        remove_indices = set()
+
+        for prototype_index, function_name in prototypes:
+            definition_index = None
+
+            definition_pattern = re.compile(
+                rf"^\s*[A-Za-z_][A-Za-z0-9_\s\*]*"
+                rf"\b{re.escape(function_name)}\s*\([^;]*\)\s*\{{"
+            )
+
+            for index in range(prototype_index + 1, len(lines)):
+                if definition_pattern.search(lines[index]):
+                    definition_index = index
+                    break
+
+            if definition_index is None:
+                continue
+
+            # Nested functions are currently emitted after main(). Their
+            # historical generated-C snapshots intentionally contain no
+            # prototype, so keep that layout stable.
+            if (
+                main_definition_index is not None
+                and definition_index > main_definition_index
+            ):
+                remove_indices.add(prototype_index)
+                continue
+
+            # A forward declaration is required if the function symbol occurs
+            # before its definition in any context: direct call, callback,
+            # function pointer assignment, address-taking, etc.
+            symbol_pattern = re.compile(
+                rf"\b{re.escape(function_name)}\b"
+            )
+
+            used_before_definition = False
+
+            for index in range(prototype_index + 1, definition_index):
+                line = lines[index]
+
+                if symbol_pattern.search(line):
+                    used_before_definition = True
+                    break
+
+            if not used_before_definition:
+                remove_indices.add(prototype_index)
+
+        if not remove_indices:
+            return c_code
+
+        return "".join(
+            line
+            for index, line in enumerate(lines)
+            if index not in remove_indices
+        )
 
     def generate_temporary_var(self, var_type: str = "int") -> str:
         """Генерирует имя временной переменной"""

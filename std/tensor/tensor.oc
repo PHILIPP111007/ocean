@@ -1,4 +1,6 @@
 cimport <std/tensor/tensor_runtime.h>
+cimport <std/tensor/autograd_runtime.h>
+cimport <math.h>
 
 
 # Public device-aware Tensor facade.  The C handle is intentionally opaque;
@@ -6,6 +8,37 @@ cimport <std/tensor/tensor_runtime.h>
 class Tensor:
     def __init__(self, handle: ocean_tensor_handle_t):
         self.handle = handle
+
+    def raw_handle(self) -> ocean_tensor_handle_t:
+        return self.handle
+
+    def requires_grad_(self, value: bool) -> None:
+        ocean_autograd_set_requires_grad(self.handle, value)
+        return None
+
+    def requires_grad(self) -> bool:
+        return ocean_autograd_requires_grad(self.handle)
+
+    def has_grad(self) -> bool:
+        return ocean_autograd_has_grad(self.handle)
+
+    def grad(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_grad_copy(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def zero_grad(self) -> None:
+        ocean_autograd_zero_grad(self.handle)
+        return None
+
+    def backward(self) -> None:
+        ocean_autograd_backward(self.handle)
+        return None
+
+    def relu(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_relu(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
 
     @staticmethod
     def zeros(rows: int, cols: int, device: str) -> Tensor:
@@ -42,47 +75,47 @@ class Tensor:
         return value
 
     def matmul(self, other: &Tensor) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_matmul(self.handle, other.handle)
+        var handle: ocean_tensor_handle_t = ocean_autograd_matmul(self.handle, other.handle)
         var value: Tensor = Tensor(handle)
         return value
 
     def add(self, other: &Tensor) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 0)
+        var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 0)
         var value: Tensor = Tensor(handle)
         return value
 
     def sub(self, other: &Tensor) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 1)
+        var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 1)
         var value: Tensor = Tensor(handle)
         return value
 
     def mul(self, other: &Tensor) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 2)
+        var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 2)
         var value: Tensor = Tensor(handle)
         return value
 
     def div(self, other: &Tensor) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_binary(self.handle, other.handle, 3)
+        var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 3)
         var value: Tensor = Tensor(handle)
         return value
 
     def add_scalar(self, value: float64) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 0)
+        var handle: ocean_tensor_handle_t = ocean_autograd_scalar(self.handle, value, 0)
         var result: Tensor = Tensor(handle)
         return result
 
     def sub_scalar(self, value: float64) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 1)
+        var handle: ocean_tensor_handle_t = ocean_autograd_scalar(self.handle, value, 1)
         var result: Tensor = Tensor(handle)
         return result
 
     def mul_scalar(self, value: float64) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 2)
+        var handle: ocean_tensor_handle_t = ocean_autograd_scalar(self.handle, value, 2)
         var result: Tensor = Tensor(handle)
         return result
 
     def div_scalar(self, value: float64) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_scalar(self.handle, value, 3)
+        var handle: ocean_tensor_handle_t = ocean_autograd_scalar(self.handle, value, 3)
         var result: Tensor = Tensor(handle)
         return result
 
@@ -92,9 +125,70 @@ class Tensor:
         return value
 
     def transpose(self) -> Tensor:
-        var handle: ocean_tensor_handle_t = ocean_tensor_transpose(self.handle)
+        var handle: ocean_tensor_handle_t = ocean_autograd_transpose(self.handle)
         var value: Tensor = Tensor(handle)
         return value
+
+
+    def transpose_dims(self, dim0: int, dim1: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_transpose_dims(self.handle, dim0, dim1)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def permute(self, axes: pointer) -> Tensor:
+        # Compiler intrinsic. The backend lowers the axis list directly to
+        # ocean_autograd_permute(). This fallback keeps the facade complete.
+        var value: Tensor = self.copy()
+        return value
+
+    def sum_dim(self, dim: int, keepdim: bool) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_sum_dim(self.handle, dim, keepdim)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def mean_dim(self, dim: int, keepdim: bool) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_mean_dim(self.handle, dim, keepdim)
+        var value: Tensor = Tensor(handle)
+        return value
+
+
+    def exp(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_exp(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def log(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_log(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def sqrt(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_sqrt(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def pow(self, exponent: float64) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_pow(self.handle, exponent)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def softmax(self, dim: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_softmax(self.handle, dim)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def layer_norm(self, dim: int, epsilon: float64) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_layer_norm(self.handle, dim, epsilon)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def masked_fill(self, mask: &Tensor, value: float64) -> Tensor:
+        var neg_mask: Tensor = mask.mul_scalar(-1.0)
+        var keep_mask: Tensor = neg_mask.add_scalar(1.0)
+        var kept: Tensor = self.mul(keep_mask)
+        var replacement: Tensor = mask.mul_scalar(value)
+        var result: Tensor = kept.add(replacement)
+        return result
 
     def row(self, row: int) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_row(self.handle, row)

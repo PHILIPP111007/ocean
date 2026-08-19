@@ -1,0 +1,337 @@
+import <std/tensor/tensor.oc>
+cimport <std/tensor/autograd_runtime.h>
+
+
+class Parameter:
+    def __init__(self, data: Tensor[float32]) -> None:
+        self.data: Tensor[float32] = data
+        self.data.requires_grad_(True)
+
+    @staticmethod
+    def zeros(rows: int, cols: int, device: str) -> Parameter:
+        var tensor: Tensor[float32] = Tensor.zeros(rows, cols, device)
+        var parameter: Parameter = Parameter(tensor)
+        return parameter
+
+    @staticmethod
+    def uniform(rows: int, cols: int, scale: float64, device: str) -> Parameter:
+        var handle: ocean_tensor_handle_t = ocean_autograd_parameter_uniform(rows, cols, scale, device)
+        var tensor: Tensor[float32] = Tensor(handle)
+        var parameter: Parameter = Parameter(tensor)
+        return parameter
+
+    def tensor(self) -> Tensor[float32]:
+        self.data.requires_grad_(True)
+        return self.data
+
+    def grad(self) -> Tensor[float32]:
+        return self.data.grad()
+
+    def has_grad(self) -> bool:
+        return self.data.has_grad()
+
+    def zero_grad(self) -> None:
+        self.data.zero_grad()
+        return None
+
+    def to(self, device: str) -> None:
+        var moved: Tensor[float32] = self.data.to(device)
+        moved.requires_grad_(True)
+        self.data = moved
+        return None
+
+    def step(self, learning_rate: float64) -> None:
+        var handle: ocean_tensor_handle_t = self.data.raw_handle()
+        ocean_autograd_sgd_step(handle, learning_rate)
+        return None
+
+    def adamw_step(self, state_id: int, step: int, learning_rate: float64, beta1: float64, beta2: float64, epsilon: float64, weight_decay: float64) -> None:
+        var handle: ocean_tensor_handle_t = self.data.raw_handle()
+        ocean_autograd_adamw_step(state_id, step, handle, learning_rate, beta1, beta2, epsilon, weight_decay)
+        return None
+
+
+
+class Module:
+    def __init__(self) -> None:
+        self.training: bool = True
+
+    def train(self) -> None:
+        self.training = True
+        return None
+
+    def eval(self) -> None:
+        self.training = False
+        return None
+
+    def is_training(self) -> bool:
+        return self.training
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = []
+        return result
+
+    def to(self, device: str) -> None:
+        var parameters: list[Parameter] = self.parameters()
+        var index: int = 0
+
+        while index < len(parameters):
+            var parameter: Parameter = parameters[index]
+            parameter.to(device)
+            index = index + 1
+
+        return None
+
+
+def relu(input: &Tensor[float32]) -> Tensor[float32]:
+    var input_handle: ocean_tensor_handle_t = input.raw_handle()
+    var handle: ocean_tensor_handle_t = ocean_autograd_relu(input_handle)
+    var result: Tensor[float32] = Tensor(handle)
+    return result
+
+
+def mse_loss(prediction: &Tensor[float32], target: &Tensor[float32]) -> Tensor[float32]:
+    var prediction_handle: ocean_tensor_handle_t = prediction.raw_handle()
+    var target_handle: ocean_tensor_handle_t = target.raw_handle()
+    var handle: ocean_tensor_handle_t = ocean_autograd_mse_loss(prediction_handle, target_handle)
+    var result: Tensor[float32] = Tensor(handle)
+    return result
+
+
+class Linear(Module):
+    def __init__(self, in_features: int, out_features: int) -> None:
+        self.training: bool = True
+        self.in_features: int = in_features
+        self.out_features: int = out_features
+        var weight_tensor: Tensor[float32] = Tensor(ocean_autograd_parameter_uniform(out_features, in_features, 0.1, "cpu"))
+        var weight_parameter: Parameter = Parameter(weight_tensor)
+        self.weight: Parameter = weight_parameter
+
+        var bias_tensor: Tensor[float32] = Tensor.zeros(1, out_features, "cpu")
+        var bias_parameter: Parameter = Parameter(bias_tensor)
+        self.bias: Parameter = bias_parameter
+
+    def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
+        var weight: Tensor[float32] = self.weight.tensor()
+        var weight_t: Tensor[float32] = weight.transpose()
+        var output: Tensor[float32] = input.matmul(weight_t)
+        var bias: Tensor[float32] = self.bias.tensor()
+        var result: Tensor[float32] = output.add(bias)
+        return result
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.weight, self.bias]
+        return result
+
+
+class ReLU(Module):
+    def __init__(self) -> None:
+        self.training: bool = True
+
+    def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
+        return relu(input)
+
+
+class MSELoss(Module):
+    def __init__(self) -> None:
+        self.training: bool = True
+
+    def forward(self, prediction: &Tensor[float32], target: &Tensor[float32]) -> Tensor[float32]:
+        return mse_loss(prediction, target)
+
+
+class MultiHeadAttention(Module):
+    def __init__(self, d_model: int, n_heads: int) -> None:
+        self.training: bool = True
+        self.d_model: int = d_model
+        self.n_heads: int = n_heads
+        self.head_dim: int = d_model // n_heads
+
+        self.q_proj: Linear = Linear(d_model, d_model)
+        self.k_proj: Linear = Linear(d_model, d_model)
+        self.v_proj: Linear = Linear(d_model, d_model)
+        self.out_proj: Linear = Linear(d_model, d_model)
+
+    def forward(self, input: &Tensor[float32], causal_mask: &Tensor[float32]) -> Tensor[float32]:
+        var batch_size: int = input.shape(0)
+        var sequence_length: int = input.shape(1)
+
+        var q_linear: Tensor[float32] = self.q_proj.forward(input)
+        var k_linear: Tensor[float32] = self.k_proj.forward(input)
+        var v_linear: Tensor[float32] = self.v_proj.forward(input)
+
+        var q_reshaped: Tensor[float32] = q_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+        var k_reshaped: Tensor[float32] = k_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+        var v_reshaped: Tensor[float32] = v_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+
+        var q: Tensor[float32] = q_reshaped.permute([0, 2, 1, 3])
+        var k: Tensor[float32] = k_reshaped.permute([0, 2, 1, 3])
+        var v: Tensor[float32] = v_reshaped.permute([0, 2, 1, 3])
+
+        var k_t: Tensor[float32] = k.transpose(-2, -1)
+        var scores: Tensor[float32] = q.matmul(k_t)
+
+        var scale: float64 = sqrt(self.head_dim)
+        var scaled: Tensor[float32] = scores.div_scalar(scale)
+        var masked: Tensor[float32] = scaled.masked_fill(causal_mask, -1000000000.0)
+        var weights: Tensor[float32] = masked.softmax(-1)
+        var context: Tensor[float32] = weights.matmul(v)
+
+        var context_bthd: Tensor[float32] = context.permute([0, 2, 1, 3])
+        var merged: Tensor[float32] = context_bthd.reshape([batch_size, sequence_length, self.d_model])
+
+        var output: Tensor[float32] = self.out_proj.forward(merged)
+        return output
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.q_proj.weight, self.q_proj.bias, self.k_proj.weight, self.k_proj.bias, self.v_proj.weight, self.v_proj.bias, self.out_proj.weight, self.out_proj.bias]
+        return result
+
+    def q_weight_has_grad(self) -> bool:
+        return self.q_proj.weight.has_grad()
+
+    def k_weight_has_grad(self) -> bool:
+        return self.k_proj.weight.has_grad()
+
+    def v_weight_has_grad(self) -> bool:
+        return self.v_proj.weight.has_grad()
+
+    def out_weight_has_grad(self) -> bool:
+        return self.out_proj.weight.has_grad()
+
+
+class LayerNorm(Module):
+    def __init__(self, d_model: int, epsilon: float64) -> None:
+        self.training: bool = True
+        self.d_model: int = d_model
+        self.epsilon: float64 = epsilon
+
+        var gamma_tensor: Tensor[float32] = Tensor.zeros(1, d_model, "cpu")
+        ocean_tensor_fill(gamma_tensor.handle, 1.0)
+        var gamma_parameter: Parameter = Parameter(gamma_tensor)
+        self.gamma: Parameter = gamma_parameter
+
+        var beta_tensor: Tensor[float32] = Tensor.zeros(1, d_model, "cpu")
+        var beta_parameter: Parameter = Parameter(beta_tensor)
+        self.beta: Parameter = beta_parameter
+
+    def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
+        var normalized: Tensor[float32] = input.layer_norm(-1, self.epsilon)
+        var gamma: Tensor[float32] = self.gamma.tensor()
+        var scaled: Tensor[float32] = normalized.mul(gamma)
+        var beta: Tensor[float32] = self.beta.tensor()
+        var result: Tensor[float32] = scaled.add(beta)
+        return result
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.gamma, self.beta]
+        return result
+
+    def gamma_has_grad(self) -> bool:
+        return self.gamma.has_grad()
+
+    def beta_has_grad(self) -> bool:
+        return self.beta.has_grad()
+
+
+class TransformerBlock(Module):
+    def __init__(self, d_model: int, n_heads: int, d_ff: int) -> None:
+        self.training: bool = True
+        self.d_model: int = d_model
+        self.n_heads: int = n_heads
+        self.d_ff: int = d_ff
+
+        self.norm1: LayerNorm = LayerNorm(d_model, 0.00001)
+        self.attention: MultiHeadAttention = MultiHeadAttention(d_model, n_heads)
+        self.norm2: LayerNorm = LayerNorm(d_model, 0.00001)
+        self.ff1: Linear = Linear(d_model, d_ff)
+        self.ff2: Linear = Linear(d_ff, d_model)
+
+    def forward(self, input: &Tensor[float32], causal_mask: &Tensor[float32]) -> Tensor[float32]:
+        var normalized1: Tensor[float32] = self.norm1.forward(input)
+        var attention_output: Tensor[float32] = self.attention.forward(normalized1, causal_mask)
+        var residual1: Tensor[float32] = input.add(attention_output)
+
+        var normalized2: Tensor[float32] = self.norm2.forward(residual1)
+        var hidden: Tensor[float32] = self.ff1.forward(normalized2)
+        var activated: Tensor[float32] = hidden.relu()
+        var feed_forward: Tensor[float32] = self.ff2.forward(activated)
+        var output: Tensor[float32] = residual1.add(feed_forward)
+        return output
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.norm1.gamma, self.norm1.beta, self.attention.q_proj.weight, self.attention.q_proj.bias, self.attention.k_proj.weight, self.attention.k_proj.bias, self.attention.v_proj.weight, self.attention.v_proj.bias, self.attention.out_proj.weight, self.attention.out_proj.bias, self.norm2.gamma, self.norm2.beta, self.ff1.weight, self.ff1.bias, self.ff2.weight, self.ff2.bias]
+        return result
+
+    def norm1_gamma_has_grad(self) -> bool:
+        return self.norm1.gamma_has_grad()
+
+    def norm1_beta_has_grad(self) -> bool:
+        return self.norm1.beta_has_grad()
+
+    def attention_q_has_grad(self) -> bool:
+        return self.attention.q_weight_has_grad()
+
+    def attention_k_has_grad(self) -> bool:
+        return self.attention.k_weight_has_grad()
+
+    def attention_v_has_grad(self) -> bool:
+        return self.attention.v_weight_has_grad()
+
+    def attention_out_has_grad(self) -> bool:
+        return self.attention.out_weight_has_grad()
+
+    def norm2_gamma_has_grad(self) -> bool:
+        return self.norm2.gamma_has_grad()
+
+    def norm2_beta_has_grad(self) -> bool:
+        return self.norm2.beta_has_grad()
+
+    def ff1_weight_has_grad(self) -> bool:
+        return self.ff1.weight.has_grad()
+
+    def ff1_bias_has_grad(self) -> bool:
+        return self.ff1.bias.has_grad()
+
+    def ff2_weight_has_grad(self) -> bool:
+        return self.ff2.weight.has_grad()
+
+    def ff2_bias_has_grad(self) -> bool:
+        return self.ff2.bias.has_grad()
+
+class Embedding(Module):
+    def __init__(self, vocab_size: int, d_model: int) -> None:
+        self.training: bool = True
+        self.vocab_size: int = vocab_size
+        self.d_model: int = d_model
+
+        var weight_tensor: Tensor[float32] = Tensor(ocean_autograd_parameter_uniform(vocab_size, d_model, 0.1, "cpu"))
+        var weight_parameter: Parameter = Parameter(weight_tensor)
+        self.weight: Parameter = weight_parameter
+
+    def forward(self, input: &Tensor[int64]) -> Tensor[float32]:
+        var weight: Tensor[float32] = self.weight.tensor()
+        var weight_handle: ocean_tensor_handle_t = weight.raw_handle()
+        var input_handle: ocean_tensor_handle_t = input.raw_handle()
+        var handle: ocean_tensor_handle_t = ocean_autograd_embedding(weight_handle, input_handle)
+        var result: Tensor[float32] = Tensor(handle)
+        return result
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.weight]
+        return result
+
+    def weight_has_grad(self) -> bool:
+        return self.weight.has_grad()
+
+
+class CrossEntropyLoss(Module):
+    def __init__(self) -> None:
+        self.training: bool = True
+
+    def forward(self, logits: &Tensor[float32], targets: &Tensor[int64]) -> Tensor[float32]:
+        var logits_handle: ocean_tensor_handle_t = logits.raw_handle()
+        var targets_handle: ocean_tensor_handle_t = targets.raw_handle()
+        var handle: ocean_tensor_handle_t = ocean_autograd_cross_entropy(logits_handle, targets_handle)
+        var result: Tensor[float32] = Tensor(handle)
+        return result

@@ -1,0 +1,59 @@
+import <std/tensor/tensor.oc>
+import <std/ml/nn.oc>
+import <std/ml/optim.oc>
+
+
+def main() -> int:
+    var input_cpu: Tensor[float32] = Tensor.zeros(4, 1, "cpu")
+    var target_cpu: Tensor[float32] = Tensor.zeros(4, 1, "cpu")
+
+    input_cpu[0, 0] = 0.0
+    input_cpu[1, 0] = 1.0
+    input_cpu[2, 0] = 2.0
+    input_cpu[3, 0] = 3.0
+
+    target_cpu[0, 0] = 1.0
+    target_cpu[1, 0] = 3.0
+    target_cpu[2, 0] = 5.0
+    target_cpu[3, 0] = 7.0
+
+    var input: Tensor[float32] = input_cpu.to("gpu")
+    var target: Tensor[float32] = target_cpu.to("gpu")
+
+    var model: Linear = Linear(1, 1)
+    model.to("gpu")
+
+    var parameters: list[Parameter] = model.parameters()
+    var optimizer: AdamW = AdamW(parameters, 0.05, 0.9, 0.999, 0.00000001, 0.01)
+    var criterion: MSELoss = MSELoss()
+
+    var initial_prediction: Tensor[float32] = model.forward(input)
+    var initial_loss_tensor: Tensor[float32] = criterion.forward(initial_prediction, target)
+    var initial_loss_cpu: Tensor[float32] = initial_loss_tensor.to("cpu")
+    var initial_loss: float64 = initial_loss_cpu.item()
+
+    var step: int = 0
+
+    while step < 220:
+        optimizer.zero_grad()
+        var prediction: Tensor[float32] = model.forward(input)
+        var loss: Tensor[float32] = criterion.forward(prediction, target)
+        loss.backward()
+        optimizer.step()
+        step = step + 1
+
+    var final_prediction: Tensor[float32] = model.forward(input)
+    var final_loss_tensor: Tensor[float32] = criterion.forward(final_prediction, target)
+    var final_loss_cpu: Tensor[float32] = final_loss_tensor.to("cpu")
+    var final_loss: float64 = final_loss_cpu.item()
+
+    var model_parameters: list[Parameter] = model.parameters()
+    var first_parameter: Parameter = model_parameters[0]
+    var first_weight: Tensor[float32] = first_parameter.tensor()
+
+    print("model parameter device =", first_weight.device())
+    print("prediction device =", final_prediction.device())
+    print("initial loss =", initial_loss)
+    print("final loss =", final_loss)
+    print("[ok] Ocean GPU training v0.1")
+    return 0

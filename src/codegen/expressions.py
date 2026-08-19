@@ -191,6 +191,11 @@ class ExpressionsMixin:
             # local binding. Preserve the public Tensor method ABI there.
             resolved_type, resolved_object = self.resolve_object_path(object_name)
             if not var_info and self.is_device_tensor_type(resolved_type or ""):
+                tensor_intrinsic = self._device_tensor_instance_call(
+                    ast, resolved_object, resolved_type or ""
+                )
+                if tensor_intrinsic is not None:
+                    return tensor_intrinsic
                 arg_strings = [self.generate_expression(arg) for arg in args]
                 full_args = resolved_object
                 if arg_strings:
@@ -201,6 +206,11 @@ class ExpressionsMixin:
                 obj_type = var_info.get("py_type", "")
 
                 if self.is_device_tensor_type(obj_type):
+                    tensor_intrinsic = self._device_tensor_instance_call(
+                        ast, object_name, obj_type
+                    )
+                    if tensor_intrinsic is not None:
+                        return tensor_intrinsic
                     arg_strings = [self.generate_expression(arg) for arg in args]
                     full_args = object_name
                     if arg_strings:
@@ -413,7 +423,31 @@ class ExpressionsMixin:
         target_type: str = "",
         target_name: str = "field",
     ) -> str:
-        """Генерирует выражение из AST для конструктора с подстановкой параметров"""
+        """Генерирует выражение из AST для конструктора с подстановкой параметров."""
+
+        if ast is None:
+            return "NULL"
+
+        # Typed IR wraps expression mappings in TypedExpression-like objects.
+        # Constructor lowering historically expected only raw dictionaries,
+        # which allowed repr(TypedExpression(...)) to leak directly into C.
+        # Normalize wrappers here so every constructor expression path shares
+        # one representation.
+        if not isinstance(ast, Mapping):
+            raw = getattr(ast, "raw", None)
+            fields = getattr(ast, "fields", None)
+
+            if isinstance(raw, Mapping):
+                ast = raw
+            elif isinstance(fields, Mapping):
+                ast = fields
+            else:
+                if isinstance(ast, bool):
+                    return "true" if ast else "false"
+                if str(ast) == "None":
+                    return "NULL"
+                return str(ast)
+
         if not ast:
             return ""
 
@@ -428,8 +462,11 @@ class ExpressionsMixin:
             logger.debug(f"Found literal: {value} (type: {data_type})")
             if data_type == "str":
                 return self._c_string_literal(value)
-            else:
-                return str(value)
+            if data_type == "bool" or isinstance(value, bool) or value in {"True", "False"}:
+                return "true" if value is True or value == "True" else "false"
+            if value is None or value == "None":
+                return "NULL"
+            return str(value)
 
         elif node_type == "variable":
             # Поддерживаем оба формата: 'value' и 'name'
@@ -450,6 +487,32 @@ class ExpressionsMixin:
                 for argument in ast.get("arguments", [])
             ]
             return f"create_{class_name}({', '.join(arguments)})"
+
+        elif node_type == "function_call":
+            function_name = ast.get("function", "")
+            if function_name.startswith("@"):
+                function_name = function_name[1:]
+            arguments = [
+                self._generate_expression_from_ast_for_init(
+                    argument,
+                    param_names,
+                )
+                for argument in ast.get("arguments", [])
+            ]
+            return f"{function_name}({', '.join(arguments)})"
+
+        elif node_type == "c_call":
+            function_name = ast.get("function", "") or ast.get("name", "")
+            if function_name.startswith("@"):
+                function_name = function_name[1:]
+            arguments = [
+                self._generate_expression_from_ast_for_init(
+                    argument,
+                    param_names,
+                )
+                for argument in ast.get("arguments", [])
+            ]
+            return f"{function_name}({', '.join(arguments)})"
 
         elif node_type == "method_call":
             raise RuntimeError(

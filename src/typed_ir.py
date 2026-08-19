@@ -449,29 +449,35 @@ class TypedIRBuilder:
                 object_type.startswith("Tensor[")
                 or object_type == "Tensor"
             ) and ast.get("method") in {
-                "row", "column", "slice", "transpose_view", "copy", "transpose", "matmul",
-                "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
-                "mul_scalar", "div_scalar", "reshape", "sum", "fill", "to",
+                "row", "column", "slice", "transpose_view", "copy",
+                "transpose", "transpose_dims", "matmul",
+                "add", "sub", "mul", "div",
+                "add_scalar", "sub_scalar", "mul_scalar", "div_scalar",
+                "reshape", "sum", "sum_dim", "mean_dim",
+                "exp", "log", "sqrt", "pow", "softmax", "layer_norm", "masked_fill", "permute",
+                "relu", "to", "contiguous", "grad",
                 "shape", "ndim", "size", "device", "get", "set",
-                "mean", "max", "min", "dtype", "is_contiguous", "contiguous", "item",
+                "mean", "max", "min", "dtype", "is_contiguous", "item",
+                "requires_grad", "has_grad",
+                "requires_grad_", "zero_grad", "backward", "fill", "release",
                 }:
-                if ast.get("method") == "sum":
+                method = ast.get("method")
+                if method == "sum":
                     return IRType.parse("float64")
-                if ast.get("method") in {"mean", "max", "min", "item"}:
+                if method in {"mean", "max", "min", "item", "get"}:
                     return IRType.parse("float64")
-                if ast.get("method") in {"shape", "ndim"}:
+                if method in {"shape", "ndim"}:
                     return IRType.parse("int")
-                if ast.get("method") == "size":
+                if method == "size":
                     return IRType.parse("size_t")
-                if ast.get("method") == "device":
+                if method in {"device", "dtype"}:
                     return IRType.parse("str")
-                if ast.get("method") == "dtype":
-                    return IRType.parse("str")
-                if ast.get("method") == "is_contiguous":
+                if method in {"is_contiguous", "requires_grad", "has_grad"}:
                     return IRType.parse("bool")
-                if ast.get("method") == "get":
-                    return IRType.parse("float64")
-                if ast.get("method") == "set":
+                if method in {
+                    "set", "requires_grad_", "zero_grad",
+                    "backward", "fill", "release"
+                }:
                     return IRType.parse("None")
                 return IRType.parse(object_type or "Tensor[float32]")
             return IRType.parse("any")

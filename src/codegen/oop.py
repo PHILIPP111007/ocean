@@ -252,12 +252,47 @@ class OopMixin:
     def _generate_init_logic(
         self, class_name: str, init_scope: Dict, param_names: List[str]
     ):
-        """Initialize fields. Object memory is already zeroed by calloc."""
         self._constructing_class = class_name
+        constructor_locals = []
         try:
             for node in (init_scope or {}).get("graph", []):
-                if node.get("node") == "attribute_assignment":
+                node_kind = node.get("node")
+
+                if node_kind == "declaration":
+                    var_name = node.get("var_name", "")
+                    var_type = node.get("var_type", "")
+                    expression_ast = node.get("expression_ast") or {}
+                    if not var_name or not var_type:
+                        continue
+                    value_expr = self._generate_expression_from_ast_for_init(
+                        expression_ast, param_names, target_type=var_type, target_name=var_name
+                    )
+                    c_type = self.map_type_to_c(var_type)
+                    if value_expr:
+                        self.add_line(f"{c_type} {var_name} = {value_expr};")
+                    elif c_type.endswith("*"):
+                        self.add_line(f"{c_type} {var_name} = NULL;")
+                    elif c_type == "bool":
+                        self.add_line(f"{c_type} {var_name} = false;")
+                    else:
+                        self.add_line(f"{c_type} {var_name} = 0;")
+                    constructor_locals.append((var_name, var_type))
+                    continue
+
+                if node_kind == "attribute_assignment":
                     self._process_attribute_assignment_in_init(node, param_names)
+
+            for var_name, var_type in reversed(constructor_locals):
+                kind = self.memory_kind_for_type(var_type)
+                if kind == self.MEMORY_ARC:
+                    self.add_line(f"ocean_release({var_name});")
+                elif kind == self.MEMORY_STRING:
+                    self.add_line(f"free({var_name});")
+                elif kind == self.MEMORY_OWNED:
+                    self.add_line(self._owned_free_call(var_name, var_type))
+                elif var_type == "ocean_tensor_handle_t":
+                    self.add_line(f"ocean_tensor_release({var_name});")
+
         finally:
             self._constructing_class = None
 
@@ -312,6 +347,44 @@ class OopMixin:
         origin_class = method_info.origin
 
         if not origin_class:
+            return
+
+        # GPU Module.to inherited specialization v0.1
+        #
+        # Ordinary inherited methods call the parent implementation. That is
+        # not sufficient for Module.to(): Module_to() would statically call
+        # Module_parameters(), losing an overriding parameters() method on the
+        # concrete model. Generate a concrete-class implementation instead.
+        if method_name == "to" and origin_class == "Module":
+            c_return_type = self.map_type_to_c(return_type)
+            self.add_line(
+                f"{c_return_type} {class_name}_to("
+                f"{class_name}* self, char* device) {{"
+            )
+            self.indent_level += 1
+
+            list_type = "list[Parameter]"
+            self.generate_list_struct(list_type)
+            list_c_type = self.map_type_to_c(list_type)
+
+            self.add_line(
+                f"{list_c_type} parameters = "
+                f"{class_name}_parameters(self);"
+            )
+            self.add_line("int index = 0;")
+            self.add_line("while (index < parameters->size) {")
+            self.indent_level += 1
+            self.add_line(
+                "Parameter_to(parameters->data[index], device);"
+            )
+            self.add_line("index += 1;")
+            self.indent_level -= 1
+            self.add_line("}")
+            self.add_line("ocean_release(parameters);")
+
+            self.indent_level -= 1
+            self.add_line("}")
+            self.add_empty_line()
             return
 
         # Генерируем сигнатуру

@@ -1,0 +1,143 @@
+import <std/tensor/tensor.oc>
+import <std/ml/nn.oc>
+import <std/ml/optim.oc>
+
+
+class TinyGPT(Module):
+    def __init__(self, vocab_size: int, context_length: int, d_model: int, n_heads: int, d_ff: int) -> None:
+        self.training: bool = True
+        self.vocab_size: int = vocab_size
+        self.context_length: int = context_length
+        self.d_model: int = d_model
+
+        self.token_embedding: Embedding = Embedding(vocab_size, d_model)
+        self.position_embedding: Embedding = Embedding(context_length, d_model)
+        self.block1: TransformerBlock = TransformerBlock(d_model, n_heads, d_ff)
+        self.block2: TransformerBlock = TransformerBlock(d_model, n_heads, d_ff)
+        self.final_norm: LayerNorm = LayerNorm(d_model, 0.00001)
+        self.lm_head: Linear = Linear(d_model, vocab_size)
+
+    def forward(self, tokens: &Tensor[int64], positions: &Tensor[int64], causal_mask: &Tensor[float32]) -> Tensor[float32]:
+        var token_hidden: Tensor[float32] = self.token_embedding.forward(tokens)
+        var position_hidden: Tensor[float32] = self.position_embedding.forward(positions)
+        var hidden0: Tensor[float32] = token_hidden.add(position_hidden)
+        var hidden1: Tensor[float32] = self.block1.forward(hidden0, causal_mask)
+        var hidden2: Tensor[float32] = self.block2.forward(hidden1, causal_mask)
+        var normalized: Tensor[float32] = self.final_norm.forward(hidden2)
+        var logits: Tensor[float32] = self.lm_head.forward(normalized)
+        return logits
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.token_embedding.weight, self.position_embedding.weight, self.block1.norm1.gamma, self.block1.norm1.beta, self.block1.attention.q_proj.weight, self.block1.attention.q_proj.bias, self.block1.attention.k_proj.weight, self.block1.attention.k_proj.bias, self.block1.attention.v_proj.weight, self.block1.attention.v_proj.bias, self.block1.attention.out_proj.weight, self.block1.attention.out_proj.bias, self.block1.norm2.gamma, self.block1.norm2.beta, self.block1.ff1.weight, self.block1.ff1.bias, self.block1.ff2.weight, self.block1.ff2.bias, self.block2.norm1.gamma, self.block2.norm1.beta, self.block2.attention.q_proj.weight, self.block2.attention.q_proj.bias, self.block2.attention.k_proj.weight, self.block2.attention.k_proj.bias, self.block2.attention.v_proj.weight, self.block2.attention.v_proj.bias, self.block2.attention.out_proj.weight, self.block2.attention.out_proj.bias, self.block2.norm2.gamma, self.block2.norm2.beta, self.block2.ff1.weight, self.block2.ff1.bias, self.block2.ff2.weight, self.block2.ff2.bias, self.final_norm.gamma, self.final_norm.beta, self.lm_head.weight, self.lm_head.bias]
+        return result
+
+    def token_embedding_has_grad(self) -> bool:
+        return self.token_embedding.weight.has_grad()
+
+    def position_embedding_has_grad(self) -> bool:
+        return self.position_embedding.weight.has_grad()
+
+    def lm_head_has_grad(self) -> bool:
+        return self.lm_head.weight.has_grad()
+
+
+def main() -> int:
+    var tokens: Tensor[int64] = Tensor.zeros(1, 7, "cpu")
+    var targets: Tensor[int64] = Tensor.zeros(1, 7, "cpu")
+    var positions: Tensor[int64] = Tensor.zeros(1, 7, "cpu")
+    var mask: Tensor[float32] = Tensor.zeros(7, 7, "cpu")
+
+    tokens[0, 0] = 0
+    tokens[0, 1] = 1
+    tokens[0, 2] = 2
+    tokens[0, 3] = 3
+    tokens[0, 4] = 4
+    tokens[0, 5] = 5
+    tokens[0, 6] = 6
+
+    targets[0, 0] = 1
+    targets[0, 1] = 2
+    targets[0, 2] = 3
+    targets[0, 3] = 4
+    targets[0, 4] = 5
+    targets[0, 5] = 6
+    targets[0, 6] = 7
+
+    positions[0, 0] = 0
+    positions[0, 1] = 1
+    positions[0, 2] = 2
+    positions[0, 3] = 3
+    positions[0, 4] = 4
+    positions[0, 5] = 5
+    positions[0, 6] = 6
+
+    mask[0, 1] = 1.0
+    mask[0, 2] = 1.0
+    mask[0, 3] = 1.0
+    mask[0, 4] = 1.0
+    mask[0, 5] = 1.0
+    mask[0, 6] = 1.0
+    mask[1, 2] = 1.0
+    mask[1, 3] = 1.0
+    mask[1, 4] = 1.0
+    mask[1, 5] = 1.0
+    mask[1, 6] = 1.0
+    mask[2, 3] = 1.0
+    mask[2, 4] = 1.0
+    mask[2, 5] = 1.0
+    mask[2, 6] = 1.0
+    mask[3, 4] = 1.0
+    mask[3, 5] = 1.0
+    mask[3, 6] = 1.0
+    mask[4, 5] = 1.0
+    mask[4, 6] = 1.0
+    mask[5, 6] = 1.0
+
+    var model: TinyGPT = TinyGPT(8, 7, 16, 4, 64)
+    var model_parameters: list[Parameter] = model.parameters()
+    var optimizer: AdamW = AdamW(model_parameters, 0.01, 0.9, 0.999, 0.00000001, 0.01)
+    var criterion: CrossEntropyLoss = CrossEntropyLoss()
+
+    var initial_logits: Tensor[float32] = model.forward(tokens, positions, mask)
+    var initial_loss_tensor: Tensor[float32] = criterion.forward(initial_logits, targets)
+    var initial_loss: float64 = initial_loss_tensor.item()
+
+    var step: int = 0
+
+    while step < 240:
+        optimizer.zero_grad()
+
+        var logits: Tensor[float32] = model.forward(tokens, positions, mask)
+        var loss: Tensor[float32] = criterion.forward(logits, targets)
+
+        loss.backward()
+        optimizer.step()
+
+        step = step + 1
+
+    var final_logits: Tensor[float32] = model.forward(tokens, positions, mask)
+    var final_loss_tensor: Tensor[float32] = criterion.forward(final_logits, targets)
+    var final_loss_value: float64 = final_loss_tensor.item()
+
+    var last_slice: Tensor[float32] = final_logits.slice(1, 6, 7, 1)
+    var last_logits: Tensor[float32] = last_slice.reshape([1, 8])
+
+    var best_token: int = 0
+    var best_score: float64 = last_logits.get(0, 0)
+    var token: int = 1
+
+    while token < 8:
+        var score: float64 = last_logits.get(0, token)
+        if score > best_score:
+            best_score = score
+            best_token = token
+        token = token + 1
+
+    print("initial loss =", initial_loss)
+    print("final loss =", final_loss_value)
+    print("predicted next token =", best_token)
+    print("token embedding grad =", model.token_embedding_has_grad())
+    print("position embedding grad =", model.position_embedding_has_grad())
+    print("lm head grad =", model.lm_head_has_grad())
+    print("[ok] Ocean TinyGPT AdamW v0.1")
+    return 0

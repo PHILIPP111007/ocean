@@ -1,0 +1,52 @@
+import <std/tensor/tensor.oc>
+import <std/ml/nn.oc>
+
+
+def main() -> int:
+    var x: Tensor[float32] = Tensor.zeros(2, 3, 8, "cpu")
+    var target: Tensor[float32] = Tensor.zeros(2, 3, 8, "cpu")
+    var mask: Tensor[float32] = Tensor.zeros(3, 3, "cpu")
+
+    x[0, 0, 0] = 0.10
+    x[0, 0, 1] = 0.20
+    x[0, 1, 2] = -0.15
+    x[0, 2, 3] = 0.35
+    x[1, 0, 4] = -0.25
+    x[1, 1, 5] = 0.40
+    x[1, 2, 6] = 0.30
+    x[1, 2, 7] = -0.10
+
+    mask[0, 1] = 1.0
+    mask[0, 2] = 1.0
+    mask[1, 2] = 1.0
+
+    x.requires_grad_(True)
+
+    var block: TransformerBlock = TransformerBlock(8, 2, 16)
+    var output: Tensor[float32] = block.forward(x, mask)
+
+    var output_batch: int = output.shape(0)
+    var output_time: int = output.shape(1)
+    var output_features: int = output.shape(2)
+    print("output shape =", output_batch, output_time, output_features)
+
+    var criterion: MSELoss = MSELoss()
+    var loss: Tensor[float32] = criterion.forward(output, target)
+    loss.backward()
+
+    print("loss =", loss.item())
+    print("x has grad =", x.has_grad())
+    print("norm1 gamma grad =", block.norm1_gamma_has_grad())
+    print("norm1 beta grad =", block.norm1_beta_has_grad())
+    print("attention q grad =", block.attention_q_has_grad())
+    print("attention k grad =", block.attention_k_has_grad())
+    print("attention v grad =", block.attention_v_has_grad())
+    print("attention out grad =", block.attention_out_has_grad())
+    print("norm2 gamma grad =", block.norm2_gamma_has_grad())
+    print("norm2 beta grad =", block.norm2_beta_has_grad())
+    print("ff1 weight grad =", block.ff1_weight_has_grad())
+    print("ff1 bias grad =", block.ff1_bias_has_grad())
+    print("ff2 weight grad =", block.ff2_weight_has_grad())
+    print("ff2 bias grad =", block.ff2_bias_has_grad())
+    print("[ok] Ocean TransformerBlock v0.1")
+    return 0

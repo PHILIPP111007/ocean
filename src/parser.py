@@ -5244,11 +5244,21 @@ class Parser:
         # A receiver may be a field path such as ``self.hidden``.  The
         # complete type is resolved by the backend; parsing only needs to
         # preserve the path so the call is not mistaken for a free function.
-        obj_symbol, found_scope = (
-            self.find_symbol_recursive(scope, obj_name)
-            if "." not in obj_name
-            else (None, None)
-        )
+        if "." not in obj_name:
+            lookup_result = self.find_symbol_recursive(scope, obj_name)
+
+            if lookup_result is None:
+                obj_symbol, found_scope = None, None
+            elif (
+                isinstance(lookup_result, tuple)
+                and len(lookup_result) == 2
+            ):
+                obj_symbol, found_scope = lookup_result
+            else:
+                obj_symbol = lookup_result
+                found_scope = scope
+        else:
+            obj_symbol, found_scope = None, None
         if not obj_symbol and "." not in obj_name:
             logger.debug(f"Error: Object '{obj_name}' not found")
             return False
@@ -5287,11 +5297,18 @@ class Parser:
 
         if obj_type == "Tensor" or obj_type.startswith("Tensor["):
             if method_name in {
-                "add", "sub", "mul", "div", "add_scalar", "sub_scalar",
-                "mul_scalar", "div_scalar", "fill", "sum", "copy",
-                "transpose", "row", "column", "slice", "reshape", "matmul", "to",
+                "add", "sub", "mul", "div",
+                "add_scalar", "sub_scalar", "mul_scalar", "div_scalar",
+                "fill", "sum", "sum_dim", "mean_dim", "copy",
+                "transpose", "transpose_dims", "row", "column", "slice",
+                "reshape", "matmul", "to",
+                "exp", "log", "sqrt", "pow", "softmax", "layer_norm", "masked_fill", "permute",
+                "relu",
                 "shape", "ndim", "size", "device", "get", "set", "release",
-                "mean", "max", "min", "dtype", "is_contiguous", "contiguous", "item",
+                "mean", "max", "min", "dtype",
+                "is_contiguous", "contiguous", "item",
+                "requires_grad", "requires_grad_", "has_grad",
+                "grad", "zero_grad", "backward",
             }:
                 method_found = True
 

@@ -49,6 +49,21 @@ class CallsMixin:
             if info and (info.get("is_deleted") or info.get("is_moved")):
                 raise RuntimeError(f"use of dead value '{object_name}'")
 
+        # Tensor has compiler intrinsics whose arguments cannot be lowered as
+        # ordinary Ocean values first. For example reshape([1, 2, 3, 4])
+        # must become a C size_t[] shape, not a temporary list object.
+        if self.is_device_tensor_type(obj_type):
+            tensor_intrinsic = self._device_tensor_instance_call(
+                node,
+                object_expression,
+                obj_type,
+            )
+            if tensor_intrinsic is not None:
+                if is_standalone:
+                    self.add_line(f"(void){tensor_intrinsic};")
+                    return None
+                return tensor_intrinsic
+
         arg_strings = [
             self.generate_expression(arg) if isinstance(arg, Mapping) else str(arg)
             for arg in args
@@ -315,11 +330,18 @@ class CallsMixin:
         arg_strings = []
         for arg in args:
             if isinstance(arg, Mapping):
-                # Если аргумент - AST, генерируем выражение
-                arg_strings.append(self.generate_expression(arg))
+                arg_type = arg.get("type", "")
+                arg_value = arg.get("value", arg.get("name", ""))
+
+                if (
+                    arg_type in {"variable", "literal"}
+                    and str(arg_value) == "NULL"
+                ):
+                    arg_strings.append("NULL")
+                else:
+                    arg_strings.append(self.generate_expression(arg))
             else:
-                # Если это простая строка
-                arg_strings.append(str(arg))
+                arg_strings.append("NULL" if str(arg) == "NULL" else str(arg))
 
         args_str = ", ".join(arg_strings)
 
@@ -345,13 +367,15 @@ class CallsMixin:
             "uint8_t", "uint16_t", "uint32_t",
         }:
             return "%u", f"(unsigned int)({expression})"
+        if py_type == "int":
+            return "%d", expression
         if py_type in {
-            "int", "int8", "int16", "int32",
+            "int8", "int16", "int32",
             "int8_t", "int16_t", "int32_t",
         }:
             return "%d", f"(int)({expression})"
         if py_type in {"float", "float16", "float32", "float64", "double"}:
-            return "%f", f"(double)({expression})"
+            return "%f", expression
 
         return None, expression
 

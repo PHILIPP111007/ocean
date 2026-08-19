@@ -132,6 +132,70 @@ class TensorCodegenMixin:
 
         return None
 
+
+    def _device_tensor_instance_call(self, ast: Dict, object_name: str, obj_type: str):
+        if not self.is_device_tensor_type(obj_type):
+            return None
+
+        method = ast.get("method", "")
+        args = ast.get("arguments", []) or []
+        gen = getattr(self, "device_tensor_argument_generator", None) or self.generate_expression
+
+        if method == "reshape" and len(args) == 1:
+            shape_ast = args[0]
+            if shape_ast.get("type") != "list_literal":
+                raise RuntimeError("Tensor.reshape(shape) expects a list literal")
+            dims = shape_ast.get("items", []) or []
+            if not dims:
+                raise RuntimeError("Tensor.reshape(shape) requires rank >= 1")
+            suffix = self.temp_var_counter
+            self.temp_var_counter += 1
+            name = f"ocean_device_tensor_reshape_shape_{suffix}"
+            vals = ", ".join(f"(size_t)({gen(item)})" for item in dims)
+            self.add_line(f"size_t {name}[{len(dims)}] = {{ {vals} }};")
+            return (
+                f"create_Tensor(ocean_autograd_reshape("
+                f"{object_name}->handle, {name}, {len(dims)}))"
+            )
+
+        if method == "transpose" and len(args) == 2:
+            d0 = gen(args[0])
+            d1 = gen(args[1])
+            return (
+                f"create_Tensor(ocean_autograd_transpose_dims("
+                f"{object_name}->handle, {d0}, {d1}))"
+            )
+
+
+        if method == "permute" and len(args) == 1:
+            axes_ast = args[0]
+            if axes_ast.get("type") != "list_literal":
+                raise RuntimeError(
+                    "Tensor.permute(axes) expects a list literal"
+                )
+            axes = axes_ast.get("items", []) or []
+            if not axes:
+                raise RuntimeError(
+                    "Tensor.permute(axes) requires rank >= 1"
+                )
+
+            suffix = self.temp_var_counter
+            self.temp_var_counter += 1
+            name = f"ocean_device_tensor_permute_axes_{suffix}"
+            values = ", ".join(
+                f"(int)({gen(axis)})"
+                for axis in axes
+            )
+            self.add_line(
+                f"int {name}[{len(axes)}] = {{ {values} }};"
+            )
+            return (
+                f"create_Tensor(ocean_autograd_permute("
+                f"{object_name}->handle, {name}, {len(axes)}))"
+            )
+
+        return None
+
     def _tensor_list_types(self, source_type: str) -> List[str]:
         types: List[str] = []
         current = source_type
