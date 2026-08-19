@@ -105,4 +105,18 @@ ocean_tensor_handle_t ocean_autograd_layer_norm(
     double epsilon
 );
 
+/* AdamW v0.1 */
+int ocean_autograd_adamw_create(void);
+int ocean_autograd_adamw_begin_step(int state_id);
+void ocean_autograd_adamw_step(
+    int state_id,
+    int step,
+    ocean_tensor_handle_t tensor,
+    double learning_rate,
+    double beta1,
+    double beta2,
+    double epsilon,
+    double weight_decay
+);
+
 #endif

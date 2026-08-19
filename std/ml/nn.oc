@@ -39,6 +39,12 @@ class Parameter:
         ocean_autograd_sgd_step(handle, learning_rate)
         return None
 
+    def adamw_step(self, state_id: int, step: int, learning_rate: float64, beta1: float64, beta2: float64, epsilon: float64, weight_decay: float64) -> None:
+        var handle: ocean_tensor_handle_t = self.data.raw_handle()
+        ocean_autograd_adamw_step(state_id, step, handle, learning_rate, beta1, beta2, epsilon, weight_decay)
+        return None
+
+
 
 class Module:
     def __init__(self) -> None:

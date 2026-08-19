@@ -1,0 +1,49 @@
+import <std/tensor/tensor.oc>
+import <std/ml/nn.oc>
+import <std/ml/optim.oc>
+
+
+def main() -> int:
+    var input: Tensor[float32] = Tensor.zeros(4, 1, "cpu")
+    var target: Tensor[float32] = Tensor.zeros(4, 1, "cpu")
+
+    input[0, 0] = 0.0
+    input[1, 0] = 1.0
+    input[2, 0] = 2.0
+    input[3, 0] = 3.0
+
+    target[0, 0] = 1.0
+    target[1, 0] = 3.0
+    target[2, 0] = 5.0
+    target[3, 0] = 7.0
+
+    var model: Linear = Linear(1, 1)
+    var parameters: list[Parameter] = model.parameters()
+    var optimizer: AdamW = AdamW(parameters, 0.05, 0.9, 0.999, 0.00000001, 0.01)
+    var criterion: MSELoss = MSELoss()
+
+    var initial_prediction: Tensor[float32] = model.forward(input)
+    var initial_loss_tensor: Tensor[float32] = criterion.forward(initial_prediction, target)
+    var initial_loss: float64 = initial_loss_tensor.item()
+
+    var step: int = 0
+
+    while step < 220:
+        optimizer.zero_grad()
+
+        var prediction: Tensor[float32] = model.forward(input)
+        var loss: Tensor[float32] = criterion.forward(prediction, target)
+
+        loss.backward()
+        optimizer.step()
+
+        step = step + 1
+
+    var final_prediction: Tensor[float32] = model.forward(input)
+    var final_loss_tensor: Tensor[float32] = criterion.forward(final_prediction, target)
+    var final_loss: float64 = final_loss_tensor.item()
+
+    print("initial loss =", initial_loss)
+    print("final loss =", final_loss)
+    print("[ok] Ocean AdamW v0.1")
+    return 0
