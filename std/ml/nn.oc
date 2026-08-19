@@ -175,3 +175,103 @@ class MultiHeadAttention(Module):
 
     def out_weight_has_grad(self) -> bool:
         return self.out_proj.weight.has_grad()
+
+
+class LayerNorm(Module):
+    def __init__(self, d_model: int, epsilon: float64) -> None:
+        self.training: bool = True
+        self.d_model: int = d_model
+        self.epsilon: float64 = epsilon
+
+        var gamma_tensor: Tensor[float32] = Tensor.zeros(1, d_model, "cpu")
+        ocean_tensor_fill(gamma_tensor.handle, 1.0)
+        var gamma_parameter: Parameter = Parameter(gamma_tensor)
+        self.gamma: Parameter = gamma_parameter
+
+        var beta_tensor: Tensor[float32] = Tensor.zeros(1, d_model, "cpu")
+        var beta_parameter: Parameter = Parameter(beta_tensor)
+        self.beta: Parameter = beta_parameter
+
+    def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
+        var normalized: Tensor[float32] = input.layer_norm(-1, self.epsilon)
+        var gamma: Tensor[float32] = self.gamma.tensor()
+        var scaled: Tensor[float32] = normalized.mul(gamma)
+        var beta: Tensor[float32] = self.beta.tensor()
+        var result: Tensor[float32] = scaled.add(beta)
+        return result
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.gamma, self.beta]
+        return result
+
+    def gamma_has_grad(self) -> bool:
+        return self.gamma.has_grad()
+
+    def beta_has_grad(self) -> bool:
+        return self.beta.has_grad()
+
+
+class TransformerBlock(Module):
+    def __init__(self, d_model: int, n_heads: int, d_ff: int) -> None:
+        self.training: bool = True
+        self.d_model: int = d_model
+        self.n_heads: int = n_heads
+        self.d_ff: int = d_ff
+
+        self.norm1: LayerNorm = LayerNorm(d_model, 0.00001)
+        self.attention: MultiHeadAttention = MultiHeadAttention(d_model, n_heads)
+        self.norm2: LayerNorm = LayerNorm(d_model, 0.00001)
+        self.ff1: Linear = Linear(d_model, d_ff)
+        self.ff2: Linear = Linear(d_ff, d_model)
+
+    def forward(self, input: &Tensor[float32], causal_mask: &Tensor[float32]) -> Tensor[float32]:
+        var normalized1: Tensor[float32] = self.norm1.forward(input)
+        var attention_output: Tensor[float32] = self.attention.forward(normalized1, causal_mask)
+        var residual1: Tensor[float32] = input.add(attention_output)
+
+        var normalized2: Tensor[float32] = self.norm2.forward(residual1)
+        var hidden: Tensor[float32] = self.ff1.forward(normalized2)
+        var activated: Tensor[float32] = hidden.relu()
+        var feed_forward: Tensor[float32] = self.ff2.forward(activated)
+        var output: Tensor[float32] = residual1.add(feed_forward)
+        return output
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.norm1.gamma, self.norm1.beta, self.attention.q_proj.weight, self.attention.q_proj.bias, self.attention.k_proj.weight, self.attention.k_proj.bias, self.attention.v_proj.weight, self.attention.v_proj.bias, self.attention.out_proj.weight, self.attention.out_proj.bias, self.norm2.gamma, self.norm2.beta, self.ff1.weight, self.ff1.bias, self.ff2.weight, self.ff2.bias]
+        return result
+
+    def norm1_gamma_has_grad(self) -> bool:
+        return self.norm1.gamma_has_grad()
+
+    def norm1_beta_has_grad(self) -> bool:
+        return self.norm1.beta_has_grad()
+
+    def attention_q_has_grad(self) -> bool:
+        return self.attention.q_weight_has_grad()
+
+    def attention_k_has_grad(self) -> bool:
+        return self.attention.k_weight_has_grad()
+
+    def attention_v_has_grad(self) -> bool:
+        return self.attention.v_weight_has_grad()
+
+    def attention_out_has_grad(self) -> bool:
+        return self.attention.out_weight_has_grad()
+
+    def norm2_gamma_has_grad(self) -> bool:
+        return self.norm2.gamma_has_grad()
+
+    def norm2_beta_has_grad(self) -> bool:
+        return self.norm2.beta_has_grad()
+
+    def ff1_weight_has_grad(self) -> bool:
+        return self.ff1.weight.has_grad()
+
+    def ff1_bias_has_grad(self) -> bool:
+        return self.ff1.bias.has_grad()
+
+    def ff2_weight_has_grad(self) -> bool:
+        return self.ff2.weight.has_grad()
+
+    def ff2_bias_has_grad(self) -> bool:
+        return self.ff2.bias.has_grad()

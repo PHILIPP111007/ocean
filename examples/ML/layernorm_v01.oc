@@ -1,0 +1,29 @@
+import <std/tensor/tensor.oc>
+import <std/ml/nn.oc>
+
+
+def main() -> int:
+    var x: Tensor[float32] = Tensor.zeros(2, 3, 8, "cpu")
+    var target: Tensor[float32] = Tensor.zeros(2, 3, 8, "cpu")
+
+    x[0, 0, 0] = 0.5
+    x[0, 1, 1] = -0.25
+    x[1, 2, 7] = 0.75
+    x.requires_grad_(True)
+
+    var norm: LayerNorm = LayerNorm(8, 0.00001)
+    var y: Tensor[float32] = norm.forward(x)
+
+    var criterion: MSELoss = MSELoss()
+    var loss: Tensor[float32] = criterion.forward(y, target)
+    loss.backward()
+
+    var batch_size: int = y.shape(0)
+    var sequence_length: int = y.shape(1)
+    var features: int = y.shape(2)
+    print("shape =", batch_size, sequence_length, features)
+    print("x grad =", x.has_grad())
+    print("gamma grad =", norm.gamma_has_grad())
+    print("beta grad =", norm.beta_has_grad())
+    print("[ok] Ocean affine LayerNorm v0.1")
+    return 0
