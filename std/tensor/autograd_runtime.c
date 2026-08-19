@@ -59,6 +59,11 @@ struct ocean_autograd_meta {
 static ocean_autograd_meta *ocean_autograd_metas = NULL;
 static bool ocean_autograd_shutdown_registered = false;
 
+static void ocean_autograd_remove_meta(ocean_autograd_meta *target);
+static void ocean_autograd_tensor_released(
+    ocean_tensor_handle_t tensor
+);
+
 static void ocean_autograd_require_float32(ocean_tensor_handle_t tensor) {
     char *dtype = ocean_tensor_dtype_name(tensor);
     bool valid = dtype && strcmp(dtype, "float32") == 0;
@@ -126,6 +131,8 @@ static void ocean_autograd_meta_free(ocean_autograd_meta *meta) {
 }
 
 static void ocean_autograd_shutdown(void) {
+    ocean_tensor_set_release_hook(NULL);
+
     ocean_autograd_meta *meta = ocean_autograd_metas;
     while (meta) {
         ocean_autograd_meta *next = meta->next;
@@ -160,6 +167,7 @@ static ocean_autograd_meta *ocean_autograd_get(
 
     if (!ocean_autograd_shutdown_registered) {
         ocean_autograd_shutdown_registered = true;
+        ocean_tensor_set_release_hook(ocean_autograd_tensor_released);
         atexit(ocean_autograd_shutdown);
     }
     return meta;
@@ -175,6 +183,21 @@ static void ocean_autograd_remove_meta(ocean_autograd_meta *target) {
             return;
         }
         cursor = &(*cursor)->next;
+    }
+}
+
+static void ocean_autograd_tensor_released(
+    ocean_tensor_handle_t tensor
+) {
+    /*
+     * Autograd metadata is keyed by the raw Tensor handle address.
+     * Remove it before the Tensor allocation is freed; otherwise malloc may
+     * reuse the same address and a new Tensor can inherit requires_grad/grad
+     * from the dead Tensor.
+     */
+    ocean_autograd_meta *meta = ocean_autograd_find(tensor);
+    if (meta) {
+        ocean_autograd_remove_meta(meta);
     }
 }
 

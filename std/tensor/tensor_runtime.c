@@ -46,6 +46,14 @@ struct ocean_tensor_handle {
 #define OCEAN_TENSOR_CPU OCEAN_TENSOR_BACKEND_CPU
 #define OCEAN_TENSOR_GPU OCEAN_TENSOR_BACKEND_OPENCL
 
+static ocean_tensor_release_hook_t ocean_tensor_release_hook = NULL;
+
+void ocean_tensor_set_release_hook(
+    ocean_tensor_release_hook_t hook
+) {
+    ocean_tensor_release_hook = hook;
+}
+
 static const ocean_tensor_backend_ops *ocean_tensor_backend_for_device(
     ocean_tensor_backend_kind device
 );
@@ -3104,6 +3112,11 @@ char *ocean_tensor_device(ocean_tensor_handle_t tensor) {
 
 void ocean_tensor_release(ocean_tensor_handle_t tensor) {
     if (!tensor) return;
+
+    if (ocean_tensor_release_hook) {
+        ocean_tensor_release_hook(tensor);
+    }
+
     ocean_tensor_backend_for_device(tensor->device)->release(tensor);
     free(tensor->shape);
     free(tensor->strides);

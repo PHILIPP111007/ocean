@@ -7,6 +7,14 @@
 
 typedef struct ocean_tensor_handle *ocean_tensor_handle_t;
 
+typedef void (*ocean_tensor_release_hook_t)(
+    ocean_tensor_handle_t tensor
+);
+
+void ocean_tensor_set_release_hook(
+    ocean_tensor_release_hook_t hook
+);
+
 _Noreturn void ocean_tensor_fail(const char *message);
 void ocean_tensor_validate_list_length(size_t actual, size_t expected);
 
