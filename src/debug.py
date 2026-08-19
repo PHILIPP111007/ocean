@@ -116,6 +116,7 @@ class Validator:
                             "ocean_tensor_get_flat",
                             "ocean_tensor_len",
                             "ocean_tensor_copy",
+                            "ocean_tensor_copy_into",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",
                             "ocean_tensor_binary",

@@ -38,6 +38,7 @@ void ocean_tensor_save_npy(
     const char *path
 );
 ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor);
+void ocean_tensor_copy_into(ocean_tensor_handle_t destination, ocean_tensor_handle_t source);
 ocean_tensor_handle_t ocean_tensor_to(ocean_tensor_handle_t tensor, const char *device);
 ocean_tensor_handle_t ocean_tensor_matmul(
     ocean_tensor_handle_t left,

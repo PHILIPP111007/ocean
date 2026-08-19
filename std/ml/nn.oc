@@ -34,6 +34,12 @@ class Parameter:
         self.data.zero_grad()
         return None
 
+    def to(self, device: str) -> None:
+        var moved: Tensor[float32] = self.data.to(device)
+        moved.requires_grad_(True)
+        self.data = moved
+        return None
+
     def step(self, learning_rate: float64) -> None:
         var handle: ocean_tensor_handle_t = self.data.raw_handle()
         ocean_autograd_sgd_step(handle, learning_rate)
@@ -64,6 +70,17 @@ class Module:
     def parameters(self) -> list[Parameter]:
         var result: list[Parameter] = []
         return result
+
+    def to(self, device: str) -> None:
+        var parameters: list[Parameter] = self.parameters()
+        var index: int = 0
+
+        while index < len(parameters):
+            var parameter: Parameter = parameters[index]
+            parameter.to(device)
+            index = index + 1
+
+        return None
 
 
 def relu(input: &Tensor[float32]) -> Tensor[float32]:

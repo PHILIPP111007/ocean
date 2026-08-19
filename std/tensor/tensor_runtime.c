@@ -978,6 +978,54 @@ ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor) {
     return result;
 }
 
+void ocean_tensor_copy_into(
+    ocean_tensor_handle_t destination,
+    ocean_tensor_handle_t source
+) {
+    if (!destination || !source) {
+        ocean_tensor_fail("Tensor.copy_into requires non-null tensors");
+    }
+    if (
+        destination->dtype != source->dtype
+        || destination->ndim != source->ndim
+        || destination->size != source->size
+    ) {
+        ocean_tensor_fail("Tensor.copy_into metadata mismatch");
+    }
+
+    for (size_t axis = 0; axis < destination->ndim; ++axis) {
+        if (destination->shape[axis] != source->shape[axis]) {
+            ocean_tensor_fail("Tensor.copy_into shape mismatch");
+        }
+    }
+
+    if (destination->device == source->device) {
+        ocean_tensor_backend_for_device(destination->device)->copy(
+            destination,
+            source
+        );
+        return;
+    }
+
+    if (destination->device == OCEAN_TENSOR_CPU) {
+        ocean_tensor_backend_for_device(source->device)->read(
+            source,
+            destination->cpu_data
+        );
+        return;
+    }
+
+    if (source->device == OCEAN_TENSOR_CPU) {
+        ocean_tensor_backend_for_device(destination->device)->write(
+            destination,
+            source->cpu_data
+        );
+        return;
+    }
+
+    ocean_tensor_fail("Tensor.copy_into unsupported device pair");
+}
+
 ocean_tensor_handle_t ocean_tensor_to(
     ocean_tensor_handle_t tensor,
     const char *device

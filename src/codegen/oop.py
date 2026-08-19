@@ -349,6 +349,44 @@ class OopMixin:
         if not origin_class:
             return
 
+        # GPU Module.to inherited specialization v0.1
+        #
+        # Ordinary inherited methods call the parent implementation. That is
+        # not sufficient for Module.to(): Module_to() would statically call
+        # Module_parameters(), losing an overriding parameters() method on the
+        # concrete model. Generate a concrete-class implementation instead.
+        if method_name == "to" and origin_class == "Module":
+            c_return_type = self.map_type_to_c(return_type)
+            self.add_line(
+                f"{c_return_type} {class_name}_to("
+                f"{class_name}* self, char* device) {{"
+            )
+            self.indent_level += 1
+
+            list_type = "list[Parameter]"
+            self.generate_list_struct(list_type)
+            list_c_type = self.map_type_to_c(list_type)
+
+            self.add_line(
+                f"{list_c_type} parameters = "
+                f"{class_name}_parameters(self);"
+            )
+            self.add_line("int index = 0;")
+            self.add_line("while (index < parameters->size) {")
+            self.indent_level += 1
+            self.add_line(
+                "Parameter_to(parameters->data[index], device);"
+            )
+            self.add_line("index += 1;")
+            self.indent_level -= 1
+            self.add_line("}")
+            self.add_line("ocean_release(parameters);")
+
+            self.indent_level -= 1
+            self.add_line("}")
+            self.add_empty_line()
+            return
+
         # Генерируем сигнатуру
         param_decls = []
         for param in parameters:
