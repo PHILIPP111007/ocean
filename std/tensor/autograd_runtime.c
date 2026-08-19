@@ -251,8 +251,38 @@ static ocean_tensor_handle_t ocean_autograd_sum_to_meta(
     size_t *source_shape = ocean_autograd_shape_copy(source, &source_ndim);
 
     if (target->ndim > source_ndim) {
+        size_t padded_ndim = target->ndim;
+        size_t leading = padded_ndim - source_ndim;
+        size_t *padded_shape = (size_t *)malloc(
+            padded_ndim * sizeof(size_t)
+        );
+        if (!padded_shape) {
+            free(source_shape);
+            ocean_tensor_fail(
+                "out of memory padding broadcast gradient rank"
+            );
+        }
+
+        for (size_t axis = 0; axis < leading; ++axis) {
+            padded_shape[axis] = 1;
+        }
+        for (size_t axis = 0; axis < source_ndim; ++axis) {
+            padded_shape[leading + axis] = source_shape[axis];
+        }
+
+        ocean_tensor_handle_t padded = ocean_tensor_reshape(
+            source,
+            padded_shape,
+            padded_ndim
+        );
+
+        free(padded_shape);
         free(source_shape);
-        ocean_tensor_fail("autograd cannot reduce gradient to a higher rank");
+
+        ocean_tensor_handle_t result =
+            ocean_autograd_sum_to_meta(padded, target);
+        ocean_tensor_release(padded);
+        return result;
     }
 
     char *source_device = ocean_tensor_device(source);
@@ -1337,6 +1367,15 @@ ocean_tensor_handle_t ocean_autograd_layer_norm(
     node->left = parent;
     node->dim0 = dim;
     node->scalar = epsilon;
+
+    /*
+     * LayerNorm backward needs the original input values.  The Ocean
+     * language-level Tensor wrapper that produced this handle may be
+     * destroyed before backward(), so parent->tensor is not a safe
+     * lifetime anchor.  Keep an owned runtime copy on the grad node.
+     */
+    node->saved_left = ocean_tensor_copy(tensor);
+
     ocean_autograd_attach(result, node);
     return result;
 }
