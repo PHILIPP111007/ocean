@@ -1,178 +1,509 @@
 # Ocean 🌊
 
-> Python-like syntax. Native C11 output. Explicit ownership for systems and ML-oriented code.
+> **Python-like syntax. Native C11. ML, backend servers, systems code — in one language.**
 
 <img src="images/ocean.jpg" alt="Ocean project illustration" width="100%" height="500px" />
 
-Ocean is an experimental programming language and compiler for people who want the readability of
-Python with a direct path to C. Ocean lowers source code to readable C11, adds ownership and borrow
-checks before code generation, and provides a contiguous `array[T]` type plus the public
-device-aware `Tensor[T]` API for numerical workloads.
+Ocean is an experimental compiled language that keeps Python-like syntax while
+lowering programs to native C11.
 
-## Why Ocean?
+The project is designed around two first-class directions:
 
-- **Familiar syntax** — functions, loops, classes, and type annotations stay lightweight.
-- **Predictable memory** — values, ARC-managed objects, owned buffers, and borrows have distinct
-  rules.
-- **C when it matters** — generated symbols use the `ocean_` namespace and can interoperate with
-  C/POSIX APIs through an explicit `unsafe:` boundary.
-- **Numerical foundations** — dense arrays and row-major tensors with shape metadata, strides, and
-  bounds-checked indexing.
-- **Standard-library backends** — a device-aware `Tensor[T]` facade can dispatch between CPU and
-  OpenCL-backed GPU storage.
-- **Parallel loops** — selected `range` loops lower to OpenMP, including nested loops with
-  `collapse(n)`.
-- **Inspectable output** — the compiler emits C you can read, compile, profile, and debug.
+```text
+Ocean
+├── Backend / systems
+│   ├── HTTP servers
+│   ├── TCP sockets
+│   ├── JSON
+│   ├── files
+│   ├── routing / middleware
+│   └── native C/POSIX interop
+│
+└── ML / HPC
+    ├── Tensor
+    ├── autograd
+    ├── Transformer
+    ├── TinyGPT
+    ├── CPU / GPU
+    └── OpenMP
+```
 
-## A small example
+The idea is simple:
 
-```python
-def scale(values: &mut array[float32], factor: float32) -> None:
-    for i in range(len(values)):
-        values[i] = values[i] * factor
-    return None
+> write code that feels close to Python, but keep native compilation,
+> explicit ownership, predictable runtime behavior, and direct access to C.
+
+---
+
+## ✨ Why Ocean?
+
+Ocean aims to combine:
+
+- **Python-like syntax**
+- **native C11 output**
+- **static validation**
+- **automatic ownership management**
+- **ARC + borrowing**
+- **C/POSIX FFI**
+- **Tensor + autograd**
+- **Transformer / GPT building blocks**
+- **CPU + GPU device API**
+- **OpenMP**
+- **HTTP/backend runtime**
+
+A small Ocean program still looks familiar:
+
+```ocean
+def square(x: float32) -> float32:
+    return x * x
 
 
 def main() -> int:
-    var values: array[float32] = [1.0, 2.0, 3.0]
-    scale(values, 2.0)
-    print(values[0])
+    var value: float32 = square(4.0)
+
+    print(value)
+
     return 0
 ```
 
-`&mut` is an exclusive mutable borrow. It does not add reference-count operations to the generated
-code and prevents conflicting access during validation.
-
-## Arrays and public tensors
-
-Use `array[T]` for a one-dimensional numeric buffer. For dense numerical data, prefer the public
-device-aware `Tensor[T]` object:
-
-```python
-import <std/tensor/tensor.oc>
-
-var matrix: Tensor[float32] = Tensor.zeros(100, 100, "cpu")
-matrix[0, 1] = 3.5
-
-var rows: int = matrix.shape(0)
-var elements: size_t = matrix.size()
-matrix.fill(0.0)
-var total: float64 = matrix.sum()
-var transposed: Tensor[float32] = matrix.transpose()
-var result: Tensor[float32] = matrix.add(transposed)
-```
-
-Tensor storage is opaque at the public API boundary. Indexing is bounds-checked by the runtime;
-`sum`, `fill`, `copy`, `transpose`, and 2D `matmul` are exposed as methods on `Tensor[T]`.
-Indexing supports arbitrary rank, for example `cube[1, 0, 1]`; `transpose()` returns an
-independent copying tensor.
-
-### Device-aware `Tensor[T]`
-
-The standard library provides the public uppercase `Tensor[T]` object with an explicit device:
+But the compiler pipeline is:
 
 ```text
-Tensor[float32]   # public device-aware standard-library facade
+Ocean source
+    ↓
+Parser
+    ↓
+Typed IR
+    ↓
+Validator
+    ↓
+CCodeGenerator
+    ↓
+C11
+    ↓
+native executable
 ```
 
-`Tensor[T]` supports numeric element types such as `bool`, signed and unsigned integers,
-`size_t`, `intptr_t`, `uintptr_t`, `float16`, `float32`, and `float64`. Reference types such as
-`str` are rejected. Without a type argument, `Tensor` uses `float32`.
+---
 
-The initial API supports arbitrary tensor rank for allocation and transfer:
+# 🧠 ML in Ocean
+
+Ocean already has a small eager ML stack:
+
+```text
+Tensor
+Parameter
+Module
+
+Linear
+ReLU
+LayerNorm
+
+MultiHeadAttention
+TransformerBlock
+
+Embedding
+CrossEntropyLoss
+
+SGD
+AdamW
+
+TinyGPT
+```
+
+---
+
+## Train a neural network
+
+A minimal training loop looks intentionally familiar:
 
 ```python
 import <std/tensor/tensor.oc>
+import <std/ml/nn.oc>
+import <std/ml/optim.oc>
 
-var cpu: Tensor[float32] = Tensor.from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
-var gpu: Tensor[float32] = cpu.to("gpu")
-var result_gpu: Tensor[float32] = gpu.matmul(gpu)
-var result_cpu: Tensor[float32] = result_gpu.to("cpu")
+
+def main() -> int:
+    var x: Tensor[float32] = Tensor.from_list(
+        [[0.0], [1.0], [2.0], [3.0]],
+        "cpu"
+    )
+
+    var y: Tensor[float32] = Tensor.from_list(
+        [[1.0], [3.0], [5.0], [7.0]],
+        "cpu"
+    )
+
+    var model: Linear = Linear(1, 1)
+
+    var optimizer: AdamW = AdamW(
+        model.parameters(),
+        0.05,
+        0.9,
+        0.999,
+        0.00000001,
+        0.01
+    )
+
+    var loss_fn: MSELoss = MSELoss()
+
+    var step: int = 0
+
+    while step < 200:
+        optimizer.zero_grad()
+
+        var prediction: Tensor[float32] = model.forward(x)
+        var loss: Tensor[float32] = loss_fn.forward(prediction, y)
+
+        loss.backward()
+        optimizer.step()
+
+        step = step + 1
+
+    return 0
 ```
 
-Static constructors follow Python-style class calls. `T` comes from the target
-annotation, so the runtime call does not repeat the generic type:
+Under the hood this goes through Ocean's own Tensor runtime and dynamic autograd
+engine.
+
+No Python runtime is required by the generated binary.
+
+---
+
+## TinyGPT
+
+Ocean can already train a small decoder-only Transformer end-to-end.
+
+The current TinyGPT stack is:
+
+```text
+token embedding
++
+position embedding
+    ↓
+TransformerBlock
+    ↓
+TransformerBlock
+    ↓
+LayerNorm
+    ↓
+lm_head
+    ↓
+CrossEntropyLoss
+```
+
+A real verified toy training run produced:
+
+```text
+initial loss = 2.079442
+final loss   = 0.057157
+
+predicted next token = 7
+
+token embedding grad    = 1
+position embedding grad = 1
+lm head grad            = 1
+```
+
+That means the full path works:
+
+```text
+Embedding
+→ attention
+→ residuals
+→ LayerNorm
+→ FFN
+→ logits
+→ CrossEntropy
+→ backward
+→ optimizer
+```
+
+---
+
+## Build a Transformer block
 
 ```python
-var weights: Tensor[float32] = Tensor.zeros(128, 128, "cpu")
-var labels: Tensor[int32] = Tensor.from_list([[1, 2, 3]], "cpu")
+var block: TransformerBlock = TransformerBlock(
+    128,   # d_model
+    8,     # heads
+    512    # feed-forward size
+)
+
+var hidden: Tensor[float32] = block.forward(
+    input,
+    causal_mask
+)
 ```
 
-The supported devices are exactly `"cpu"` and `"gpu"`. `.to(device)` is non-mutating: it returns
-an owned tensor on the requested device and leaves the source tensor valid. `Tensor` also provides
-`zeros`, `from_list`, `copy`, `matmul`, `add`, `sub`, `mul`, `div`, scalar arithmetic,
-`reshape`, `transpose`, `sum`, `mean`, `min`, `max`, `item`, `dtype`, `is_contiguous`,
-`contiguous`, `fill`, `shape`, `ndim`, `size`, `device`, and `release`.
+The attention path supports Transformer-shaped tensors such as:
 
-`Tensor.matmul` requires compatible 2D shapes and matching devices. CPU matmul is dtype-generic.
-The GPU path currently has OpenCL kernels for `float32` and `int32`; other numeric dtypes use a
-correct CPU fallback until specialized GPU kernels are added. The operation does not transpose the
-right-hand matrix implicitly.
+```text
+[B, H, T, D]
+```
 
-Elementwise methods support trailing-axis broadcasting on CPU. Equal-shape `float32` GPU operations
-use OpenCL kernels; broadcasting and other dtypes use the CPU implementation and transfer the
-result back to the original device. `reshape` and `transpose` currently return independent
-contiguous tensors, while `fill` mutates the existing tensor.
+with batched matmul, transpose, permute, broadcasting, softmax, masking and
+autograd.
 
-### File IO and NumPy weights
+---
 
-The standard library provides managed text and binary streams:
+# ⚡ GPU
+
+Ocean exposes a backend-neutral device API:
 
 ```python
-import <std/io/file.oc>
+var model: TinyGPT = TinyGPT(...)
 
-var output: File = open("notes.txt", "w")
-output.writelines(["hello\n", "world\n"])
-output.close()
+model.to("gpu")
 
-var input: File = open("notes.txt", "r")
-var lines: list[str] = input.readlines()
-input.close()
+var tokens_gpu: Tensor[int64] = tokens.to("gpu")
+var mask_gpu: Tensor[float32] = mask.to("gpu")
+
+var logits: Tensor[float32] = model.forward(
+    tokens_gpu,
+    positions_gpu,
+    mask_gpu
+)
 ```
 
-Use `open_binary(...)` and `BinaryFile.read_bytes()` / `write_bytes()` for
-raw bytes. File objects close their managed C stream at scope exit or when
-`close()` is called. For tensor weights, `Tensor.load_npy(path, device)` and
-`tensor.save_npy(path)` read and write standard NumPy `.npy` files. The
-implementation supports `.npy` v1/v2/v3 and numeric dtypes from `bool`,
-signed/unsigned integers, and `float16`/`float32`/`float64`; it writes
-row-major arrays and rejects Fortran-order and non-numeric/object dtypes.
+And training keeps the same API:
 
 ```python
-import <std/tensor/tensor.oc>
+model.to("gpu")
 
-var weights: Tensor[float32] = Tensor.load_npy("weights.npy", "cpu")
-weights.save_npy("weights_copy.npy")
+var optimizer: AdamW = AdamW(
+    model.parameters(),
+    0.001,
+    0.9,
+    0.999,
+    0.00000001,
+    0.01
+)
+
+loss.backward()
+optimizer.step()
 ```
 
-GPU tensors are downloaded to CPU while saving, and non-contiguous views are
-materialized into a compatible row-major `.npy` payload. For linear weight
-iteration, `len(tensor)` returns the scalar element count and `tensor[i]`
-accesses the flattened row-major storage; multidimensional `tensor[i, j]`
-access remains rank-checked.
+The current GPU backend is based on OpenCL.
 
-The public facade owns an opaque runtime handle. Ocean code does not access `cl_mem`, OpenCL
-contexts, queues, or backend-specific pointers directly. `Tensor.from_list(...)` is the public
-constructor for literal data; native compiler tensors are not part of this API. See
-[std/tensor/README.md](std/tensor/README.md) and
-[std/tensor/OpenCL.md](std/tensor/OpenCL.md) for the API and backend design.
+The public API intentionally stays:
 
-## Imports and the standard library
+```text
+"cpu"
+"gpu"
+```
 
-Imports have two explicit forms:
+instead of exposing OpenCL/CUDA-specific objects to application code.
+
+Some Tensor operations are already GPU-native, while others still use
+correctness-first CPU fallback internally. A CUDA backend can later live behind
+the same `"gpu"` API.
+
+---
+
+# 🌐 Backend development in Ocean
+
+Ocean is not only an ML language.
+
+The standard library is also developing a native backend stack:
+
+```text
+std/net
+├── TCP sockets
+├── HTTP
+├── Request / Response
+├── App
+├── Router
+├── middleware
+├── worker pool
+└── keep-alive
+```
+
+The goal is to write backend services with Python-like ergonomics and compile
+them into native executables.
+
+---
+
+## A small API server
+
+The intended API looks like this:
 
 ```python
-import "./examples/matmul.oc"       # relative to the importing source file
-import <std/tensor/tensor.oc>        # from the repository standard library
+import <std/net/web.oc>
+import <std/json/json.oc>
+
+
+def health(request: Request) -> Response:
+    var body: Json = Json.object()
+    var status: Json = Json.str("ok")
+
+    body.set("status", status)
+
+    return Response.json_value(body)
+
+
+def hello(request: Request) -> Response:
+    var name: str = request.query_param(
+        "name",
+        "Ocean"
+    )
+
+    return Response.text(
+        "Hello, " + name + "!"
+    )
+
+
+def main() -> int:
+    var app: App = App.create()
+
+    app.get("/health", health)
+    app.get("/hello", hello)
+
+    app.workers(8)
+    app.queue_size(256)
+    app.keep_alive(5000)
+
+    app.run("0.0.0.0", 8080)
+
+    return 0
 ```
 
-Quoted imports are resolved relative to the importing file. Angle-bracket imports beginning with
-`std/` are resolved from `./std/`. Standard-library C runtimes referenced by generated code are
-discovered and compiled automatically.
+The runtime is built on C11/POSIX primitives rather than a Python event loop.
 
-## OpenMP parallel loops
+---
 
-Ocean can lower a restricted, ownership-safe subset of `range` loops to OpenMP:
+## Routers
+
+Large applications can be organized by route groups:
+
+```python
+var app: App = App.create()
+
+var api: Router = Router.create("/api/v1")
+
+api.get("/users/{id}", get_user)
+api.post("/users", create_user)
+api.patch("/users/{id}", update_user)
+api.delete("/users/{id}", delete_user)
+
+app.include(api)
+```
+
+Which produces routes like:
+
+```text
+GET     /api/v1/users/{id}
+POST    /api/v1/users
+PATCH   /api/v1/users/{id}
+DELETE  /api/v1/users/{id}
+```
+
+---
+
+## Middleware
+
+The intended middleware API is deliberately familiar:
+
+```python
+def request_log(
+    request: Request,
+    call_next: Next
+) -> Response:
+
+    print("before request")
+
+    var response: Response = call_next.call(request)
+
+    print("after request")
+
+    return response
+
+
+app.middleware(request_log)
+```
+
+The same mechanism can support:
+
+```text
+CORS
+authentication
+request IDs
+access logging
+timing
+rate limiting
+error recovery
+```
+
+---
+
+## Native worker pool
+
+The backend runtime is designed around a bounded worker pool:
+
+```text
+accept thread
+    ↓
+bounded connection queue
+    ↓
+worker #1
+worker #2
+...
+worker #N
+```
+
+This gives predictable concurrency and memory usage without spawning an
+unbounded thread per request.
+
+---
+
+# 🧬 One language, two worlds
+
+A particularly interesting Ocean use case is combining backend and ML in the
+same native program.
+
+For example:
+
+```text
+HTTP request
+    ↓
+JSON parsing
+    ↓
+Tensor preprocessing
+    ↓
+TinyGPT / model inference
+    ↓
+JSON response
+```
+
+Conceptually:
+
+```python
+def predict(request: Request) -> Response:
+    var payload: Json = request.json()
+
+    var tokens: Tensor[int64] = encode(payload)
+    var tokens_gpu: Tensor[int64] = tokens.to("gpu")
+
+    var logits: Tensor[float32] = model.forward(
+        tokens_gpu,
+        positions,
+        causal_mask
+    )
+
+    var result: Json = decode_logits(logits)
+
+    return Response.json_value(result)
+```
+
+That is one of the core directions of Ocean:
+
+> **native backend + native ML without crossing a Python/C boundary.**
+
+---
+
+# 🧵 Parallel numerical code
+
+Ocean also supports an ownership-safe subset of OpenMP:
 
 ```python
 #pragma omp parallel for collapse(2) schedule(static)
@@ -181,86 +512,118 @@ for i in range(rows):
         output[i, j] = left[i, j] + right[i, j]
 ```
 
-Nested loops must be perfectly nested when using `collapse(n)`. Supported clauses include
-`schedule`, `collapse`, `reduction`, `private`, `firstprivate`, `lastprivate`, `shared`, `default`,
-`nowait`, and `ordered`. The compiler adds `-fopenmp` automatically when generated C contains an
-OpenMP pragma; it can also be supplied explicitly:
+The compiler automatically adds OpenMP compiler flags when required.
 
-```bash
-python main.py run examples/matmul.oc --cflag=-fopenmp --run
-```
+---
 
-The current parallel-loop subset requires constant non-zero integer steps and `range(...)` loops.
-Managed objects such as lists, dictionaries, strings, and classes, as well as function calls,
-`break`, `continue`, and unsupported nested-loop forms are rejected because the current ownership
-runtime is thread-confined. More examples and validation rules are documented in
-[docs/OpenMP.md](docs/OpenMP.md).
+# 🧠 Ownership without writing Rust
 
-## OpenCL GPU build
+Ocean separates memory behavior by type:
 
-The Tensor runtime uses OpenCL through an unsafe C implementation in
-`std/tensor/tensor_runtime.c`. When the generated C references this runtime, the compiler discovers
-and compiles the standard-library C source automatically. If `pkg-config` can find an `OpenCL`
-package, its include, library, and linker flags are added automatically as well.
-
-For a custom OpenCL installation, pass the include directory containing `CL/cl.h`, the library
-directory containing `libOpenCL.so`, and the feature macro explicitly:
-
-```bash
-python main.py run examples/your_tensor_program.oc \
-    --cflags "-I/opt/opencl/include -L/opt/opencl/lib -lOpenCL -DOCEAN_TENSOR_ENABLE_OPENCL"
-```
-
-For example, if the header is `/opt/opencl/include/CL/cl.h`, the correct include flag is
-`-I/opt/opencl/include`, not the `CL` directory itself. The equivalent package configuration is:
-
-```toml
-[build]
-compiler = "gcc"
-cflags = [
-    "-std=c11",
-    "-I/opt/opencl/include",
-    "-L/opt/opencl/lib",
-    "-lOpenCL",
-    "-DOCEAN_TENSOR_ENABLE_OPENCL",
-]
-```
-
-```bash
-ocean run ./examples/matmul_gpu.oc \
-  --cflags "-I${CONDA_PREFIX}/include -L/usr/local/cuda/targets/x86_64-linux/lib -lOpenCL -DOCEAN_TENSOR_ENABLE_OPENCL"
-```
-
-The GPU backend requires an OpenCL platform and device at runtime. A CPU-only machine can still
-use `Tensor[T]` on `"cpu"`; requesting `"gpu"` fails with a runtime error when no usable OpenCL
-backend is available.
-
-## Memory model
-
-| Ocean type | Runtime model |
-| --- | --- |
-| `int`, `float`, `bool` | plain value |
-| `list[T]`, `dict[K,V]`, tuples, classes | non-atomic reference counting |
-| `str` | owned C string with copied aliases |
+| Type | Runtime model |
+|---|---|
+| `int`, `float`, `bool` | plain values |
 | `array[T]` | unique-owned buffer |
-| `Tensor[T]` | ARC-managed facade over CPU or GPU tensor storage |
-| `&T` / `&mut T` | lexical immutable / exclusive borrow |
-| raw pointers and direct C calls | explicit `unsafe:` boundary |
+| `list[T]`, `dict[K,V]`, classes | ARC |
+| `Tensor[T]` | managed Tensor object |
+| `&T` | immutable borrow |
+| `&mut T` | exclusive mutable borrow |
+| raw pointers / C calls | explicit unsafe boundary |
 
-Owned objects are released at scope exit. `del` can release a value early, while borrows do not
-retain or free their source. Read the full model in [docs/MEMORY_MODEL.md](docs/MEMORY_MODEL.md).
+A mutable borrow looks like:
 
-## Quick start
+```ocean
+def scale(
+    values: &mut array[float32],
+    factor: float32
+) -> None:
+
+    for i in range(len(values)):
+        values[i] = values[i] * factor
+
+    return None
+```
+
+Borrowing does not imply a heap allocation or a reference-count increment.
+
+---
+
+# 🔌 C / POSIX interop
+
+Ocean can call native C APIs through an explicit unsafe boundary:
+
+```python
+cimport <math.h>
+
+
+def main() -> int:
+    unsafe:
+        var value: float64 = @sqrt(16.0)
+
+    print(value)
+
+    return 0
+```
+
+This keeps low-level integration possible without exposing raw C semantics
+through ordinary safe code.
+
+---
+
+# 📦 NumPy weights
+
+Ocean Tensor can load standard NumPy `.npy` files:
+
+```python
+var weights: Tensor[float32] = Tensor.load_npy(
+    "weights.npy",
+    "cpu"
+)
+
+weights.save_npy(
+    "weights_copy.npy"
+)
+```
+
+This makes it possible to move model weights between Python tooling and Ocean
+without inventing a custom binary format.
+
+---
+
+# 🚀 Quick start
+
+Create an environment:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
 
-pytest -v
+python -m pip install -e ".[dev]"
 ```
 
-The minimal package model is:
+Run tests:
+
+```bash
+python -m pytest
+```
+
+Build an Ocean program:
+
+```bash
+python main.py build
+```
+
+Or, after editable installation:
+
+```bash
+ocean --help
+```
+
+---
+
+## Package layout
+
+A minimal project can use:
 
 ```toml
 [package]
@@ -275,109 +638,164 @@ compiler = "gcc"
 cflags = ["-std=c11"]
 
 [build.profiles.release]
-cflags = ["-O2"]
+cflags = ["-O3"]
 ```
 
-`check` validates and generates C; `build` also invokes the C compiler; `run` builds and executes;
-`test` runs pytest; and `clean` removes the package's `build/` directory. Package artifacts are
-isolated under `build/<profile>/`.
-
-## Install as a Python package
-
-Build the distributable artifacts locally with the standard Python packaging tools:
+Then:
 
 ```bash
-python -m pip install -e ".[dev]"
-python -m build
-python -m twine check dist/*
+ocean check
+ocean build
+ocean run
 ```
 
-The editable install exposes the `ocean` command:
+---
 
-```bash
-ocean --help
-ocean run examples/neural_network.oc
-```
+# 🧪 Current status
 
-The package metadata is defined in `pyproject.toml`. The compiler is currently distributed as an
-experimental package; uploading to PyPI should be done only after choosing the final project name
-and configuring a PyPI token.
+Ocean is an active prototype.
 
-## Object-oriented ML example
-
-Classes, constructors, fields, methods, and single-inheritance-compatible object layouts are
-lowered to ARC-managed C objects. The repository contains equivalent small decoder-only Transformer
-language-model examples:
-
-- [examples/transformer_pytorch.py](examples/transformer_pytorch.py) — PyTorch implementation.
-- [examples/transformer_ocean.oc](examples/transformer_ocean.oc) — the same model structure using
-  Ocean classes and methods.
-
-The Ocean version uses ordinary OOP syntax and can call C math/POSIX functionality only through an
-explicit `unsafe:` boundary. Generated C is available for inspection with `--c-output` or the
-legacy `examples/*.generated.c` workflow.
-
-For strict manual C checks:
-
-```bash
-gcc -std=c11 -Wall -Wextra -Wpedantic \
-    -fsanitize=address,undefined -fno-omit-frame-pointer \
-    examples/generated_code.c -o /tmp/ocean_generated
-```
-
-## Performance snapshot
-
-On the development machine, the current `examples/matmul.oc` benchmark runs in roughly **5 seconds
-without compiler optimization** and **under 1 second with `-O3`**. CPU `float32`/`float64` matmul
-uses a contiguous row-major fast path; other dtypes and layouts retain a generic fallback. These
-numbers are hardware- and compiler-dependent; the benchmark is the source of truth for comparisons.
-
-## Compiler pipeline
+The current verified CPU/ML regression baseline is:
 
 ```text
-Ocean source → Parser → TypedModule → Validator → CCodeGenerator → C11
+137 passed
 ```
 
-- `src/parser.py` — syntax, types, expressions, indexing, arrays, and tensors.
-- `src/typed_ir.py` — canonical typed scopes, expression result types, data dependencies, and
-  ownership effects. The compiler pipeline does not serialize an intermediate representation.
-- `src/diagnostics.py` — typed `Diagnostic`, `SourceLocation`, and immutable
-  `DiagnosticReport` values with stable error codes.
-- `src/debug.py` — validation, source locations, ownership, and borrow checks. Validator reports
-  expose typed diagnostics and retain the legacy dictionary projection for existing tooling.
-- `src/codegen/` — C lowering for scopes, types, ownership, containers, tensors, and OOP.
-- `src/compiler.py` — public `CCodeGenerator` compatibility API.
-- `tests/` — pytest regression and generated-C tests.
-- `docs/` — memory model and backend design notes.
-- `graphify-out/` — generated code-navigation graph, reports, and analysis cache. Refresh it with
-  `graphify update .` after source changes.
+There is also a GPU integration test which may be skipped when OpenCL
+development/runtime support is not available in the environment.
 
-Diagnostics use the following fields:
+Important distinction:
 
 ```text
-Diagnostic(severity, code, message, location, scope_idx, node_idx)
-SourceLocation(source_file, line, column, source_content)
+GPU test passed  -> GPU execution verified
+GPU test skipped -> environment not verified
 ```
 
-The CLI prints the code and source position, for example `E400 path/to/file.oc:3:5`. The
-compatibility report still contains `errors`, `warnings`, and `formatted_errors` dictionaries.
+Current working milestones include:
 
-## Honest project status
-
-Ocean is an active prototype, not a finished Rust replacement. The compiler now has a typed IR and
-explicit move checks for unique arrays/tensors, while lexical borrows remain the safe zero-cost
-interface for shared access. Current boundaries include non-atomic ARC, thread-confined managed
-objects, possible leaks from reference cycles, incomplete integer-overflow semantics, broadcasting
-shape errors being runtime checks, and an unsafe FFI escape hatch.
-
-## Contributing
-
-Keep Python code readable with four-space indentation and focused backend modules. Add a regression
-test for every compiler or memory-model change, then run:
-
-```bash
-pytest -v
-git diff --check
+```text
+Typed IR
+ownership / ARC
+borrowing
+Tensor
+ND broadcasting
+batched matmul
+autograd
+LayerNorm
+MultiHeadAttention
+TransformerBlock
+Embedding
+CrossEntropyLoss
+SGD
+AdamW
+TinyGPT training
+OpenMP
+File IO
+NumPy .npy
+std/net backend foundation
 ```
 
-The project roadmap and deeper backend rationale are available in `docs/`.
+---
+
+# 🗺️ Roadmap
+
+Near-term priorities:
+
+### ML / GPU
+
+```text
+GPU-native Transformer kernels
+TinyGPT.generate()
+KV cache
+RoPE
+Tensor.arange
+GPU-native AdamW
+CUDA backend
+mixed precision
+quantization
+```
+
+### Backend
+
+```text
+Router stabilization
+nested routers
+middleware
+keep-alive
+graceful shutdown
+CORS
+cookies
+uploads
+streaming
+WebSocket
+OpenAPI
+database ecosystem
+```
+
+### Language / compiler
+
+```text
+stronger borrow/data-flow analysis
+better diagnostics
+traits/interfaces
+Result / Option
+zero-copy Tensor views
+memory pools
+LSP / tooling
+```
+
+---
+
+# 📚 Documentation
+
+For architecture and implementation details:
+
+- [`docs/Handoff.md`](docs/Handoff.md) — current technical state and roadmap
+- [`AGENTS.md`](AGENTS.md) — repository rules for coding agents
+- [`docs/MEMORY_MODEL.md`](docs/MEMORY_MODEL.md) — ownership and memory model
+- [`std/tensor/README.md`](std/tensor/README.md) — Tensor API
+- [`std/tensor/OpenCL.md`](std/tensor/OpenCL.md) — GPU backend design
+- [`std/net/README.md`](std/net/README.md) — networking/backend stack
+
+---
+
+# 🌊 Philosophy
+
+Ocean is exploring a space between:
+
+```text
+Python
+    simplicity
+
+C / C++
+    native runtime control
+
+Rust
+    ownership discipline
+
+PyTorch
+    ML ergonomics
+
+FastAPI-like frameworks
+    backend ergonomics
+```
+
+The goal is not to clone any one of them.
+
+The goal is to make code like this feel natural:
+
+```python
+model.to("gpu")
+
+app.post("/predict", predict)
+
+app.run("0.0.0.0", 8080)
+```
+
+while still ending up with a native executable.
+
+---
+
+## License
+
+See the repository license for details.
