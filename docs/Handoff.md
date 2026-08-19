@@ -1,44 +1,183 @@
-# Handoff — Phils Language / Ocean backend
+# Handoff — Phils Language / Ocean
 
-> Обновлено: 2026-08-16. Этот документ описывает фактическое состояние
-> репозитория после перехода на Typed IR, удаления legacy tensor/JSON-пути,
-> добавления OpenMP/OpenCL, File IO, NumPy `.npy` и развития `std/net`/web backend.
-> Исторические разделы ниже сохранены для контекста; актуальный статус и следующий
-> план находятся в разделах 33–41.
-
-## 1. Цель проекта
-
-Разрабатывается язык **Phils** — компилируемый системный язык с Python-подобным синтаксисом и C-like производительностью.
-
-Основные цели:
-
-- простой Python-like синтаксис;
-- компиляция в C;
-- высокая производительность;
-- memory safety;
-- хороший C ABI / FFI;
-- пригодность для:
-  - обычного прикладного программирования;
-  - OS/system programming;
-  - HPC;
-  - ML / нейронных сетей.
-
-Целевая идея:
-
-> Python-like systems language with automatic ownership management and zero-cost abstractions for performance-critical code.
+> Обновлено: **2026-08-19**
+>
+> Этот документ — актуальный технический handoff по текущему состоянию Ocean.
+> Он намеренно отделяет **что уже доказано тестами** от **что реализовано, но ещё
+> не подтверждено в целевом окружении**, и от **что остаётся roadmap**.
+>
+> Основная ветка разработки: `dev`.
 
 ---
 
-# 2. Текущая архитектура
+# 1. Что такое Ocean
 
-Изначально `CCodeGenerator` был монолитным классом примерно на 8000 строк.
+Ocean — компилируемый язык с Python-подобным синтаксисом и C11 backend.
 
-Он был разбит на модули:
+Цели проекта:
+
+- Python-like syntax;
+- компиляция в C11;
+- предсказуемая ownership-модель;
+- ARC для shared/reference объектов;
+- borrowing через `&T` / `&mut T`;
+- хороший C ABI / FFI;
+- HPC/OpenMP;
+- Tensor runtime;
+- autograd;
+- ML/Transformer/GPT;
+- CPU и GPU backends.
+
+Целевая ниша:
+
+```text
+Python-like syntax
++ static semantics
++ ownership / borrows
++ direct C ABI
++ C11 portability
++ Tensor / ML runtime
+```
+
+Ocean не должен превращаться в динамический Python runtime.
+
+---
+
+# 2. Краткий статус проекта
+
+На 2026-08-19 подтверждены:
+
+```text
+Parser
+    ↓
+Typed IR
+    ↓
+Validator
+    ↓
+CCodeGenerator
+    ↓
+C11
+    ↓
+native executable
+```
+
+Работают:
+
+- базовые типы;
+- list/dict/tuple/class;
+- ARC;
+- lexical borrow checking;
+- single inheritance;
+- C imports / FFI;
+- OpenMP;
+- File/BinaryFile;
+- TCP sockets / HTTP client foundation;
+- HTTP/Web backend foundation (`std/net`);
+- typed `Request` / `Response` / `App` wrappers;
+- middleware / Router / worker-pool architecture;
+- NumPy `.npy`;
+- Tensor CPU backend;
+- OpenCL Tensor backend foundation;
+- ND Tensor;
+- broadcasting;
+- batched matmul;
+- reshape/transpose/permute;
+- reductions;
+- softmax;
+- LayerNorm;
+- dynamic autograd;
+- Parameter;
+- Module;
+- Linear;
+- ReLU;
+- MSELoss;
+- SGD;
+- AdamW;
+- Embedding;
+- CrossEntropyLoss;
+- MultiHeadAttention;
+- TransformerBlock;
+- TinyGPT;
+- next-token training end-to-end.
+
+Последняя общая проверка после добавления GPU device semantics:
+
+```text
+137 passed, 1 skipped
+```
+
+Пропущен именно GPU integration test, потому что в текущем окружении
+OpenCL development/runtime environment пока не полностью доступен.
+
+Важно:
+
+> CPU/ML/autograd regressions зелёные.
+>
+> Реальное выполнение нового `model.to("gpu")` на H100 пока НЕ считается
+> подтверждённым, пока `tests/test_gpu_training_v01_ocean.py` не перестанет
+> быть `skipped` и не завершится `passed`.
+
+---
+
+# 3. Главная архитектура compiler pipeline
+
+Основной путь:
+
+```text
+Ocean source
+    ↓
+Parser
+    ↓
+TypedModule / Typed IR
+    ↓
+Validator
+    ↓
+CCodeGenerator
+    ↓
+generated C11
+    ↓
+gcc/clang
+    ↓
+binary
+```
+
+Ключевые файлы:
+
+```text
+src/parser.py
+src/typed_ir.py
+src/debug.py
+
+src/codegen/
+    orchestrator.py
+    expressions.py
+    calls.py
+    oop.py
+    ownership.py
+    tensor_codegen.py
+    list_codegen.py
+    ...
+
+src/modules/
+    imports.py
+    constants.py
+
+main.py
+```
+
+Основное правило:
+
+> Новые backend-фичи должны по возможности идти через Typed IR, а не создавать
+> отдельный legacy AST path.
+
+---
+
+# 4. Codegen architecture
+
+Старый `CCodeGenerator` был монолитным. Сейчас backend разбит на mixin/modules:
 
 ```text
 src/codegen/
-├── __init__.py
-├── generator.py
 ├── core.py
 ├── scope.py
 ├── types.py
@@ -54,72 +193,49 @@ src/codegen/
 ├── helpers.py
 ├── imports.py
 ├── oop.py
-└── ownership.py
+├── ownership.py
+└── tensor_codegen.py
 ```
 
-Публичный API сохранён:
-
-```python
-from src.compiler import CCodeGenerator
-
-generator = CCodeGenerator()
-output = generator.generate_from_typed_ir(typed_module)
-```
-
-Добавлен compatibility-wrapper `src/compiler.py`.
+Не следует возвращать giant-switch / giant-class архитектуру.
 
 ---
 
-# 3. Namespace generated C
+# 5. Namespace generated C
 
-Принято решение использовать единый префикс:
+Внутренний runtime использует префикс:
 
 ```text
 ocean_
 ```
 
-для всех внутренних типов и функций runtime Phils.
-
 Например:
 
 ```c
 ocean_object_header
+ocean_retain
+ocean_release
 
-ocean_list_int
-ocean_dict_str_int
-Tensor runtime handle
-
-ocean_retain()
-ocean_release()
-
-ocean_create_list_int()
-ocean_append_list_int()
+ocean_tensor_handle_t
+ocean_tensor_matmul
+ocean_autograd_backward
 ```
 
-При этом C/POSIX ABI не переименовывается:
+Стандартный C/POSIX ABI не переименовывается:
 
 ```c
 malloc
 free
-printf
+memcpy
 sqrt
 pthread_create
-memcpy
-```
-
-остаются стандартными именами.
-
-`main` также остаётся:
-
-```c
-int main(...)
 ```
 
 ---
 
-# 4. Memory model
+# 6. Memory model
 
-Принята гибридная модель:
+Текущая концептуальная модель:
 
 ```text
 VALUE
@@ -131,10 +247,10 @@ VALUE
 OWNED
     array[T]
 
-SHARED
+SHARED / ARC
     list[T]
     dict[K, V]
-    str
+    tuple[T]
     class
     Tensor[T]
 
@@ -142,113 +258,15 @@ BORROWED
     &T
     &mut T
 
-RAW
+RAW / FFI
     *T
     void*
-    C FFI
+    C handles
 ```
 
----
+## 6.1 ARC
 
-## VALUE
-
-Типы хранятся inline / stack:
-
-```python
-var x: int = 10
-var y: float = 2.0
-```
-
-Никакого refcount.
-
----
-
-## SHARED
-
-Высокоуровневые Python-like объекты используют ARC:
-
-```python
-var a: list[int] = [1, 2, 3]
-var b: list[int] = a
-```
-
-`a` и `b` ссылаются на один объект.
-
-Backend должен генерировать:
-
-```c
-ocean_retain(a);
-b = a;
-```
-
-При завершении lifetime:
-
-```c
-ocean_release(a);
-```
-
----
-
-## OWNED
-
-Для performance-oriented объектов:
-
-```python
-array[T]
-```
-
-предполагается unique ownership.
-
-Для них **не должен использоваться refcount в обычном hot path**.
-
-Это особенно важно для OS / HPC / ML.
-
----
-
-## BORROWED
-
-Безопасные временные ссылки:
-
-```python
-&T
-&mut T
-```
-
-### Immutable borrow
-
-```python
-def read(x: &array[float32]) -> float:
-    return x[0]
-```
-
-Не делает:
-
-```text
-retain
-release
-copy
-allocation
-```
-
-### Mutable borrow
-
-```python
-def scale(
-    x: &mut array[float32],
-    factor: float32
-) -> None:
-    ...
-```
-
-`&mut` должен быть exclusive.
-
-Пока он активен, нельзя использовать владельца напрямую.
-
----
-
-# 5. ARC runtime
-
-Введена концепция общего header:
+Reference-типы используют:
 
 ```c
 typedef struct ocean_object_header {
@@ -257,1371 +275,1966 @@ typedef struct ocean_object_header {
 } ocean_object_header;
 ```
 
-Общие операции:
+И:
 
 ```c
 ocean_retain(obj);
 ocean_release(obj);
 ```
 
-Shared-типы должны встраивать этот header.
+ARC сейчас non-atomic.
 
-Например:
+Не следует делать обычный refcount atomic без отдельного concurrency design.
 
-```c
-typedef struct ocean_list_int {
-    ocean_object_header header;
+## 6.2 Container ownership
 
-    int* data;
-    size_t size;
-    size_t capacity;
-} ocean_list_int;
-```
-
----
-
-# 6. Ownership контейнеров
-
-Для reference элементов:
-
-```python
-var d: list[int] = [1, 2]
-
-var f: list[list[int]] = []
-
-f.append(d)
-f.append(d)
-```
-
-контейнер обязан делать retain элемента.
-
-Поэтому две ссылки на `d` внутри `f` больше не должны приводить к double-free.
-
-Правило:
+Для reference elements:
 
 ```text
-append reference      -> retain
-insert reference      -> retain
-set reference         -> retain(new), release(old)
+append reference       -> retain
+insert reference       -> retain
+replace reference      -> retain(new), release(old)
 
-remove                -> release
-clear                 -> release all
-destroy               -> release all
+remove                  -> release
+clear                   -> release all
+destroy                 -> release all
+
+pop                     -> transfer ownership to caller
 ```
 
-`pop()` должен **передавать ownership** результата вызывающему.
+## 6.3 `del`
+
+`del` — explicit early release, а не обязательная manual memory management.
+
+Scope cleanup должен происходить автоматически.
 
 ---
 
-# 7. `del`
+# 7. Borrowing
 
-`del` больше не должен быть обязательным для освобождения памяти.
+Safe borrowing:
 
-Например:
-
-```python
-def foo() -> None:
-    var a: list[int] = [1, 2, 3]
+```ocean
+var x: &Tensor[float32] = tensor
+var y: &mut Tensor[float32] = tensor
 ```
 
-compiler автоматически освобождает `a` на scope exit.
+RAW pointer semantics отдельно:
 
-```python
-del a
-```
-
-становится explicit early-release.
-
----
-
-# 8. Borrow checker
-
-Реализуется гибридный lexical borrow checker.
-
-Поддерживаемая модель:
-
-```python
-var a: list[int] = [1, 2, 3]
-
-var x: &list[int] = a
-```
-
-`x` — immutable borrow.
-
-Пока он существует:
-
-```text
-read a       OK
-modify a     forbidden
-del a        forbidden
-```
-
-Для:
-
-```python
-var x: &mut list[int] = a
-```
-
-borrow exclusive.
-
-Пока `x` существует:
-
-```text
-x read       OK
-x modify     OK
-
-a read       forbidden
-a modify     forbidden
-a delete     forbidden
-```
-
-Это пока **lexical checker v1**, не полноценный Rust NLL/data-flow checker.
-
----
-
-# 9. Threading
-
-Пока обычный ARC предполагается non-atomic.
-
-В будущем:
-
-```python
-shared[T]
-```
-
-или отдельный `Shared[T]` должен использовать atomic reference counting.
-
-Дальше можно добавить аналоги:
-
-```text
-Send
-Sync
-```
-
-для compile-time проверки передачи объектов между pthreads.
-
----
-
-# 10. C interop
-
-Текущий синтаксис:
-
-```python
-@sqrt(16)
-@pthread_create(...)
-```
-
-остаётся прямым C ABI.
-
-В перспективе raw C operations должны считаться unsafe boundary.
-
-Например:
-
-```python
-unsafe:
-    @malloc(...)
-```
-
-или через FFI contracts.
-
----
-
-# 11. Parser
-
-Исходный parser — крупный `Parser`, порядка 6500 строк / 87 методов.
-
-Он поддерживает:
-
-- variables;
-- constants;
-- list;
-- dict;
-- tuple;
-- set;
-- classes;
-- inheritance;
-- methods;
-- loops;
-- if/elif/else;
-- C calls;
-- raw pointers;
-- address-of;
-- dereference;
-- indexing;
-- nested indexing;
-- slicing;
-- function calls;
-- C imports.
-
-Исходный parser был прочитан и использован как основа.
-
----
-
-# 12. Новый parser v0.2
-
-Был подготовлен обновлённый parser:
-
-```text
-phils_parser_ocean_v02.zip
-```
-
-Он добавляет отдельный type parser:
-
-```text
-src/parsing/type_system.py
-```
-
-Типы больше не должны полностью анализироваться вручную через:
-
-```python
-startswith("list[")
-```
-
----
-
-## Новый type syntax
-
-Parser теперь должен понимать:
-
-```python
-list[int]
-
-dict[str, int]
-
-tuple[int]
-
-array[float32]
-
-Tensor[float32]
-
-shared[list[int]]
-
-&list[int]
-
-&mut list[int]
-
-*int
-
-str?
-```
-
-При этом старое поле сохраняется:
-
-```text
-"var_type": "&mut list[int]"
-```
-
-но добавляется structured metadata:
-
-```text
-"type_info": {
-    "kind": "mut_borrow",
-    "memory_kind": "mut_borrow",
-    ...
-}
-```
-
----
-
-# 13. `&x` vs borrow
-
-В старом языке:
-
-```python
+```ocean
 var p: *int = &x
 ```
 
-означает C address-of.
+Это не одно и то же.
 
-Это поведение сохраняется.
+Текущий borrow checker lexical, не Rust-style NLL.
 
-То есть:
-
-```python
-*int
-```
-
-+ expression:
-
-```python
-&x
-```
-
-остаются RAW pointer semantics.
-
-Safe borrow записывается через тип:
-
-```python
-var p: &list[int] = values
-```
-
-или:
-
-```python
-var p: &mut list[int] = values
-```
+Не следует обещать interprocedural/NLL guarantees, которых пока нет.
 
 ---
 
-# 14. Struct
+# 8. Classes и inheritance
 
-В parser добавлена концепция value struct:
+Классы — ARC objects.
 
-```python
-struct Point:
-    x: float32
-    y: float32
-```
-
-Целевой lowering:
-
-```c
-typedef struct ocean_point {
-    float x;
-    float y;
-} ocean_point;
-```
-
-Без:
-
-```text
-malloc
-ARC
-vtable
-```
-
-Это особенно важно для OS/system programming.
-
----
-
-# 15. Classes
-
-Классы остаются reference objects.
-
-Идея:
-
-```c
-typedef struct ocean_user {
-    ocean_object_header header;
-    const ocean_user_vtable* vtable;
-
-    ...
-} ocean_user;
-```
-
-Per-object malloc для vtable должен быть убран.
-
-Vtable должна быть static per class.
-
----
-
-## Multiple inheritance
-
-Текущая старая реализация multiple inheritance небезопасна.
-
-Она физически embedding делает только первого base class, но может кастовать объект ко второму.
-
-Поэтому принято решение:
-
-> временно запретить multiple inheritance.
-
-Для v0.x оставить:
+Поддерживаемая модель:
 
 ```text
 single inheritance
 ```
 
-Позже добавить:
+Multiple inheritance пока должна считаться запрещённой/неподдерживаемой,
+потому что корректный multi-base ABI ещё не реализован.
+
+Долгосрочный вариант:
 
 ```text
-traits/interfaces
+traits / interfaces
 ```
 
-или корректный ABI для multiple bases.
+вместо небезопасного C-cast based MI.
 
 ---
 
-# 16. Strings
+# 9. C imports и Validator
 
-Текущие строки всё ещё требуют дальнейшей унификации.
+Очень важная текущая особенность:
 
-Старая реализация смешивает:
+```ocean
+cimport <std/tensor/autograd_runtime.h>
+```
+
+**не означает**, что frontend автоматически парсит C header и получает signatures.
+
+Validator держит whitelist известных external C functions в:
 
 ```text
-static literal
-malloc string
-input string
-string helper result
+src/debug.py
 ```
 
-под одним `char*`.
+Поэтому при добавлении новой runtime C API функции нужно проверить одновременно:
 
-Это опасно.
+1. declaration в `.h`;
+2. implementation в `.c`;
+3. `cimport` в `.oc`;
+4. регистрацию symbol name в Validator;
+5. корректный return type в frontend, если результат используется как expression.
 
-Долгосрочная цель:
+Это уже проявилось при добавлении AdamW:
 
-```c
-ocean_string
+```text
+ocean_autograd_adamw_create
+ocean_autograd_adamw_begin_step
+ocean_autograd_adamw_step
 ```
 
-с чёткой ownership semantics.
-
-Для C FFI выдавать borrowed:
-
-```c
-const char*
-```
+Header был корректным, но Validator сначала считал функции необъявленными.
 
 ---
 
-# 17. Bounds safety
+# 10. Tensor runtime
 
-Memory-safe язык не должен отключать bounds checks через:
-
-```c
-#ifndef NDEBUG
-```
-
-Правило:
+Основные файлы:
 
 ```text
-bounds check присутствует всегда
+std/tensor/tensor.oc
+std/tensor/tensor_runtime.h
+std/tensor/tensor_runtime.c
+
+std/tensor/autograd_runtime.h
+std/tensor/autograd_runtime.c
 ```
 
-если compiler **не доказал**, что индекс безопасен.
+Публичный тип:
 
-Позже:
-
-```text
-Bounds Check Elimination
-```
-
-может убрать проверки из hot loops.
-
----
-
-# 18. SIMD
-
-Старый generic SIMD-copy был удалён/должен быть удалён.
-
-Причина: он предполагал 4-byte element size и был некорректен для:
-
-```text
-double
-64-bit pointers
-nested lists
-class references
-```
-
-План:
-
-```text
-generic containers -> memcpy/compiler auto-vectorization
-
-array and Tensor numeric types ->
-type-specific SIMD
-```
-
----
-
-# 19. Demand-driven runtime
-
-Была найдена проблема: даже простая программа:
-
-```python
-@sqrt(16)
-```
-
-генерировала десятки ненужных runtime helpers:
-
-```text
-list[str]
-string helpers
-sorting helpers
-ARC
-...
-```
-
-Это было исправлено концептуально в backend v0.2.2.
-
-Runtime должен генерироваться только когда реально нужен:
-
-```text
-math-only program
-    -> zero Ocean heap runtime
-
-list
-    -> list runtime
-
-dict
-    -> dict runtime
-
-str methods
-    -> string runtime
-
-ARC type
-    -> ocean_retain/release
-```
-
----
-
-# 20. Тесты
-
-Существующие тесты в основном golden:
-
-```python
-assert generated_c == expected_c
-```
-
-После перехода:
-
-```text
-list_int
-```
-
-→
-
-```text
-ocean_list_int
-```
-
-и появления automatic cleanup многие старые golden expected-C автоматически устарели.
-
-Поэтому предложено разделить тестирование.
-
----
-
-## Level 1 — AST / parser
-
-Проверять структуру AST.
-
----
-
-## Level 2 — C generation
-
-Проверять ключевые конструкции:
-
-```python
-assert "ocean_list_int" in output
-```
-
----
-
-## Level 3 — compile
-
-```bash
-gcc \
-    -std=c11 \
-    -Wall \
-    -Wextra \
-    -Wpedantic \
-    -Werror
-```
-
----
-
-## Level 4 — memory safety
-
-```bash
--fsanitize=address,undefined
--fno-omit-frame-pointer
-```
-
-и реальное выполнение generated binary.
-
----
-
-## Обязательные memory tests
-
-Добавить:
-
-```text
-alias list
-nested alias
-double append same child
-del original while aliases exist
-list[str]
-self-assignment
-return ownership transfer
-pop ownership transfer
-borrow + delete
-borrow + mutation
-&mut exclusivity
-scope cleanup
-nested scope cleanup
-```
-
----
-
-# 21. Array — принятое устройство
-
-`array[T]` — performance/system container.
-
-Он отличается от `list[T]`.
-
-### list
-
-```text
-dynamic
-Python-like
-append/pop
-shared
-ARC
-```
-
-### array
-
-```text
-contiguous
-fixed-size или controlled resize
-unique ownership
-NO ARC
-SIMD-friendly
-OS-friendly
-ML-friendly
-```
-
-Целевая структура:
-
-```c
-typedef struct ocean_array_float32 {
-    float* data;
-    size_t size;
-} ocean_array_float32;
-```
-
-или при необходимости:
-
-```c
-typedef struct ocean_array_float32 {
-    float* data;
-    size_t size;
-    size_t capacity;
-} ocean_array_float32;
-```
-
----
-
-# 22. Tensor — принятое устройство
-
-`Tensor[T]` — публичный N-dimensional dense row-major объект с managed runtime handle.
-
-Он **не должен быть `list[list[T]]`**.
-
-Физически данные должны храниться одним contiguous buffer.
-
-Например:
-
-```python
-var A: Tensor[float32] = [
-    [1.0, 2.0],
-    [3.0, 4.0]
-]
-```
-
-должен соответствовать:
-
-```text
-data:
-[1.0, 2.0, 3.0, 4.0]
-
-shape:
-[2, 2]
-
-strides:
-[2, 1]
-
-ndim:
-2
-
-size:
-4
-```
-
-Целевая структура:
-
-```c
-Tensor хранит opaque runtime handle; layout и backend details остаются внутри
-`std/tensor/tensor_runtime`.
-```
-
----
-
-# 23. Array vs Tensor
-
-```text
-array[T]
-    1D contiguous buffer
-
+```ocean
 Tensor[T]
-    N-D abstraction over contiguous storage
 ```
 
-Tensor добавляет:
+Старый отдельный lowercase tensor path не должен возвращаться.
+
+---
+
+# 11. Tensor storage
+
+Runtime handle хранит:
 
 ```text
+identity
+dtype
+device
 shape
 strides
 ndim
-multi-dimensional indexing
+size
+CPU/GPU storage
+```
+
+Используется monotonic Tensor identity/generation.
+
+Это важно для autograd metadata.
+
+Нельзя снова сопоставлять graph metadata только по raw pointer address:
+allocator может переиспользовать адрес освобождённого Tensor.
+
+---
+
+# 12. Tensor API
+
+Основной публичный API включает:
+
+```text
+Tensor.zeros(...)
+Tensor.from_list(...)
+Tensor.load_npy(...)
+
+tensor.save_npy(...)
+
+tensor.to(device)
+tensor.copy()
+
+tensor.matmul(...)
+tensor.add(...)
+tensor.sub(...)
+tensor.mul(...)
+tensor.div(...)
+
+tensor.add_scalar(...)
+tensor.sub_scalar(...)
+tensor.mul_scalar(...)
+tensor.div_scalar(...)
+
+tensor.reshape(...)
+tensor.transpose(...)
+tensor.permute(...)
+
+tensor.sum_dim(...)
+tensor.mean_dim(...)
+
+tensor.exp()
+tensor.log()
+tensor.sqrt()
+tensor.pow(...)
+
+tensor.softmax(...)
+tensor.layer_norm(...)
+
+tensor.masked_fill(...)
+
+tensor.shape(...)
+tensor.ndim()
+tensor.size()
+tensor.device()
+
+tensor.item()
+
+tensor.requires_grad_(...)
+tensor.backward()
+tensor.grad()
+tensor.zero_grad()
+```
+
+---
+
+# 13. ND Tensor milestone
+
+Поддерживается arbitrary-rank Tensor path для Transformer workloads.
+
+Реализованы:
+
+```text
+zeros_nd
+from_cpu_strided
+reshape ND
+typed ND get/set
+ndim/shape/size
+broadcasting
+slice arbitrary axis
+.npy arbitrary rank
+batched/broadcasted matmul
+transpose arbitrary dims
+permute
+sum_dim
+mean_dim
+autograd
+```
+
+Batched matmul contract:
+
+```text
+A [..., M, K]
+B [..., K, N]
+
+leading dimensions broadcast
+```
+
+Backward:
+
+```text
+dA = dY @ B.transpose(-2, -1)
+dB = A.transpose(-2, -1) @ dY
+```
+
+после чего gradient приводится к исходной shape через sum-to-meta.
+
+---
+
+# 14. Известный bug: higher-rank gradient reduction
+
+При TinyGPT был найден случай, где gradient имел форму:
+
+```text
+[T, C]
+```
+
+а target meta:
+
+```text
+[1, T, C]
+```
+
+Старый `sum_to_meta` падал:
+
+```text
+autograd cannot reduce gradient to a higher rank
+```
+
+Исправление:
+
+- недостающие leading dimensions разрешается left-pad'ить единицами;
+- затем выполняется обычный reduction/broadcast normalization.
+
+Этот behaviour не следует откатывать.
+
+---
+
+# 15. Autograd design
+
+Autograd динамический, eager-style.
+
+Tensor metadata хранит:
+
+```text
+requires_grad
+leaf
+grad
+shape metadata
+graph node
+tensor identity
+```
+
+Graph node хранит:
+
+```text
+left/right parent metadata
+saved_left
+saved_right
+operation data
+```
+
+---
+
+# 16. Критический lifetime invariant autograd
+
+Очень важное правило:
+
+> `ocean_autograd_meta*` — topology metadata, но `meta->tensor` НЕ является
+> гарантией lifetime Tensor storage.
+
+При TinyGPT был найден реальный:
+
+```text
+heap-use-after-free
+```
+
+в LayerNorm backward.
+
+Причина:
+
+- forward intermediate Tensor wrapper уничтожался;
+- runtime Tensor handle освобождался;
+- graph metadata оставался;
+- backward читал `node->left->tensor`;
+- получался UAF.
+
+Правильный pattern:
+
+```c
+node->saved_left = ocean_tensor_copy(tensor);
+```
+
+если backward нужны реальные forward values.
+
+И затем backward читает:
+
+```c
+node->saved_left
+```
+
+а node destructor освобождает saved Tensor.
+
+НЕПРАВИЛЬНО:
+
+```c
+node->left->tensor
+```
+
+если backward читает данные Tensor.
+
+---
+
+# 17. Не удалять autograd metadata на Tensor release
+
+Ранее рассматривалась идея удалять autograd metadata при release Tensor.
+
+Этого делать нельзя в текущей архитектуре.
+
+Graph nodes содержат raw pointers:
+
+```c
+ocean_autograd_meta*
+```
+
+и удаление metadata при wrapper release создаёт dangling graph topology.
+
+Правило:
+
+> Исправлять lifetime нужных Tensor values через `saved_left/saved_right`,
+> а не через агрессивное удаление metadata.
+
+---
+
+# 18. Math/autograd v0.3
+
+Реализованы:
+
+```text
+exp
+log
+sqrt
+pow
+softmax(dim)
+layer_norm
+```
+
+с backward.
+
+Softmax numerically stable.
+
+LayerNorm primitive используется в affine `LayerNorm` module.
+
+---
+
+# 19. Causal attention
+
+Causal masking сейчас строится через composition:
+
+```text
+keep = 1 - mask
+result = input * keep + mask * value
+```
+
+API:
+
+```ocean
+tensor.masked_fill(mask, value)
+```
+
+Для attention mask используется большое отрицательное значение:
+
+```text
+-1e9
+```
+
+Проверялось:
+
+```text
+future attention weights ≈ 0
+row sums ≈ 1
+Q/K/V backward
+finite differences
+```
+
+---
+
+# 20. `permute`
+
+Реализован:
+
+```ocean
+tensor.permute([0, 2, 1, 3])
+```
+
+Autograd хранит permutation и в backward использует inverse permutation.
+
+Не создавать отдельный opcode на каждую permutation.
+
+---
+
+# 21. ML standard library
+
+Основные файлы:
+
+```text
+std/ml/ml.oc
+std/ml/nn.oc
+std/ml/optim.oc
+```
+
+Текущий минимальный framework:
+
+```text
+Tensor
+Parameter
+Module
+
+Linear
+ReLU
+MSELoss
+
+LayerNorm
+MultiHeadAttention
+TransformerBlock
+
+Embedding
+CrossEntropyLoss
+
+SGD
+AdamW
+
+TinyGPT
+```
+
+---
+
+# 22. Parameter
+
+Текущая логика:
+
+```ocean
+class Parameter:
+    data: Tensor[float32]
+```
+
+`Parameter` включает:
+
+```text
+tensor()
+grad()
+has_grad()
+zero_grad()
+step()          # SGD
+adamw_step(...)
+to(device)
+```
+
+После `Parameter.to(device)` новый Tensor снова получает:
+
+```text
+requires_grad = True
+leaf semantics
+```
+
+---
+
+# 23. Module
+
+Базовый API:
+
+```text
+train()
+eval()
+is_training()
+parameters()
+to(device)
+```
+
+`Module.to(device)` переносит все `Parameter`, возвращаемые `parameters()`.
+
+Это важно: текущая система ещё не имеет полноценной recursive reflection по
+полям класса, поэтому корректность зависит от `parameters()` конкретного Module.
+
+---
+
+# 24. Важная особенность inherited `Module.to`
+
+Обычный inherited method stub не подходит для `Module.to`.
+
+Почему:
+
+если inherited stub вызывает:
+
+```c
+Module_to(...)
+```
+
+то внутри него статически будет:
+
+```c
+Module_parameters(...)
+```
+
+и override:
+
+```text
+TinyGPT.parameters()
+Linear.parameters()
+...
+```
+
+потеряется.
+
+Поэтому codegen имеет специальный path:
+
+> Для inherited `Module.to` генерируется concrete-class implementation,
+> который вызывает `ConcreteClass_parameters(self)`.
+
+Не удалять эту специализацию, пока в языке нет настоящего dynamic dispatch
+для такого вызова.
+
+---
+
+# 25. Linear
+
+`Linear`:
+
+```text
+weight [out_features, in_features]
+bias   [1, out_features]
+```
+
+Forward:
+
+```text
+weight_t = weight.transpose()
+output = input.matmul(weight_t)
+result = output + bias
+```
+
+Работает с batched input благодаря ND matmul + broadcasting.
+
+---
+
+# 26. LayerNorm module
+
+Affine LayerNorm:
+
+```text
+normalized = input.layer_norm(-1, eps)
+scaled = normalized * gamma
+result = scaled + beta
+```
+
+Параметры:
+
+```text
+gamma [1, d_model]
+beta  [1, d_model]
+```
+
+Инициализация gamma через обычный Tensor op внутри constructor ранее была
+проблематичной, поэтому используется:
+
+```text
+Tensor.zeros(...)
+ocean_tensor_fill(..., 1.0)
+```
+
+---
+
+# 27. MultiHeadAttention
+
+Текущий flow:
+
+```text
+input [B, T, C]
+
+q_proj/k_proj/v_proj
+    ↓
+[B, T, C]
+
 reshape
-transpose/view semantics
-ML operations
+    ↓
+[B, T, H, D]
+
+permute
+    ↓
+[B, H, T, D]
+
+scores = Q @ K^T
+scaled = scores / sqrt(D)
+masked = causal masked_fill
+weights = softmax(-1)
+context = weights @ V
+
+permute back
+reshape
+out_proj
 ```
 
 ---
 
-# 24. Tensor indexing
+# 28. TransformerBlock
 
-Принято решение поддержать естественный синтаксис:
-
-```python
-A[i, j]
-```
-
-а не использовать:
-
-```python
-A[i][j]
-```
-
-как для nested lists.
-
-Для row-major Tensor:
+Текущий block:
 
 ```text
-offset =
-    i * strides[0] +
-    j * strides[1]
+Pre-LN
+
+x
+ ↓
+LayerNorm
+ ↓
+MultiHeadAttention
+ ↓
+residual add
+ ↓
+LayerNorm
+ ↓
+Linear d_model → d_ff
+ ↓
+ReLU
+ ↓
+Linear d_ff → d_model
+ ↓
+residual add
 ```
 
-и затем:
+Dropout пока не является частью текущего минимального block.
+
+---
+
+# 29. GPT primitives
+
+## Embedding
+
+Input:
+
+```text
+indices [B, T] int64
+weight  [V, C] float32
+```
+
+Output:
+
+```text
+[B, T, C]
+```
+
+Backward:
+
+```text
+scatter-add into weight.grad
+```
+
+Repeated token IDs должны аккумулировать gradients.
+
+Token IDs non-differentiable.
+
+## CrossEntropyLoss
+
+Поддерживает:
+
+```text
+logits  [..., V]
+target  [...]
+```
+
+Mean reduction.
+
+Forward использует stable log-sum-exp.
+
+Backward:
+
+```text
+softmax(logits) - one_hot(target)
+```
+
+с нормировкой на число элементов.
+
+---
+
+# 30. TinyGPT v0.1
+
+Рабочая архитектура:
+
+```text
+token_embedding
++
+position_embedding
+    ↓
+TransformerBlock × 2
+    ↓
+LayerNorm
+    ↓
+Linear lm_head
+    ↓
+logits
+```
+
+Проверенная конфигурация:
+
+```text
+vocab_size      = 8
+context_length  = 7
+d_model         = 16
+n_heads         = 4
+d_ff            = 64
+n_layers        = 2
+```
+
+Toy task:
+
+```text
+input : 0 1 2 3 4 5 6
+target: 1 2 3 4 5 6 7
+```
+
+Подтверждённый результат:
+
+```text
+initial loss = 2.079442
+final loss   = 0.057157
+predicted next token = 7
+
+token embedding grad    = 1
+position embedding grad = 1
+lm head grad            = 1
+
+[ok] Ocean TinyGPT v0.1
+```
+
+Это доказывает end-to-end:
+
+```text
+Embedding
+→ attention
+→ LayerNorm
+→ residual
+→ FFN
+→ lm_head
+→ CrossEntropy
+→ backward
+→ optimizer
+```
+
+---
+
+# 31. TinyGPT parameters
+
+На текущем этапе `TinyGPT.parameters()` содержит explicit/manual list.
+
+Это намеренно.
+
+Recursive parameter discovery по nested Module fields пока недостаточно
+надёжен, поэтому нельзя тихо заменить explicit list на reflection-like
+автоматику без отдельного тестового milestone.
+
+---
+
+# 32. Optimizers
+
+## SGD
+
+Рабочий базовый optimizer.
+
+Используется для regression baseline.
+
+## AdamW v0.1
+
+Реализован:
+
+```text
+first moment m
+second moment v
+bias correction
+epsilon
+decoupled weight decay
+```
+
+Формула:
+
+```text
+m_t = beta1*m_(t-1) + (1-beta1)*g
+v_t = beta2*v_(t-1) + (1-beta2)*g²
+
+m_hat = m_t / (1-beta1^t)
+v_hat = v_t / (1-beta2^t)
+
+p = p - lr * weight_decay * p
+      - lr * m_hat / (sqrt(v_hat) + eps)
+```
+
+Optimizer state имеет собственный:
+
+```text
+state_id
+step
+per-Parameter m/v
+```
+
+Два разных AdamW instance не должны разделять moment state.
+
+Есть numerical two-step reference test.
+
+TinyGPT + AdamW также проходит regression.
+
+---
+
+# 33. GPU architecture
+
+Текущий GPU backend — **OpenCL**.
+
+Public API не должен экспонировать:
+
+```text
+cl_mem
+cl_context
+cl_command_queue
+```
+
+Пользователь видит только:
+
+```ocean
+tensor.to("gpu")
+model.to("gpu")
+```
+
+---
+
+# 34. Tensor `.to(device)`
+
+У Tensor давно есть:
+
+```ocean
+tensor.to("cpu")
+tensor.to("gpu")
+```
+
+Runtime:
+
+```text
+CPU → GPU
+GPU → CPU
+GPU → GPU copy
+CPU → CPU copy
+```
+
+GPU storage представлен opaque handle.
+
+---
+
+# 35. Новый `Parameter.to("gpu")`
+
+Добавлен device transfer Parameter:
+
+```ocean
+parameter.to("gpu")
+```
+
+Семантика:
+
+```text
+old parameter Tensor
+    ↓
+Tensor.to("gpu")
+    ↓
+new Tensor
+    ↓
+requires_grad_(True)
+    ↓
+Parameter.data = moved Tensor
+```
+
+Цель:
+
+- веса реально живут на GPU;
+- optimizer получает новый leaf Tensor;
+- дальнейший forward использует GPU Tensor.
+
+---
+
+# 36. Новый `Module.to("gpu")`
+
+API:
+
+```ocean
+var model: TinyGPT = TinyGPT(...)
+model.to("gpu")
+```
+
+Переносит все параметры:
+
+```text
+for parameter in model.parameters():
+    parameter.to(device)
+```
+
+Для concrete inherited modules используется специальный codegen path,
+описанный выше.
+
+---
+
+# 37. GPU kernels: что уже есть
+
+OpenCL backend уже имеет native kernels / backend paths для части операций:
+
+```text
+matmul
+binary arithmetic
+scalar arithmetic
+fill
+```
+
+В первую очередь оптимизированы:
+
+```text
+float32
+int32
+```
+
+Matmul использует tiled kernel:
+
+```text
+8 × 8 workgroup
+local memory tiles
+bounds checks
+```
+
+---
+
+# 38. GPU fallback semantics
+
+Не все Tensor operations сейчас GPU-native.
+
+Для неподдержанных path runtime может делать:
+
+```text
+GPU Tensor
+   ↓
+copy to CPU
+   ↓
+CPU implementation
+   ↓
+copy result to GPU
+```
+
+Это корректно функционально, но может быть очень медленно.
+
+Особенно это касается части:
+
+```text
+broadcast-heavy operations
+softmax
+LayerNorm
+Embedding
+some ND/batched paths
+optimizer update
+```
+
+Поэтому:
+
+> `device == "gpu"` ещё не означает, что весь Transformer forward является
+> GPU-native без host round-trips.
+
+---
+
+# 39. GPU optimizer v0.1
+
+SGD и AdamW были расширены для GPU-resident Parameter.
+
+Текущий correctness-first path:
+
+```text
+GPU weight
+GPU grad
+   ↓
+temporary CPU copy
+   ↓
+optimizer update on CPU
+   ↓
+copy updated values into original GPU handle
+```
+
+Optimizer state AdamW (`m/v`) пока остаётся host-side.
+
+Это не финальная performance architecture.
+
+Следующий этап:
+
+```text
+native GPU SGD kernel
+native GPU AdamW kernel
+GPU m/v buffers
+```
+
+---
+
+# 40. `ocean_tensor_copy_into`
+
+Для device-aware optimizer update добавлен runtime primitive:
 
 ```c
-A->data[offset]
+ocean_tensor_copy_into(destination, source)
 ```
 
----
+Он копирует данные в существующий Tensor handle без смены identity.
 
-# 25. Tensor metadata
+Это важно для Parameter:
 
-Планируемый интерфейс:
+- leaf metadata остаётся привязано к тому же Tensor handle;
+- optimizer не заменяет Parameter object;
+- GPU weight storage обновляется in-place semantically.
 
-```python
-A.shape
-A.size
-A.ndim
-```
-
-Также:
-
-```python
-A.shape[0]
-A.shape[1]
-```
-
-Metadata lookup не должен копировать tensor data.
-
----
-
-# 26. Tensor ownership
-
-Tensor должен быть managed публичным объектом:
+Не заменять это на:
 
 ```text
-SHARED
+parameter = tensor.to(...)
 ```
 
-а не ARC-managed по умолчанию.
-
-Например:
-
-```python
-var A: Tensor[float32] = ...
-```
-
-владеет storage.
-
-Функция:
-
-```python
-def forward(
-    A: &Tensor[float32]
-) -> None:
-```
-
-получает borrow:
-
-```text
-retain = 0
-release = 0
-copy = 0
-allocation = 0
-```
-
-Функция:
-
-```python
-def normalize(
-    A: &mut Tensor[float32]
-) -> None:
-```
-
-получает exclusive mutable borrow.
+в optimizer step, иначе можно разрушить autograd leaf identity/state.
 
 ---
 
-# 27. ML target
+# 41. GPU status на 2026-08-19
 
-Целевой API:
+Добавлен integration test:
 
-```python
-def matmul(
-    A: &Tensor[float32],
-    B: &Tensor[float32],
-    C: &mut Tensor[float32]
-) -> None:
-
-    var M: int = A.shape[0]
-    var K: int = A.shape[1]
-    var N: int = B.shape[1]
-
-    for i in range(M):
-        for j in range(N):
-
-            var total: float32 = 0.0
-
-            for k in range(K):
-                total += A[i, k] * B[k, j]
-
-            C[i, j] = total
+```text
+tests/test_gpu_training_v01_ocean.py
 ```
 
-Целевой lowering:
+Он должен проверить:
+
+```text
+Linear model.to("gpu")
+input.to("gpu")
+target.to("gpu")
+forward on gpu
+backward
+AdamW step
+loss decreases
+output.device() == "gpu"
+parameter.device() == "gpu"
+```
+
+Но текущий результат:
+
+```text
+1 skipped
+```
+
+Причина:
+
+```text
+OpenCL environment not fully usable
+```
+
+Диагностика показала:
+
+```text
+NVIDIA/CUDA available
+OpenCL not fully usable
+```
+
+Возможная причина — отсутствуют OpenCL development headers/pkg-config metadata,
+а не отсутствие GPU.
+
+Проверить:
+
+```bash
+ls -l /usr/include/CL/cl.h
+ls -l /usr/local/include/CL/cl.h
+
+ldconfig -p | grep -i opencl
+
+clinfo -l
+
+pkg-config --exists OpenCL
+pkg-config --cflags OpenCL
+pkg-config --libs OpenCL
+```
+
+На Debian/Ubuntu типичные packages:
+
+```bash
+sudo apt install ocl-icd-opencl-dev opencl-headers clinfo
+```
+
+После настройки обязательно:
+
+```bash
+python -m pytest tests/test_gpu_training_v01_ocean.py -q -s
+```
+
+GPU milestone считается подтверждённым только при:
+
+```text
+1 passed
+```
+
+а не `skipped`.
+
+---
+
+# 42. OpenCL vs CUDA
+
+На текущем этапе не нужно немедленно выбрасывать OpenCL backend.
+
+Правильный порядок:
+
+1. довести окружение OpenCL;
+2. проверить реальный GPU integration test;
+3. измерить performance;
+4. только после этого решать, нужен ли CUDA backend как отдельный backend.
+
+Для H100 CUDA backend в долгосрочной перспективе логичен, но public API должен
+остаться backend-neutral:
+
+```ocean
+model.to("gpu")
+```
+
+а не:
+
+```ocean
+model.to("cuda")
+```
+
+если мы хотим оставить абстракцию portable.
+
+Внутри runtime позже можно выбирать:
+
+```text
+GPU backend
+    ├── CUDA
+    └── OpenCL
+```
+
+---
+
+# 43. OpenCL build integration
+
+`main.py::compile_c()` обнаруживает standard runtimes по generated includes.
+
+Если Tensor runtime требует OpenCL и доступен:
+
+```bash
+pkg-config --exists OpenCL
+```
+
+compile path автоматически добавляет:
+
+```text
+OpenCL cflags
+OpenCL link flags
+-DOCEAN_TENSOR_ENABLE_OPENCL
+```
+
+Если OpenCL backend отсутствует, `to("gpu")` должен падать явно,
+а не молча выполнять весь код на CPU.
+
+Silent fallback устройства запрещён.
+
+---
+
+# 44. `.npy`
+
+Поддерживается:
+
+```text
+Tensor.load_npy(path, device)
+Tensor.save_npy(path)
+```
+
+Reader/writer не зависит от NumPy runtime.
+
+Поддерживаются:
+
+```text
+bool
+int8/int16/int32/int64
+uint8/uint16/uint32/uint64
+float16/float32/float64
+```
+
+Поддерживаются `.npy` v1/v2/v3.
+
+Fortran-order и object/string dtypes пока не основной path.
+
+GPU Tensor при save может копироваться на CPU.
+
+---
+
+# 45. OpenMP
+
+Compiler поддерживает OpenMP pragmas и автоматически добавляет:
+
+```text
+-fopenmp
+```
+
+если generated C содержит OpenMP.
+
+Не использовать OpenMP для кода с managed objects без validator guarantees.
+
+---
+
+# 46. Frontend/compiler quirks, которые уже встречались
+
+Эти проблемы реальны и важны при следующих ML milestones.
+
+## 46.1 Multiline class method signatures
+
+Некоторые multiline signatures ранее:
+
+- корректно резолвились на call site;
+- но method implementation не попадал в `class_method_scopes`;
+- generated C содержал call без implementation.
+
+Практический workaround:
+
+> Пока держать критические class method signatures в одну строку,
+> если parser/codegen regression не доказал обратное.
+
+## 46.2 Method calls in constructors
+
+Constructor lowering более ограничен, чем обычный method body.
+
+Не предполагать, что любой expression, работающий в `forward`, безопасно
+работает внутри `__init__`.
+
+## 46.3 `len(self.parameters)`
+
+Ранее мог генерироваться undefined `builtin_len`.
+
+Надёжный pattern:
+
+```ocean
+var parameters: list[Parameter] = self.parameters
+len(parameters)
+```
+
+если regression снова проявится.
+
+## 46.4 `Tensor.item()` + reassignment
+
+Ранее:
+
+```ocean
+final_loss = final_loss_tensor.item()
+```
+
+мог типизироваться как `unknown`.
+
+Надёжный pattern:
+
+```ocean
+var final_loss_value: float64 = final_loss_tensor.item()
+```
+
+с fresh typed declaration.
+
+## 46.5 Chained attribute methods в `print`
+
+Проблемный pattern:
+
+```ocean
+print(projection.weight.has_grad())
+```
+
+Validator мог интерпретировать промежуточный:
+
+```text
+projection.weight
+```
+
+как standalone variable.
+
+Надёжнее:
+
+```ocean
+var weight: Parameter = projection.weight
+print(weight.has_grad())
+```
+
+## 46.6 1D Tensor assignment
+
+Исторически:
+
+```ocean
+positions[0] = 0
+```
+
+мог lower'иться как обычный C indexing:
 
 ```c
-void ocean_matmul(
-    const Tensor* restrict A,
-    const Tensor* restrict B,
-    Tensor* restrict C
-)
+positions[0] = 0;
 ```
 
-Внутри compute loop не должно быть ARC.
+где `positions` — Ocean Tensor wrapper.
+
+Для TinyGPT использовался workaround:
+
+```text
+positions [1, T]
+positions[0, i]
+```
+
+Пока отдельный regression не докажет исправление 1D set path, помнить про это.
 
 ---
 
-# 28. Исторический статус array/tensor до завершения backend-перехода
+# 47. Bool/int lowering
 
-### Parser
+Python implementation frontend должен отличать:
 
-Уже подготовлена поддержка AST для:
-
-```text
-array[T]
-Tensor[T]
+```python
+bool
 ```
 
-в parser v0.2.
+от:
 
-Parser умеет концептуально сохранять:
-
-```text
-element_type
-ownership
-shape
-rank
-is_rectangular
+```python
+int
 ```
 
-для Tensor construction и array literals.
+Поскольку:
 
-### Backend
-
-Lowering `array` и публичного `Tensor` поддерживается; удалённый native
-старый native tensor-тип больше не является частью языка.
-
-Последний запрос перед handoff был:
-
-> реализовать `array` и публичный `Tensor`.
-
-Начат план следующей backend-итерации:
-
-```text
-array[T]
-    unique-owned contiguous storage
-    creation
-    indexing
-    mutation
-    len
-    cleanup
-    borrowing
-
-Tensor[T]
-    contiguous row-major storage
-    shape
-    strides
-    ndim
-    size
-    A[i, j]
-    mutation
-    automatic cleanup
-    &T / &mut T
+```python
+isinstance(True, int) == True
 ```
 
-Именно с этого надо продолжить следующую сессию.
+нельзя проверять integer literal до bool.
+
+Надёжное правило:
+
+```python
+isinstance(value, bool)
+```
+
+должно идти раньше integer handling.
 
 ---
 
-# 29. Устойчивые архитектурные ограничения
+# 48. Generated runtime / demand driven
+
+Runtime helpers должны генерироваться/линковаться только когда нужны.
+
+Не возвращаться к ситуации, где:
+
+```ocean
+sqrt(...)
+```
+
+тянет list/string/ARC/Tensor helpers.
+
+---
+
+# 49. Testing philosophy
+
+Для Ocean недостаточно только проверить generated C text.
+
+Нужны уровни:
+
+```text
+1. parser / Typed IR
+2. Validator
+3. generated C
+4. strict GCC/Clang compile
+5. binary execution
+6. numerical reference
+7. finite differences для autograd
+8. regression suite
+```
+
+Для ML операций желательно:
+
+```text
+forward reference
+backward reference
+finite differences
+shape tests
+broadcast tests
+lifetime tests
+```
+
+---
+
+# 50. Текущая regression база
+
+Последний фактически сообщённый результат:
+
+```text
+137 passed, 1 skipped
+```
+
+`skipped`:
+
+```text
+GPU training/inference integration
+```
+
+CPU TinyGPT, AdamW и остальные regression tests проходят.
+
+При изменениях Tensor/autograd всегда отдельно прогонять:
+
+```bash
+python -m pytest tests/test_layernorm_v01_ocean.py -q
+python -m pytest tests/test_transformer_block_v01_ocean.py -q
+python -m pytest tests/test_tiny_gpt_v01_ocean.py -q
+python -m pytest tests/test_tiny_gpt_adamw_v01_ocean.py -q
+python -m pytest tests/test_adamw_v01_runtime.py -q
+python -m pytest tests/test_adamw_v01_ocean.py -q
+python -m pytest
+```
+
+После настройки OpenCL:
+
+```bash
+python -m pytest tests/test_gpu_training_v01_ocean.py -q -s
+```
+
+---
+
+# 51. ASan обязателен для autograd lifetime bugs
+
+Если появляется SIGSEGV после:
+
+```text
+forward
+backward
+```
+
+не гадать.
+
+Собирать:
+
+```bash
+-fsanitize=address
+-O0
+-g3
+-fno-omit-frame-pointer
+```
+
+ASan уже позволил найти LayerNorm use-after-free.
+
+Особенно подозрительны:
+
+```text
+node->left->tensor
+node->right->tensor
+```
+
+в backward implementations.
+
+---
+
+# 52. Что НЕ делать
 
 Не следует:
 
-1. делать Tensor через `list[list[T]]`;
-2. добавлять лишние копирования в Tensor hot path;
-3. делать generic handwritten SIMD для любых T;
-4. возвращаться к одному 8000-line `CCodeGenerator`;
-5. добавлять новые type semantics непосредственно во время C emission;
-6. продолжать unsafe multiple inheritance;
-7. считать raw C FFI memory-safe;
-8. отключать bounds checks через release/NDEBUG.
+- возвращать Tensor как `list[list[T]]`;
+- удалять autograd metadata при каждом Tensor release;
+- отключать bounds checks через `NDEBUG`;
+- делать silent CPU fallback для `device="gpu"` на уровне device selection;
+- считать GPU feature готовой только потому, что тест `skipped`;
+- reintroduce raw pointer identity как autograd identity;
+- делать generic SIMD, предполагающий фиксированный element size;
+- использовать multiple inheritance через unsafe C casts;
+- добавлять отдельный ad-hoc AST/codegen path для каждой Tensor операции;
+- скрывать CPU round-trip под словами "GPU-native".
 
 ---
 
-# 30. Устаревший план до завершения Tensor backend
+# 53. Ближайший roadmap
 
-Продолжить с реализации:
+## P0 — подтвердить GPU training
 
-```text
-src/codegen/array_codegen.py
-src/codegen/tensor_codegen.py
+1. Установить/настроить OpenCL headers/runtime.
+2. Убедиться, что:
+
+```bash
+pkg-config --exists OpenCL
+clinfo -l
 ```
 
-и добавить их в:
-
-```python
-class CCodeGenerator(...)
-```
-
-Нужно реализовать в таком порядке:
-
-### Array
+видят backend/device.
+3. Добиться:
 
 ```text
-1. type mapping
-2. runtime struct
-3. literal creation
-4. get/set
-5. bounds checks
-6. len
-7. scope cleanup
-8. assignment/move semantics
-9. &array[T]
-10. &mut array[T]
+tests/test_gpu_training_v01_ocean.py → passed
 ```
 
-### Tensor
+4. Добавить GPU test для:
+   - SGD;
+   - AdamW;
+   - Linear inference;
+   - Linear training.
+
+## P1 — GPU-native Transformer path
+
+Убрать host round-trip из:
 
 ```text
-1. Tensor runtime handle
-2. contiguous literal flattening
-3. shape generation
-4. stride generation
-5. ndim
-6. size
-7. A[i, j]
-8. multidimensional checked offset
-9. set
-10. shape access
-11. borrow
-12. cleanup
-13. reshape/view
+batched matmul
+broadcast binary
+softmax
+LayerNorm
+Embedding
+CrossEntropy
+reductions
+transpose/permute where possible
 ```
 
 После этого:
 
 ```text
-matmul benchmark
-↓
-bounds-check elimination
-↓
-restrict/noalias analysis
-↓
-SIMD
-↓
-BLAS
-↓
-CUDA backend/interoperability
+TinyGPT CPU vs GPU
+```
+
+benchmark.
+
+Обязательно сравнивать:
+
+```text
+loss
+logits
+gradients
+predicted token
+runtime
+memory
+```
+
+## P2 — autoregressive inference
+
+Реализовать:
+
+```text
+TinyGPT.generate()
+greedy decoding
+last-token logits
+max_new_tokens
+```
+
+Сначала без cache.
+
+## P3 — KV cache
+
+После базового `generate()`:
+
+```text
+generation without KV cache
+vs
+generation with KV cache
+```
+
+Проверять:
+
+```text
+identical tokens
+close logits
+speed/token
+scaling with context length
+```
+
+## P4 — positional encoding
+
+Добавить:
+
+```text
+Tensor.arange
+automatic position ids
+RoPE
+```
+
+После этого learned positional embedding можно оставить как supported option.
+
+## P5 — CUDA backend
+
+Если OpenCL на H100 функционально работает, но performance ограничивает проект:
+
+```text
+Tensor backend interface
+    ├── CPU
+    ├── OpenCL
+    └── CUDA
+```
+
+Public API оставить:
+
+```ocean
+.to("gpu")
+```
+
+Backend selection должен быть runtime/build-level detail.
+
+## P6 — optimizer performance
+
+Перевести:
+
+```text
+SGD
+AdamW
+m/v state
+```
+
+на GPU buffers и kernels.
+
+## P7 — views / memory
+
+Сделать:
+
+```text
+zero-copy reshape
+zero-copy transpose/permute where valid
+offset
+strides
+storage ownership
+memory pool
+arena
 ```
 
 ---
 
-# 31. Созданные артефакты
+# 54. ML roadmap после GPU
 
-Compiler modular refactor:
+После GPU-native TinyGPT:
 
-`phils_codegen_refactor.zip`
-
-Ocean ownership backend:
-
-`phils_codegen_ocean_v02.zip`
-
-Logging fix:
-
-`phils_codegen_ocean_v021.zip`
-
-Demand-driven helpers iteration:
-
-`phils_codegen_ocean_v022.zip`
-
-Parser v0.2:
-
-`phils_parser_ocean_v02.zip`
+```text
+Dropout
+GELU / SiLU
+RoPE
+RMSNorm
+KV cache
+FlashAttention-like kernel
+weight tying
+checkpoint load/save
+tokenizer
+dataset API
+mixed precision
+quantization
+```
 
 ---
 
-# 32. Главная архитектурная цель
+# 55. Quantization roadmap
 
-Итоговая модель Phils:
+Уже поддерживаются compact numeric dtypes, включая `int8`.
 
-```text
-Python-like syntax
-        ↓
-Parser
-        ↓
-Typed AST / HIR
-        ↓
-Semantic analyzer
-        ↓
-Automatic ownership management
-        ↓
-Borrow checking
-        ↓
-Safety optimizations
-        ↓
-C backend
-        ↓
-clang/gcc
-```
+Но это ещё не полноценная quantization API.
 
-Семантика памяти:
+Нужно отдельно:
 
 ```text
-Value
-    ↓
-zero-cost
-
-Owned array / managed Tensor
-    ↓
-unique ownership
-    ↓
-zero refcount
-
-Shared list/dict/class
-    ↓
-ARC
-
-&T / &mut T
-    ↓
-zero-cost borrow
-
-*T / C
-    ↓
-unsafe/raw
+scale
+zero_point
+per-tensor
+per-channel
+weight-only
+int8
+int4
+int2
 ```
 
-Главная цель производительности:
-
-> В OS/ML hot paths Phils должен уметь генерировать C без hidden allocation, ARC и копирования, чтобы итоговый код мог оптимизироваться clang/gcc примерно на уровне C/Rust.
+Не смешивать packed storage и обычный dtype API без metadata.
 
 ---
 
-# 33. Актуальная архитектура компилятора
+# 56. Backend-neutral device model
 
-Текущий основной pipeline:
+Долгосрочная желаемая модель:
+
+```ocean
+var model = TinyGPT(...)
+model.to("gpu")
+
+var x = x.to("gpu")
+var y = model.forward(x)
+```
+
+А внутри:
 
 ```text
-Ocean source → Parser → TypedModule / Typed IR → validation
-    → ownership/borrow analysis → structured diagnostics
-    → CCodeGenerator → generated C11 → gcc/clang
+device="gpu"
+    ↓
+preferred GPU backend
+    ↓
+CUDA or OpenCL
 ```
 
-`TypedModule` является главным API backend’а:
+Если explicit backend control понадобится, лучше отдельная configuration layer,
+а не разрушение основного PyTorch-like API.
 
-```python
-typed_module = Parser().parse_typed(source)
-c_code = CCodeGenerator().generate_from_typed_ir(typed_module)
-```
+---
 
-Основные компоненты:
+# 57. Команды для разработки
 
-- `src/parser.py` — синтаксис и построение типизированного модуля;
-- `src/typed_ir.py` — типы, зависимости, reads/writes и ownership effects;
-- `src/debug.py` — validation, borrow/move checks и внешние C symbols;
-- `src/diagnostics.py` — typed diagnostics с location и стабильными кодами;
-- `src/codegen/` — lowering в C11;
-- `src/compiler.py` — сохранённый public compatibility API;
-- `std/` — стандартная библиотека и C runtime.
-
-Внутреннее представление compiler pipeline больше не сериализуется в JSON.
-Совместимость сохранена только для legacy dictionary projection diagnostics и
-mapping-представлений Typed IR. JSON-файлы Graphify являются артефактами
-инструмента анализа кода, а не частью compiler/runtime IR.
-
-Импорты разделены по назначению:
-
-```text
-import "./examples/matmul.oc"       # относительно импортирующего файла
-import <std/tensor/tensor.oc>        # из ./std/
-```
-
-Package CLI поддерживает `init`, `check`, `build`, `run`, `test`, `clean`.
-Артефакты package build находятся в `build/<profile>/`; legacy single-file
-workflow остаётся доступным при передаче исходного `.oc` файла.
-
-# 34. Актуальная модель памяти
-
-```text
-scalar value       → plain C value
-list/dict/class    → non-atomic ARC
-str                → owned C string semantics
-array[T]           → unique-owned numeric buffer
-Tensor[T]          → ARC-managed facade over opaque runtime handle
-File/BinaryFile    → ARC-managed facade over opaque FILE handle
-&T / &mut T        → lexical zero-cost borrow
-*T / C calls       → explicit unsafe boundary
-```
-
-Реализованы детерминированный cleanup managed объектов при выходе из scope,
-`del` как раннее освобождение, ownership effects в Typed IR, move/use-after-move
-checks, immutable/mutable lexical borrows, retain/release элементов list/dict,
-ownership transfer через `pop` и return paths, а также bounds checks,
-не зависящие от `NDEBUG`.
-
-Ограничения v1:
-
-- ARC неатомарен и рассчитан на thread-confined managed objects;
-- полноценные NLL/lifetime parameters ещё не реализованы;
-- `Send`/`Sync`, `Shared[T]`, arenas и allocator API отсутствуют;
-- циклы ARC могут приводить к leak;
-- raw C pointers и произвольные C ownership contracts не анализируются;
-- multiple inheritance запрещён, безопасная модель пока single inheritance.
-
-# 35. OpenMP и параллельные циклы
-
-Поддерживается ограниченный безопасный subset:
-
-```text
-#pragma omp parallel for collapse(2) schedule(static)
-for i in range(rows):
-    for j in range(cols):
-        output[i, j] = left[i, j] + right[i, j]
-```
-
-Допускается совместимое написание `#pragma opm`; в C всегда генерируется
-правильный `#pragma omp`. Поддерживаются clauses `schedule`, `collapse`,
-`reduction`, `private`, `firstprivate`, `lastprivate`, `shared`, `default`,
-`nowait`, `ordered`.
-
-Для `collapse(n)` циклы должны быть идеально вложенными, с постоянным
-ненулевым integer step. Managed objects, вызовы функций, `break`, `continue`
-и небезопасные формы вложенности отклоняются validator’ом. Если generated C
-содержит OpenMP pragma, CLI автоматически добавляет `-fopenmp`.
-
-# 36. Tensor backend: фактическое состояние
-
-`Tensor[T]` — единственный публичный tensor type. Старый отдельный lowercase
-`tensor` больше не является частью публичного API. Пользовательский код не
-видит `cl_mem`, OpenCL context, queue или CPU pointers.
-
-Основной API:
-
-```text
-Tensor.zeros(..., device)
-Tensor.from_list(..., device)
-Tensor.load_npy(path, device)
-tensor.save_npy(path)
-tensor.to(device), tensor.copy(), tensor.matmul(other)
-tensor.add/sub/mul/div(...), tensor.reshape/transpose/row/column/slice(...)
-tensor.sum/mean/min/max/item(), tensor.shape(axis), tensor.ndim()
-tensor.size(), tensor.device(), tensor.get/set/fill()
-```
-
-Поддерживаются numeric dtypes: `bool`, signed/unsigned integers,
-`float16`, `float32`, `float64`. `Tensor[str]` отклоняется. Устройства:
-`"cpu"` и `"gpu"` (OpenCL).
-
-Runtime использует backend operation table. OpenCL context, queue, program и
-kernels создаются лениво и кэшируются по процессу; kernel cache разделён по
-операции и dtype. Очередь in-order, операции flush’ятся без лишних глобальных
-barrier, host reads ждут собственные read events. OpenCL events освобождаются
-после постановки команды.
-
-CPU `float32`/`float64` 2D matmul имеет contiguous row-major `i-k-j` fast path.
-OpenCL kernels есть для `float32` и `int32`; остальные numeric dtypes используют
-корректный CPU fallback с переносом результата на исходное устройство.
-
-Для одноиндексного scalar iteration:
-
-```text
-len(tensor)  → число скалярных элементов
-tensor[i]    → плоский row-major элемент
-tensor[i, j] → строгий многомерный доступ с проверкой rank
-```
-
-Это позволяет загружать веса и проходить их линейным циклом. `Tensor` пока не
-имеет zero-copy view semantics: `reshape`, `transpose`, `row`, `column` и
-`slice` материализуют независимое contiguous storage.
-
-# 37. File и BinaryFile
-
-Добавлен стандартный импорт:
-
-```text
-import <std/io/file.oc>
-```
-
-`File` предоставляет `read`, `readline`, `readlines`, `write`, `writelines`,
-`flush`, `eof`, `close`.
-
-`open_binary(path, mode)` возвращает `BinaryFile` с методами `read_byte`,
-`read_bytes`, `write_byte`, `write_bytes`, `flush`, `eof`, `close`.
-
-Runtime находится в `std/io/file_runtime.h` и `std/io/file_runtime.c`.
-В safe Ocean code проходят opaque handles; `FILE*` напрямую не экспортируется.
-File handles закрываются явно или при уничтожении владеющего Ocean объекта.
-
-# 38. NumPy `.npy`
-
-Добавлены методы `Tensor.load_npy(path, device)` и `tensor.save_npy(path)`.
-Reader/writer реализован напрямую в C runtime без зависимости от NumPy.
-
-Поддерживаются `.npy` v1.0, v2.0 и v3.0, little/big endian и numeric
-descriptors `bool`, `int8/int16/int32/int64`, `uint8/uint16/uint32/uint64`,
-`float16/float32/float64`.
-
-Writer использует v1, пока header помещается в 16-bit length field, иначе v2.
-Данные сохраняются в C-order row-major виде. При сохранении GPU Tensor сначала
-скачивается на CPU; non-contiguous storage материализуется перед записью.
-
-Reader проверяет magic/version/header, извлекает `descr`, `fortran_order` и
-`shape`, читает raw payload через `fread`, при необходимости делает endian
-byte-swap и затем переносит Tensor на запрошенное устройство.
-
-Пока отклоняются Fortran-order, object/string/structured dtypes и scalar arrays.
-`.npy` не сжимается и не хранит quantization metadata. `Tensor[int8]` уже
-поддерживается как компактный dtype, но настоящие `scale`/`zero_point`
-quantization API ещё не реализованы.
-
-# 39. Примеры и проверки
-
-ML/OOP примеры:
-
-- `examples/transformer_pytorch.py` — PyTorch reference implementation;
-- `examples/transformer_ocean.oc` — OOP Transformer-like implementation;
-- `examples/matmul.oc` — CPU Tensor/matmul;
-- `examples/matmul_gpu.oc` — OpenCL Tensor path;
-- `examples/load_npy.oc` — загрузка и линейная итерация `.npy` weights;
-- `examples/openmp.oc` — OpenMP loops;
-- `examples/neural_network.oc` — ML-oriented language example.
-
-Последняя проверенная база:
-
-```text
-pytest -q                 → 109 passed
-python main.py check --quiet
-python main.py build --quiet
-git diff --check
-```
-
-Runtime C проверяется также строгой компиляцией:
+Полный regression:
 
 ```bash
-gcc -std=c11 -Wall -Wextra -Wpedantic -I. \
-    -c std/tensor/tensor_runtime.c
-gcc -std=c11 -Wall -Wextra -Wpedantic -I. \
-    -c std/io/file_runtime.c
+python -m pytest
 ```
 
-Для OpenCL необходимо передавать include directory с `CL/cl.h`, library
-directory с `libOpenCL.so`, `-lOpenCL` и
-`-DOCEAN_TENSOR_ENABLE_OPENCL`, например:
+Конкретный ML test:
 
 ```bash
-ocean run ./examples/matmul_gpu.oc \
-  --cflags "-I${CONDA_PREFIX}/include \
--L/usr/local/cuda/targets/x86_64-linux/lib \
--lOpenCL -DOCEAN_TENSOR_ENABLE_OPENCL"
+python -m pytest tests/test_tiny_gpt_v01_ocean.py -q
 ```
 
-Graphify после последнего изменения кода:
+GPU:
 
-```text
-1468 nodes
-3159 edges
-89 communities
+```bash
+python -m pytest tests/test_gpu_training_v01_ocean.py -q -s
 ```
 
-Обновлять graph artifacts:
+Проверка OpenCL:
+
+```bash
+pkg-config --exists OpenCL
+pkg-config --cflags OpenCL
+pkg-config --libs OpenCL
+clinfo -l
+```
+
+Проверка NVIDIA:
+
+```bash
+nvidia-smi
+nvcc --version
+```
+
+Graphify:
 
 ```bash
 ./.venv/bin/graphify update .
 ```
 
-# 40. Текущие ограничения и ближайший roadmap
+---
 
-Приоритет P0 — завершить compiler foundation:
+# 58. На что смотреть при следующем падении TinyGPT
 
-1. Убрать оставшиеся прямые AST обходы из backend в пользу Typed IR.
-2. Добавить `Result[T, E]`, `Option[T]` и `defer` вместо process-exit для обычных ошибок.
-3. Улучшить diagnostics для rank/type/ownership ошибок, включая точные source spans.
-4. Довести interprocedural borrow/data-flow checks и явные move diagnostics.
-
-Приоритет P1 — Tensor performance:
-
-1. Ввести zero-copy Tensor views через `offset`, `shape`, `strides`, `owns_data`.
-2. Добавить memory pool для повторного использования CPU/GPU buffers.
-3. Реализовать kernel fusion для цепочек elementwise операций.
-4. Добавить SIMD CPU backend и benchmark suite с `-O2`/`-O3`.
-5. Сделать async Tensor events публичным безопасным API без ручного OpenCL доступа.
-
-Приоритет P2 — compact ML weights:
-
-1. Реализовать affine `int8` quantization: `scale` и `zero_point`.
-2. Добавить per-channel quantization для Linear/Conv weights.
-3. Использовать стандартный `.npz` для `data`, `scale`, `zero_point`, не вводя
-   собственный checkpoint format.
-4. Позже добавить packed `int4`/`int2` storage.
-
-Приоритет P3 — язык и backend:
-
-1. Traits/interfaces: `Numeric`, `Readable`, `Writable`, `Backend`, `Allocator`.
-2. Value generics/comptime для dtype, rank, layout и tile sizes.
-3. Явные allocator’ы и arena lifetime для системного кода.
-4. `Send`/`Sync`-подобные ограничения для pthread/OpenMP объектов.
-5. Дополнительные backend’ы: SIMD, CUDA/внешний BLAS, затем возможно LLVM/MLIR.
-6. `ocean fmt`, `ocean lint`, LSP, profiler и incremental compilation cache.
-
-Целевая ниша Ocean — не полная замена Rust, Zig или Mojo, а их практический
-пересекающийся слой:
+Если ошибка validation:
 
 ```text
-Python-like syntax
-+ lexical ownership/borrows
-+ explicit C ABI and unsafe boundary
-+ comptime specialization
-+ Tensor/OpenCL/ML standard library
+function not declared
 ```
 
-Не следует возвращаться к Tensor через `list[list[T]]`, отключать bounds checks
-через `NDEBUG`, добавлять handwritten generic SIMD без dtype/layout доказательств
-или снова смешивать backend semantics с C emission.
+проверить C-function whitelist Validator.
 
-# 41. `std/net` и HTTP/Web backend
+Если GCC:
 
-`std/net` развивается как Python-like backend stack поверх C11/POSIX runtime.
+```text
+incompatible types
+```
 
-Актуальная структура:
+смотреть generated C и Tensor intrinsic lowering.
+
+Если runtime:
+
+```text
+shape/rank mismatch
+```
+
+проверять broadcasting/sum_to_meta/matmul.
+
+Если SIGSEGV:
+
+```text
+ASan immediately
+```
+
+Если backward UAF:
+
+```text
+ищем node->left->tensor / node->right->tensor
+```
+
+и решаем через:
+
+```text
+saved_left / saved_right
+```
+
+если operation нуждается в forward values.
+
+---
+
+# 59. Текущая точка продолжения
+
+Самый правильный следующий шаг после этого handoff:
+
+```text
+1. починить OpenCL окружение
+2. добиться реального pass GPU integration test
+3. добавить TinyGPT GPU inference test
+4. добавить TinyGPT GPU training test
+5. профилировать CPU fallback
+6. переносить горячие Transformer operations в GPU-native kernels
+```
+
+До выполнения пункта 2 не считать GPU training полностью завершённым.
+
+---
+
+# 60. Ключевые инварианты проекта
+
+Если нужно запомнить только несколько вещей:
+
+1. **Typed IR — основной compiler contract.**
+2. **ARC и ownership должны оставаться deterministic.**
+3. **Autograd metadata != Tensor storage lifetime.**
+4. **Backward, которому нужны forward values, сохраняет собственный Tensor copy.**
+5. **Tensor identity не равен raw pointer address.**
+6. **Module.to(device) обязан использовать concrete model parameters().**
+7. **`gpu` не означает GPU-native для каждого op, пока есть host fallback.**
+8. **Skipped GPU test не является подтверждением GPU execution.**
+9. **Каждый новый ML primitive должен иметь numerical/backward test.**
+10. **После каждого крупного ML/runtime изменения нужен полный regression suite.**
+
+---
+
+# 61. Итог
+
+На текущем этапе Ocean уже умеет не только компилировать обычный код в C,
+но и обучать небольшой GPT-подобный Transformer end-to-end:
+
+```text
+Ocean source
+→ Tensor
+→ Embedding
+→ Transformer
+→ CrossEntropy
+→ autograd
+→ AdamW
+→ trained TinyGPT
+```
+
+CPU path подтверждён тестами.
+
+GPU device abstraction и `.to("gpu")` уже заведены в Tensor/Parameter/Module,
+но реальный GPU training test ещё должен быть подтверждён после настройки
+OpenCL development/runtime environment.
+
+Следующий крупный рубеж:
+
+> **полностью подтверждённый TinyGPT training/inference на GPU, а затем
+> GPU-native Transformer kernels и KV cache.**
+
+---
+
+# 62. Backend/server development — `std/net`
+
+Ocean предназначен не только для ML/HPC. На нём также проектируется и уже
+частично реализован **обычный серверный backend stack** поверх C11/POSIX.
+
+Это важная часть проекта и её нельзя считать второстепенной или исторической.
+
+Цель:
+
+```text
+Ocean source
+    ↓
+typed Request / Response / Router / App
+    ↓
+std/net + std/json
+    ↓
+C11/POSIX sockets + pthread worker pool
+    ↓
+native HTTP backend executable
+```
+
+То есть на Ocean должен быть возможен код уровня:
+
+```ocean
+def get_user(request: Request) -> Response:
+    var root: Json = Json.object()
+    var name: Json = Json.str("Ocean")
+
+    root.set("name", name)
+
+    return Response.json_value(root)
+
+
+def main() -> int:
+    var app: App = App.create()
+
+    app.get("/users/{id}", get_user)
+    app.workers(8)
+    app.queue_size(256)
+    app.keep_alive(5000)
+
+    app.run("0.0.0.0", 8080)
+
+    return 0
+```
+
+Не обязательно, чтобы конкретно все показанные convenience methods уже были
+стабильны в tracked sources; это целевой API направления.
+
+## 62.1 Структура `std/net`
+
+Текущая/целевая структура:
 
 ```text
 std/net/
@@ -1635,25 +2248,67 @@ std/net/
 └── README.md
 ```
 
-Низкоуровневый слой предоставляет TCP sockets и HTTP client. Web-слой должен
-скрывать opaque C handles от обычного Ocean-кода и использовать публичные
-Ocean-типы:
+Слои:
 
-```python
-def handler(request: Request) -> Response:
-    ...
+```text
+socket.oc
+    ↓
+TCP sockets
+
+http.oc
+    ↓
+HTTP client
+
+web.oc
+    ↓
+HTTP server / application API
 ```
 
-## Typed `Request` / `Response`
+Пользовательский Ocean-код не должен работать напрямую с `socket fd`,
+`struct sockaddr`, `pthread_t` или private C layouts.
 
-`Request` и `Response` являются обычными Ocean class objects, внутри которых
-хранятся opaque handles:
+---
+
+# 63. Typed backend API
+
+Web layer должен скрывать raw handles за обычными Ocean class objects:
+
+```text
+Request
+Response
+App
+Router
+Next
+```
+
+Внутри:
 
 ```text
 Request  -> ocean_web_request_t
 Response -> ocean_web_response_t
 App      -> ocean_web_app_t
+Router   -> private router runtime
+Next     -> ocean_web_next_t
 ```
+
+Пользовательский handler:
+
+```ocean
+def handler(request: Request) -> Response:
+    ...
+```
+
+а не:
+
+```c
+ocean_web_response_t handler(ocean_web_request_t request)
+```
+
+Raw ABI — implementation detail stdlib.
+
+---
+
+# 64. `Request`
 
 Основной API request:
 
@@ -1664,70 +2319,103 @@ Request.query(request)
 Request.body(request)
 Request.json(request)
 Request.remote(request)
+
 Request.header(request, name, default)
+
 Request.query_param(request, name, default)
 Request.path_param(request, name, default)
 ```
 
-Основной API response:
+Следующий typed слой:
+
+```text
+Request.path_int(...)
+Request.query_int(...)
+Request.query_bool(...)
+```
+
+В перспективе:
+
+```text
+Request.state / request context
+cookies
+multipart/form-data
+uploads
+```
+
+---
+
+# 65. `Response`
+
+Основной API:
 
 ```text
 Response.text(...)
 Response.text_status(...)
+
 Response.json(...)
 Response.json_status(...)
+
 Response.json_value(Json)
 Response.json_value_status(status, Json)
+
 Response.html(...)
+
 Response.empty(status)
 Response.redirect(...)
+
 Response.add_header(...)
 ```
 
-`Request.json()` и `Response.json_value()` связывают `std/net` с существующим
-`std/json`, поэтому JSON не нужно собирать конкатенацией строк:
+Важно интегрировать backend с `std/json`, а не собирать JSON через string
+concatenation.
 
-```python
-def get_user(request: Request) -> Response:
+Пример:
+
+```ocean
+def health(request: Request) -> Response:
     var root: Json = Json.object()
-    var name: Json = Json.str("Ocean")
+    var status: Json = Json.str("ok")
 
-    root.set("name", name)
+    root.set("status", status)
 
     return Response.json_value(root)
 ```
 
-## Важный ABI naming rule
+---
 
-Ocean classes lowering’ятся с `ocean_` prefix:
+# 66. ABI naming rule для web backend
+
+Ocean classes lower'ятся с `ocean_` prefix.
+
+Например:
 
 ```text
 class Request
-    -> ocean_Request
-    -> ocean_create_Request(...)
-    -> ocean_Request_raw_handle(...)
-
-class Response
-    -> ocean_Response
-    -> ocean_create_Response(...)
-    -> ocean_Response_take_handle(...)
-```
-
-Нельзя объявлять callback ABI через:
-
-```c
-struct Request
-struct Response
-```
-
-Реальные generated C types называются:
-
-```c
+    ↓
 ocean_Request
-ocean_Response
+ocean_create_Request(...)
+ocean_Request_raw_handle(...)
 ```
 
-Правильный handler ABI:
+и:
+
+```text
+class Response
+    ↓
+ocean_Response
+ocean_create_Response(...)
+ocean_Response_take_handle(...)
+```
+
+Поэтому callback ABI нельзя объявлять через несуществующие:
+
+```c
+struct Request;
+struct Response;
+```
+
+Правильная идея:
 
 ```c
 typedef struct ocean_Request ocean_Request;
@@ -1738,16 +2426,25 @@ typedef ocean_Response *(*ocean_web_handler_t)(
 );
 ```
 
-## Критическая FFI-грабля: `.handle` внутри `@C-call`
+Generated type names должны совпадать с реальным Ocean class lowering.
 
-На текущем backend нельзя надёжно писать:
+---
 
-```python
-@ocean_web_next_call(self.handle, request_handle)
+# 67. Важная FFI-грабля для backend wrappers
+
+Проблемный pattern:
+
+```ocean
 @ocean_web_get(self.handle, path, handler)
 ```
 
-Attribute access внутри аргумента raw C call может быть emitted буквально как:
+или:
+
+```ocean
+@ocean_web_next_call(self.handle, request_handle)
+```
+
+Attribute access внутри raw C-call arguments ранее мог lower'иться буквально:
 
 ```c
 self.handle
@@ -1759,41 +2456,39 @@ self.handle
 self->handle
 ```
 
-и C compilation падает.
+Надёжный stdlib pattern:
 
-Устойчивый stdlib pattern:
-
-```python
-def raw_handle(self) -> ocean_web_next_t:
+```ocean
+def raw_handle(self) -> ocean_web_app_t:
     return self.handle
-
-
-def call(self, request: Request) -> Response:
-    unsafe:
-        var next_handle: ocean_web_next_t = self.raw_handle()
-        var request_handle: ocean_web_request_t = request.raw_handle()
-        var response_handle: ocean_web_response_t = @ocean_web_next_call(next_handle, request_handle)
-
-    return Response(response_handle)
 ```
 
-Тот же pattern следует использовать для `App`, `Router` и других stdlib
-wrappers:
+затем:
+
+```ocean
+unsafe:
+    var app_handle: ocean_web_app_t = self.raw_handle()
+    @ocean_web_get(app_handle, path, handler)
+```
+
+То есть:
 
 ```text
-Ocean method call
+Ocean method
     ↓
 local C-typed handle
     ↓
-@raw_c_call(...)
+raw C call
 ```
 
-Долгосрочно это надо исправить в compiler lowering для C-call arguments, а не
-полагаться только на workaround stdlib.
+Долгосрочно это надо исправить в generic compiler lowering C-call arguments,
+а не только обходить внутри `std/net`.
 
-## Worker thread pool
+---
 
-Подготовлена архитектура fixed-size HTTP worker pool:
+# 68. Worker pool
+
+Целевой HTTP server использует bounded fixed-size worker pool:
 
 ```text
 accept thread
@@ -1806,45 +2501,56 @@ worker #2
 worker #N
 ```
 
-Python-like configuration API:
+API:
 
-```python
+```ocean
 var app: App = App.create()
 
 app.workers(8)
 app.queue_size(256)
 ```
 
-Worker владеет connection на время обработки и выполняет route handler вместе
-с middleware chain.
-
 Это предпочтительнее thread-per-request:
 
 ```text
 thread-per-request
-    -> potentially unbounded pthread count
+    ↓
+unbounded pthread count
+    ↓
+unpredictable memory / scheduling
 
 fixed worker pool
-    -> bounded pthread count
-    -> predictable memory usage
+    ↓
+bounded pthread count
+    ↓
+predictable resources
 ```
 
-Web runtime, использующий pthread pool, должен автоматически получать
-`-pthread` в CLI build path так же, как `std/multiprocessing/thread_backend.c`.
+Worker владеет accepted connection во время обработки request/keep-alive
+sequence.
 
-## HTTP/1.1 keep-alive
+Если web runtime использует pthreads, CLI build path должен автоматически
+добавлять:
 
-Подготовлен keep-alive API:
+```text
+-pthread
+```
 
-```python
+---
+
+# 69. HTTP/1.1 keep-alive
+
+Целевой API:
+
+```ocean
 app.keep_alive(5000)
 app.max_keep_alive_requests(100)
 ```
 
-Один TCP connection может обслужить несколько последовательных HTTP requests:
+Один TCP connection:
 
 ```text
-TCP connect
+connect
     ↓
 GET /a
     ↓
@@ -1852,23 +2558,17 @@ GET /b
     ↓
 POST /c
     ↓
-TCP close
+close
 ```
 
 Runtime должен учитывать:
 
 ```http
-HTTP/1.1
 Connection: keep-alive
-```
-
-и:
-
-```http
 Connection: close
 ```
 
-а также автоматически выставлять:
+и корректно выставлять:
 
 ```text
 Content-Length
@@ -1876,9 +2576,13 @@ Connection
 Keep-Alive
 ```
 
-Текущий целевой режим — последовательный HTTP/1.1 keep-alive.
+Текущий целевой scope:
 
-Пока не являются частью runtime:
+```text
+HTTP/1.1 sequential keep-alive
+```
+
+Пока не приоритет:
 
 ```text
 HTTP pipelining
@@ -1886,19 +2590,22 @@ HTTP/2
 HTTP/3
 ```
 
-При connection-oriented worker pool один keep-alive connection остаётся
-закреплён за worker до закрытия или timeout. Поэтому слишком длинный idle timeout
-может снижать доступную concurrency.
+При connection-oriented worker pool keep-alive connection закрепляется за
+worker до close/timeout, поэтому слишком большой idle timeout может ухудшать
+concurrency.
 
-## Middleware
+---
 
-Целевой middleware API сделан в Python/Starlette-like стиле:
+# 70. Middleware
 
-```python
+Целевой API:
+
+```ocean
 def request_log(
     request: Request,
     call_next: Next
 ) -> Response:
+
     print("before")
 
     var response: Response = call_next.call(request)
@@ -1911,7 +2618,7 @@ def request_log(
 app.middleware(request_log)
 ```
 
-Middleware chain:
+Chain:
 
 ```text
 request
@@ -1929,67 +2636,40 @@ middleware #1 after
 response
 ```
 
-Это должно стать общей основой для:
+На этом слое должны строиться:
 
 ```text
 CORS
 access logging
-request-id
-auth
+request id
+authentication
+authorization
 timing
-recovery/error handling
+recovery
 rate limiting
+structured errors
 ```
 
-`Next` является Ocean wrapper над внутренним `ocean_web_next_t`; raw handle не
-должен попадать в пользовательские handlers.
+`Next` — Ocean wrapper над runtime callback state.
 
-## Thread safety web handlers
+Raw `ocean_web_next_t` не должен появляться в обычном application code.
 
-Текущий ARC non-atomic.
+---
 
-Поэтому HTTP runtime должен придерживаться правила:
+# 71. Router
 
-> Managed objects одного request должны оставаться thread-confined одному worker.
+Целевой Python-like API:
 
-Локальные:
-
-```text
-Request
-Response
-Json
-str
-list
-class instances
-```
-
-можно использовать в пределах одного handler/middleware chain при отсутствии
-межпоточного alias.
-
-Нельзя считать безопасным общий mutable managed object, который несколько
-workers одновременно читают или изменяют.
-
-Для полноценного shared application state в будущем нужны:
-
-```text
-Shared[T]
-atomic ARC
-Send/Sync-like rules
-thread-safe containers
-locks/synchronization primitives
-```
-
-## `Router` и route groups
-
-Целевой Python-way API:
-
-```python
+```ocean
 var app: App = App.create()
 
 var api: Router = Router.create("/api/v1")
 
 api.get("/users/{id}", get_user)
 api.post("/users", create_user)
+api.put("/users/{id}", replace_user)
+api.patch("/users/{id}", update_user)
+api.delete("/users/{id}", delete_user)
 
 app.include(api)
 ```
@@ -1997,11 +2677,14 @@ app.include(api)
 Результат:
 
 ```text
-GET  /api/v1/users/{id}
-POST /api/v1/users
+GET     /api/v1/users/{id}
+POST    /api/v1/users
+PUT     /api/v1/users/{id}
+PATCH   /api/v1/users/{id}
+DELETE  /api/v1/users/{id}
 ```
 
-`Router` поддерживает основные методы:
+Поддерживаемый/целевой route API:
 
 ```text
 route
@@ -2015,80 +2698,136 @@ head
 any
 ```
 
-Архитектурно Router не должен знать private layout `ocean_web_app` или
-внутренний тип route table.
-
-Первая попытка Router installer зависела от конкретных внутренних имён:
-
-```text
-route_t / findroute(...)
-```
-
-против:
-
-```text
-ocean_web_route_entry / find_route(...)
-```
-
-и поэтому оказалась хрупкой.
-
-Принято более устойчивое устройство:
-
-```text
-Router runtime
-    owns prefix
-    owns private router_route[]
-        ↓
-App.include(router)
-        ↓
-for each route
-        ↓
-public ocean_web_route(...)
-```
-
-То есть Router должен зависеть только от публичного web runtime ABI и не должен
-обращаться к:
+Router не должен зависеть от private layout:
 
 ```c
 app->routes
 ```
 
-или другим private полям `ocean_web_app`.
+или от private internal route type.
 
-На момент этого handoff:
+Правильная архитектура:
 
 ```text
-web.oc
-web_runtime.h
+Router
+    owns prefix
+    owns private route descriptions
+        ↓
+App.include(router)
+        ↓
+public ocean_web_route(...)
 ```
 
-Router API уже был подготовлен локальными patch installers.
+То есть Router зависит от **public web runtime ABI**, а не от internal structs.
 
-Layout-independent Router runtime v3 подготовлен, но его всё ещё нужно прогнать
-в пользовательской рабочей копии и затем перенести изменения из installer
-patches в tracked source files.
+---
 
-Проверка:
+# 72. Nested routers
 
-```bash
-python install_std_net_router_v3.py
+Следующий DX-layer:
 
-python -m py_compile \
-    src/debug.py \
-    src/modules/constants.py \
-    src/codegen/oop.py
+```ocean
+var api: Router = Router.create("/api")
+var users: Router = Router.create("/users")
 
-ocean run ./examples/std/net/router_app.oc
+users.get("/{id}", get_user)
+
+api.include(users)
+app.include(api)
 ```
 
-После успешной проверки Router должен получить normal regression tests.
+Итог:
 
-## Что проверять для `std/net`
+```text
+/api/users/{id}
+```
 
-Минимальный regression suite:
+Это важно для реального backend проекта, где routes делятся по модулям.
+
+---
+
+# 73. Thread safety backend-кода
+
+ARC сейчас non-atomic.
+
+Поэтому базовое правило web runtime:
+
+> Managed objects одного request должны быть thread-confined одному worker.
+
+Безопасный типичный lifetime:
+
+```text
+worker
+    ↓
+Request
+Response
+Json
+str
+list
+temporary classes
+    ↓
+destroy before / at request completion
+```
+
+Нельзя считать безопасным общий mutable:
+
+```text
+list
+dict
+Json
+class instance
+Tensor
+```
+
+если несколько workers используют его одновременно без synchronization.
+
+Для полноценного shared application state нужны:
+
+```text
+Shared[T]
+atomic ARC
+Send/Sync-like rules
+mutex/rwlock
+thread-safe containers
+```
+
+До этого глобальное mutable state должно использовать raw/native synchronized
+runtime primitives или быть архитектурно изолировано.
+
+---
+
+# 74. Что уже делает Ocean пригодным для backend
+
+Даже до полного FastAPI-like DX у языка уже есть необходимые базовые слои:
+
+```text
+native C11 compilation
+POSIX integration
+TCP sockets
+HTTP runtime
+JSON
+File/BinaryFile
+classes
+lists/dicts/strings
+pthreads
+worker-pool design
+typed request/response wrappers
+routing foundation
+middleware design
+```
+
+То есть backend/server направление — **первоклассная цель Ocean** наряду с
+ML/HPC.
+
+---
+
+# 75. Regression suite для `std/net`
+
+Минимум, который должен быть закреплён тестами:
 
 ```text
 GET / -> 200
+
 unknown route -> 404
 known path + wrong method -> 405
 HEAD fallback to GET
@@ -2101,7 +2840,7 @@ Response.json_value(Json)
 
 custom response headers
 
-middleware order before/after
+middleware before/after ordering
 middleware response mutation
 
 multiple concurrent connections
@@ -2109,10 +2848,10 @@ multiple concurrent connections
 keep-alive:
     two sequential requests on one socket
     Connection: close
-    max request count
+    max requests
     idle timeout
 
-worker queue saturation behavior
+worker queue saturation
 
 Router prefix
 Router path params after include
@@ -2123,7 +2862,7 @@ Router PATCH
 Router DELETE
 ```
 
-C runtime полезно отдельно собирать строго:
+C runtime отдельно:
 
 ```bash
 gcc \
@@ -2137,54 +2876,81 @@ gcc \
     -c std/net/web_runtime.c
 ```
 
-Для memory bugs нужны ASan/UBSan server smoke tests.
-
-## Следующий web roadmap
-
-После стабилизации:
+Для server runtime обязательны также:
 
 ```text
-worker pool
-keep-alive
-middleware
-Router
+ASan
+UBSan
+concurrent smoke tests
+socket disconnect tests
+malformed HTTP tests
 ```
 
-приоритетен следующий developer-experience слой:
+---
 
-1. nested routers:
+# 76. Backend roadmap
 
-```python
-var api: Router = Router.create("/api")
-var users: Router = Router.create("/users")
+После стабилизации worker pool / keep-alive / middleware / Router:
 
-users.get("/{id}", get_user)
-
-api.include(users)
-app.include(api)
-```
-
-2. typed path/query helpers:
-
-```python
-Request.path_int(...)
-Request.query_int(...)
-Request.query_bool(...)
-```
-
-3. `Request.state` / request context для middleware;
-4. готовый CORS middleware;
+1. nested routers;
+2. typed path/query parsing;
+3. request state/context;
+4. CORS middleware;
 5. structured HTTP errors;
-6. graceful shutdown по `SIGINT`/`SIGTERM`;
+6. graceful shutdown `SIGINT` / `SIGTERM`;
 7. cookies;
-8. multipart/form-data и uploads;
-9. `FileResponse` / `sendfile()`;
-10. streaming responses;
-11. TLS/HTTPS отдельным `std/net/tls` слоем;
-12. WebSocket;
-13. OpenAPI/schema/model validation.
+8. multipart/form-data;
+9. uploads;
+10. `FileResponse` / `sendfile()`;
+11. streaming responses;
+12. TLS/HTTPS отдельным runtime layer;
+13. WebSocket;
+14. OpenAPI/schema generation;
+15. request/response model validation;
+16. database client ecosystem;
+17. connection pools;
+18. observability / metrics / tracing.
 
-Async/await пока не является приоритетом.
+`async/await` пока не обязателен.
 
-До стабилизации ownership и shared state fixed worker thread pool проще,
-предсказуемее и достаточно полезен для реального backend-кода.
+Для текущей ownership-модели fixed worker pool проще, предсказуемее и уже
+достаточно полезен для реального backend-кода.
+
+---
+
+# 77. Две равноправные области Ocean
+
+Развитие языка сейчас имеет две большие прикладные вертикали:
+
+```text
+Ocean
+├── Backend / systems
+│   ├── HTTP
+│   ├── TCP
+│   ├── JSON
+│   ├── files
+│   ├── pthread workers
+│   └── routing/middleware
+│
+└── ML / HPC
+    ├── Tensor
+    ├── autograd
+    ├── Transformer
+    ├── TinyGPT
+    ├── CPU/GPU
+    └── OpenMP
+```
+
+Нельзя развивать ML часть ценой удаления или забвения backend/server части.
+
+Обе области опираются на одни и те же ключевые свойства языка:
+
+```text
+native compilation
+ownership
+predictable memory
+C ABI
+classes
+containers
+static validation
+```
