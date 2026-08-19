@@ -1,0 +1,36 @@
+import <std/tensor/tensor.oc>
+import <std/ml/nn.oc>
+
+
+def main() -> int:
+    var q: Tensor[float32] = Tensor.zeros(2, 2, 3, 4, "cpu")
+    var k: Tensor[float32] = Tensor.zeros(2, 2, 3, 4, "cpu")
+    var v: Tensor[float32] = Tensor.zeros(2, 2, 3, 4, "cpu")
+    var target: Tensor[float32] = Tensor.zeros(2, 2, 3, 4, "cpu")
+
+    q.fill(0.10)
+    k.fill(0.20)
+    v.fill(0.30)
+
+    q.requires_grad_(True)
+    k.requires_grad_(True)
+    v.requires_grad_(True)
+
+    var kt: Tensor[float32] = k.transpose(-2, -1)
+    var scores: Tensor[float32] = q.matmul(kt)
+    var scaled: Tensor[float32] = scores.div_scalar(2.0)
+    var weights: Tensor[float32] = scaled.softmax(-1)
+    var output: Tensor[float32] = weights.matmul(v)
+
+    var criterion: MSELoss = MSELoss()
+    var loss: Tensor[float32] = criterion.forward(output, target)
+    loss.backward()
+
+    print("loss =", loss.item())
+    print("scores shape =", scores.shape(0), scores.shape(1), scores.shape(2), scores.shape(3))
+    print("output shape =", output.shape(0), output.shape(1), output.shape(2), output.shape(3))
+    print("q has grad =", q.has_grad())
+    print("k has grad =", k.has_grad())
+    print("v has grad =", v.has_grad())
+    print("[ok] Ocean 4D attention v0.1")
+    return 0
