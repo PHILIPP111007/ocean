@@ -2360,7 +2360,7 @@ static void ocean_autograd_backward_node(ocean_autograd_meta *meta) {
                 ocean_tensor_handle_t contribution =
                     ocean_autograd_layer_norm_backward_v03(
                         upstream,
-                        node->left->tensor,
+                        node->saved_left,
                         NULL,
                         node->dim0,
                         node->scalar
