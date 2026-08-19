@@ -46,6 +46,7 @@ typedef struct ocean_autograd_node {
 
 struct ocean_autograd_meta {
     ocean_tensor_handle_t tensor;
+    uint64_t tensor_identity;
     bool requires_grad;
     bool leaf;
     ocean_tensor_handle_t grad;
@@ -60,9 +61,6 @@ static ocean_autograd_meta *ocean_autograd_metas = NULL;
 static bool ocean_autograd_shutdown_registered = false;
 
 static void ocean_autograd_remove_meta(ocean_autograd_meta *target);
-static void ocean_autograd_tensor_released(
-    ocean_tensor_handle_t tensor
-);
 
 static void ocean_autograd_require_float32(ocean_tensor_handle_t tensor) {
     char *dtype = ocean_tensor_dtype_name(tensor);
@@ -107,9 +105,24 @@ static bool ocean_autograd_same_shape_meta(
     return true;
 }
 
-static ocean_autograd_meta *ocean_autograd_find(ocean_tensor_handle_t tensor) {
-    for (ocean_autograd_meta *meta = ocean_autograd_metas; meta; meta = meta->next) {
-        if (meta->tensor == tensor) return meta;
+static ocean_autograd_meta *ocean_autograd_find(
+    ocean_tensor_handle_t tensor
+) {
+    if (!tensor) return NULL;
+
+    uint64_t identity = ocean_tensor_identity(tensor);
+
+    for (
+        ocean_autograd_meta *meta = ocean_autograd_metas;
+        meta;
+        meta = meta->next
+    ) {
+        if (
+            meta->tensor == tensor
+            && meta->tensor_identity == identity
+        ) {
+            return meta;
+        }
     }
     return NULL;
 }
@@ -131,8 +144,6 @@ static void ocean_autograd_meta_free(ocean_autograd_meta *meta) {
 }
 
 static void ocean_autograd_shutdown(void) {
-    ocean_tensor_set_release_hook(NULL);
-
     ocean_autograd_meta *meta = ocean_autograd_metas;
     while (meta) {
         ocean_autograd_meta *next = meta->next;
@@ -155,6 +166,7 @@ static ocean_autograd_meta *ocean_autograd_get(
     if (!meta) ocean_tensor_fail("out of memory creating autograd metadata");
 
     meta->tensor = tensor;
+    meta->tensor_identity = ocean_tensor_identity(tensor);
     meta->shape = ocean_autograd_shape_copy(tensor, &meta->ndim);
     meta->device = ocean_tensor_device(tensor);
     if (!meta->device) {
@@ -167,7 +179,6 @@ static ocean_autograd_meta *ocean_autograd_get(
 
     if (!ocean_autograd_shutdown_registered) {
         ocean_autograd_shutdown_registered = true;
-        ocean_tensor_set_release_hook(ocean_autograd_tensor_released);
         atexit(ocean_autograd_shutdown);
     }
     return meta;
@@ -186,20 +197,7 @@ static void ocean_autograd_remove_meta(ocean_autograd_meta *target) {
     }
 }
 
-static void ocean_autograd_tensor_released(
-    ocean_tensor_handle_t tensor
-) {
-    /*
-     * Autograd metadata is keyed by the raw Tensor handle address.
-     * Remove it before the Tensor allocation is freed; otherwise malloc may
-     * reuse the same address and a new Tensor can inherit requires_grad/grad
-     * from the dead Tensor.
-     */
-    ocean_autograd_meta *meta = ocean_autograd_find(tensor);
-    if (meta) {
-        ocean_autograd_remove_meta(meta);
-    }
-}
+
 
 static ocean_tensor_handle_t ocean_autograd_zeros_meta(
     const ocean_autograd_meta *meta
