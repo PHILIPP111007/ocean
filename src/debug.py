@@ -170,6 +170,8 @@ class Validator:
                             "ocean_autograd_transpose",
                             "ocean_autograd_relu",
                             "ocean_autograd_mse_loss",
+                            "ocean_autograd_embedding",
+                            "ocean_autograd_cross_entropy",
                             "ocean_autograd_parameter_uniform",
                             "ocean_autograd_sgd_step",
                             "ocean_autograd_exp",

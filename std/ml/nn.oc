@@ -275,3 +275,41 @@ class TransformerBlock(Module):
 
     def ff2_bias_has_grad(self) -> bool:
         return self.ff2.bias.has_grad()
+
+class Embedding(Module):
+    def __init__(self, vocab_size: int, d_model: int) -> None:
+        self.training: bool = True
+        self.vocab_size: int = vocab_size
+        self.d_model: int = d_model
+
+        var weight_tensor: Tensor[float32] = Tensor(ocean_autograd_parameter_uniform(vocab_size, d_model, 0.1, "cpu"))
+        var weight_parameter: Parameter = Parameter(weight_tensor)
+        self.weight: Parameter = weight_parameter
+
+    def forward(self, input: &Tensor[int64]) -> Tensor[float32]:
+        var weight: Tensor[float32] = self.weight.tensor()
+        var weight_handle: ocean_tensor_handle_t = weight.raw_handle()
+        var input_handle: ocean_tensor_handle_t = input.raw_handle()
+        var handle: ocean_tensor_handle_t = ocean_autograd_embedding(weight_handle, input_handle)
+        var result: Tensor[float32] = Tensor(handle)
+        return result
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.weight]
+        return result
+
+    def weight_has_grad(self) -> bool:
+        return self.weight.has_grad()
+
+
+class CrossEntropyLoss(Module):
+    def __init__(self) -> None:
+        self.training: bool = True
+
+    def forward(self, logits: &Tensor[float32], targets: &Tensor[int64]) -> Tensor[float32]:
+        var logits_handle: ocean_tensor_handle_t = logits.raw_handle()
+        var targets_handle: ocean_tensor_handle_t = targets.raw_handle()
+        var handle: ocean_tensor_handle_t = ocean_autograd_cross_entropy(logits_handle, targets_handle)
+        var result: Tensor[float32] = Tensor(handle)
+        return result
+

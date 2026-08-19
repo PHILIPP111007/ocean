@@ -48,6 +48,14 @@ ocean_tensor_handle_t ocean_autograd_mse_loss(
     ocean_tensor_handle_t prediction,
     ocean_tensor_handle_t target
 );
+ocean_tensor_handle_t ocean_autograd_embedding(
+    ocean_tensor_handle_t weight,
+    ocean_tensor_handle_t indices
+);
+ocean_tensor_handle_t ocean_autograd_cross_entropy(
+    ocean_tensor_handle_t logits,
+    ocean_tensor_handle_t targets
+);
 
 ocean_tensor_handle_t ocean_autograd_parameter_uniform(
     int rows,

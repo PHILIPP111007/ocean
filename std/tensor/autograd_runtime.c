@@ -28,6 +28,8 @@ enum {
     OCEAN_AUTOGRAD_SOFTMAX = 23,
     OCEAN_AUTOGRAD_LAYER_NORM = 24,
     OCEAN_AUTOGRAD_PERMUTE = 25,
+    OCEAN_AUTOGRAD_EMBEDDING = 26,
+    OCEAN_AUTOGRAD_CROSS_ENTROPY = 27,
 };
 
 typedef struct ocean_autograd_meta ocean_autograd_meta;
@@ -1413,6 +1415,373 @@ ocean_tensor_handle_t ocean_autograd_permute(
     return result;
 }
 
+
+static void ocean_autograd_require_int64_v04(
+    ocean_tensor_handle_t tensor,
+    const char *message
+) {
+    char *dtype = ocean_tensor_dtype_name(tensor);
+    bool valid = dtype && strcmp(dtype, "int64") == 0;
+    free(dtype);
+    if (!valid) ocean_tensor_fail(message);
+}
+
+static void ocean_autograd_contiguous_strides_v04(
+    const size_t *shape,
+    size_t ndim,
+    size_t *strides
+) {
+    if (!ndim) return;
+    strides[ndim - 1] = 1;
+    for (size_t i = ndim - 1; i > 0; --i) {
+        strides[i - 1] = strides[i] * shape[i];
+    }
+}
+
+static ocean_tensor_handle_t ocean_autograd_embedding_forward_v04(
+    ocean_tensor_handle_t weight,
+    ocean_tensor_handle_t indices
+) {
+    ocean_autograd_require_float32(weight);
+    ocean_autograd_require_int64_v04(
+        indices,
+        "Embedding indices must be Tensor[int64]"
+    );
+
+    int weight_rank = ocean_tensor_ndim(weight);
+    int index_rank = ocean_tensor_ndim(indices);
+    if (weight_rank != 2 || index_rank < 1) {
+        ocean_tensor_fail(
+            "Embedding expects weight [V,D] and indices rank >= 1"
+        );
+    }
+
+    size_t vocab = (size_t)ocean_tensor_shape(weight, 0);
+    size_t dim = (size_t)ocean_tensor_shape(weight, 1);
+    size_t count = ocean_tensor_size(indices);
+    size_t output_rank = (size_t)index_rank + 1;
+
+    size_t *shape = (size_t *)malloc(output_rank * sizeof(size_t));
+    size_t *strides = (size_t *)malloc(output_rank * sizeof(size_t));
+    float *data = count && dim
+        ? (float *)malloc(count * dim * sizeof(float))
+        : NULL;
+
+    if (!shape || !strides || (count && dim && !data)) {
+        free(shape);
+        free(strides);
+        free(data);
+        ocean_tensor_fail("out of memory in Embedding forward");
+    }
+
+    for (int axis = 0; axis < index_rank; ++axis) {
+        shape[(size_t)axis] =
+            (size_t)ocean_tensor_shape(indices, axis);
+    }
+    shape[output_rank - 1] = dim;
+    ocean_autograd_contiguous_strides_v04(
+        shape,
+        output_rank,
+        strides
+    );
+
+    char *device = ocean_tensor_device(weight);
+    ocean_tensor_handle_t wc = strcmp(device, "cpu") == 0
+        ? weight
+        : ocean_tensor_to(weight, "cpu");
+
+    char *indices_device = ocean_tensor_device(indices);
+    ocean_tensor_handle_t ic = strcmp(indices_device, "cpu") == 0
+        ? indices
+        : ocean_tensor_to(indices, "cpu");
+
+    for (size_t i = 0; i < count; ++i) {
+        int64_t token = ocean_tensor_get_flat_i64(ic, i);
+        if (token < 0 || (uint64_t)token >= (uint64_t)vocab) {
+            free(data);
+            free(shape);
+            free(strides);
+            if (wc != weight) ocean_tensor_release(wc);
+            if (ic != indices) ocean_tensor_release(ic);
+            free(device);
+            free(indices_device);
+            ocean_tensor_fail("Embedding token id is out of range");
+        }
+
+        size_t row = (size_t)token;
+        for (size_t feature = 0; feature < dim; ++feature) {
+            data[i * dim + feature] =
+                ocean_tensor_get_flat_f32(
+                    wc,
+                    row * dim + feature
+                );
+        }
+    }
+
+    ocean_tensor_handle_t cpu = ocean_tensor_from_cpu_strided(
+        data,
+        shape,
+        strides,
+        output_rank,
+        "float32",
+        "cpu"
+    );
+    ocean_tensor_handle_t result = cpu;
+
+    if (strcmp(device, "cpu") != 0) {
+        result = ocean_tensor_to(cpu, device);
+        ocean_tensor_release(cpu);
+    }
+
+    if (wc != weight) ocean_tensor_release(wc);
+    if (ic != indices) ocean_tensor_release(ic);
+    free(device);
+    free(indices_device);
+    free(data);
+    free(shape);
+    free(strides);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_autograd_embedding(
+    ocean_tensor_handle_t weight,
+    ocean_tensor_handle_t indices
+) {
+    ocean_tensor_handle_t result =
+        ocean_autograd_embedding_forward_v04(weight, indices);
+
+    ocean_autograd_meta *weight_meta =
+        ocean_autograd_find(weight);
+    if (!weight_meta || !weight_meta->requires_grad) {
+        return result;
+    }
+
+    ocean_autograd_node *node =
+        ocean_autograd_node_new(OCEAN_AUTOGRAD_EMBEDDING);
+    node->left = weight_meta;
+    node->saved_right = ocean_tensor_copy(indices);
+    ocean_autograd_attach(result, node);
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_autograd_cross_entropy_forward_v04(
+    ocean_tensor_handle_t logits,
+    ocean_tensor_handle_t targets,
+    ocean_tensor_handle_t *probabilities_out
+) {
+    ocean_autograd_require_float32(logits);
+    ocean_autograd_require_int64_v04(
+        targets,
+        "CrossEntropyLoss targets must be Tensor[int64]"
+    );
+
+    int logits_rank = ocean_tensor_ndim(logits);
+    int targets_rank = ocean_tensor_ndim(targets);
+
+    if (logits_rank < 2 || targets_rank != logits_rank - 1) {
+        ocean_tensor_fail(
+            "CrossEntropyLoss expects logits [...,V] and targets [...]"
+        );
+    }
+
+    for (int axis = 0; axis < targets_rank; ++axis) {
+        if (
+            ocean_tensor_shape(logits, axis)
+            != ocean_tensor_shape(targets, axis)
+        ) {
+            ocean_tensor_fail(
+                "CrossEntropyLoss target shape must match logits prefix"
+            );
+        }
+    }
+
+    size_t vocab =
+        (size_t)ocean_tensor_shape(logits, logits_rank - 1);
+    size_t examples = ocean_tensor_size(targets);
+
+    if (!vocab || !examples) {
+        ocean_tensor_fail(
+            "CrossEntropyLoss requires non-empty vocab and targets"
+        );
+    }
+
+    char *device = ocean_tensor_device(logits);
+    ocean_tensor_handle_t lc = strcmp(device, "cpu") == 0
+        ? logits
+        : ocean_tensor_to(logits, "cpu");
+
+    char *target_device = ocean_tensor_device(targets);
+    ocean_tensor_handle_t tc = strcmp(target_device, "cpu") == 0
+        ? targets
+        : ocean_tensor_to(targets, "cpu");
+
+    size_t total = ocean_tensor_size(lc);
+    float *probabilities =
+        (float *)malloc(total * sizeof(float));
+    if (!probabilities) {
+        if (lc != logits) ocean_tensor_release(lc);
+        if (tc != targets) ocean_tensor_release(tc);
+        free(device);
+        free(target_device);
+        ocean_tensor_fail(
+            "out of memory in CrossEntropyLoss forward"
+        );
+    }
+
+    double total_loss = 0.0;
+
+    for (size_t example = 0; example < examples; ++example) {
+        size_t base = example * vocab;
+        float maximum = -INFINITY;
+
+        for (size_t cls = 0; cls < vocab; ++cls) {
+            float value =
+                ocean_tensor_get_flat_f32(lc, base + cls);
+            if (value > maximum) maximum = value;
+        }
+
+        double denominator = 0.0;
+        for (size_t cls = 0; cls < vocab; ++cls) {
+            float value =
+                ocean_tensor_get_flat_f32(lc, base + cls);
+            float exponential = expf(value - maximum);
+            probabilities[base + cls] = exponential;
+            denominator += (double)exponential;
+        }
+
+        int64_t target =
+            ocean_tensor_get_flat_i64(tc, example);
+        if (target < 0 || (uint64_t)target >= (uint64_t)vocab) {
+            free(probabilities);
+            if (lc != logits) ocean_tensor_release(lc);
+            if (tc != targets) ocean_tensor_release(tc);
+            free(device);
+            free(target_device);
+            ocean_tensor_fail(
+                "CrossEntropyLoss target is out of range"
+            );
+        }
+
+        float target_logit =
+            ocean_tensor_get_flat_f32(
+                lc,
+                base + (size_t)target
+            );
+        total_loss +=
+            log(denominator)
+            + (double)maximum
+            - (double)target_logit;
+
+        for (size_t cls = 0; cls < vocab; ++cls) {
+            probabilities[base + cls] =
+                (float)(
+                    (double)probabilities[base + cls]
+                    / denominator
+                );
+        }
+    }
+
+    size_t rank = (size_t)logits_rank;
+    size_t *shape = (size_t *)malloc(rank * sizeof(size_t));
+    size_t *strides = (size_t *)malloc(rank * sizeof(size_t));
+
+    if (!shape || !strides) {
+        free(shape);
+        free(strides);
+        free(probabilities);
+        if (lc != logits) ocean_tensor_release(lc);
+        if (tc != targets) ocean_tensor_release(tc);
+        free(device);
+        free(target_device);
+        ocean_tensor_fail(
+            "out of memory storing CrossEntropyLoss probabilities"
+        );
+    }
+
+    for (size_t axis = 0; axis < rank; ++axis) {
+        shape[axis] =
+            (size_t)ocean_tensor_shape(lc, (int)axis);
+    }
+    ocean_autograd_contiguous_strides_v04(
+        shape,
+        rank,
+        strides
+    );
+
+    ocean_tensor_handle_t probabilities_cpu =
+        ocean_tensor_from_cpu_strided(
+            probabilities,
+            shape,
+            strides,
+            rank,
+            "float32",
+            "cpu"
+        );
+    ocean_tensor_handle_t probabilities_result =
+        probabilities_cpu;
+
+    if (strcmp(device, "cpu") != 0) {
+        probabilities_result =
+            ocean_tensor_to(probabilities_cpu, device);
+        ocean_tensor_release(probabilities_cpu);
+    }
+
+    ocean_tensor_handle_t loss_cpu =
+        ocean_tensor_zeros(1, 1, "cpu");
+    ocean_tensor_fill(
+        loss_cpu,
+        total_loss / (double)examples
+    );
+    ocean_tensor_handle_t loss = loss_cpu;
+
+    if (strcmp(device, "cpu") != 0) {
+        loss = ocean_tensor_to(loss_cpu, device);
+        ocean_tensor_release(loss_cpu);
+    }
+
+    *probabilities_out = probabilities_result;
+
+    free(shape);
+    free(strides);
+    free(probabilities);
+    if (lc != logits) ocean_tensor_release(lc);
+    if (tc != targets) ocean_tensor_release(tc);
+    free(device);
+    free(target_device);
+    return loss;
+}
+
+ocean_tensor_handle_t ocean_autograd_cross_entropy(
+    ocean_tensor_handle_t logits,
+    ocean_tensor_handle_t targets
+) {
+    ocean_tensor_handle_t probabilities = NULL;
+    ocean_tensor_handle_t result =
+        ocean_autograd_cross_entropy_forward_v04(
+            logits,
+            targets,
+            &probabilities
+        );
+
+    ocean_autograd_meta *logits_meta =
+        ocean_autograd_find(logits);
+
+    if (!logits_meta || !logits_meta->requires_grad) {
+        ocean_tensor_release(probabilities);
+        return result;
+    }
+
+    ocean_autograd_node *node =
+        ocean_autograd_node_new(
+            OCEAN_AUTOGRAD_CROSS_ENTROPY
+        );
+    node->left = logits_meta;
+    node->saved_left = probabilities;
+    node->saved_right = ocean_tensor_copy(targets);
+    ocean_autograd_attach(result, node);
+    return result;
+}
+
 typedef struct ocean_autograd_topology {
     ocean_autograd_meta **items;
     size_t count;
@@ -1612,6 +1981,240 @@ static void ocean_autograd_backward_node(ocean_autograd_meta *meta) {
 
         case OCEAN_AUTOGRAD_TRANSPOSE: { if(node->left)ocean_autograd_accumulate(node->left,ocean_tensor_transpose_dims(upstream,0,1)); break; }
         case OCEAN_AUTOGRAD_TRANSPOSE_DIMS: { if(node->left)ocean_autograd_accumulate(node->left,ocean_tensor_transpose_dims(upstream,node->dim0,node->dim1)); break; }
+        case OCEAN_AUTOGRAD_EMBEDDING: {
+            if (node->left) {
+                size_t vocab = node->left->shape[0];
+                size_t dim = node->left->shape[1];
+                size_t index_count =
+                    ocean_tensor_size(node->saved_right);
+
+                char *device =
+                    ocean_tensor_device(upstream);
+                ocean_tensor_handle_t gc =
+                    strcmp(device, "cpu") == 0
+                    ? upstream
+                    : ocean_tensor_to(upstream, "cpu");
+
+                char *indices_device =
+                    ocean_tensor_device(node->saved_right);
+                ocean_tensor_handle_t ic =
+                    strcmp(indices_device, "cpu") == 0
+                    ? node->saved_right
+                    : ocean_tensor_to(
+                        node->saved_right,
+                        "cpu"
+                    );
+
+                size_t total = vocab * dim;
+                float *data = total
+                    ? (float *)calloc(total, sizeof(float))
+                    : NULL;
+                size_t shape[2] = {vocab, dim};
+                size_t strides[2] = {dim, 1};
+
+                if (total && !data) {
+                    if (gc != upstream) ocean_tensor_release(gc);
+                    if (ic != node->saved_right) {
+                        ocean_tensor_release(ic);
+                    }
+                    free(device);
+                    free(indices_device);
+                    ocean_tensor_fail(
+                        "out of memory in Embedding backward"
+                    );
+                }
+
+                for (size_t i = 0; i < index_count; ++i) {
+                    int64_t token =
+                        ocean_tensor_get_flat_i64(ic, i);
+                    size_t row = (size_t)token;
+
+                    for (size_t feature = 0; feature < dim; ++feature) {
+                        data[row * dim + feature] +=
+                            ocean_tensor_get_flat_f32(
+                                gc,
+                                i * dim + feature
+                            );
+                    }
+                }
+
+                ocean_tensor_handle_t cpu =
+                    ocean_tensor_from_cpu_strided(
+                        data,
+                        shape,
+                        strides,
+                        2,
+                        "float32",
+                        "cpu"
+                    );
+                ocean_tensor_handle_t contribution = cpu;
+
+                if (strcmp(device, "cpu") != 0) {
+                    contribution =
+                        ocean_tensor_to(cpu, device);
+                    ocean_tensor_release(cpu);
+                }
+
+                free(data);
+                if (gc != upstream) ocean_tensor_release(gc);
+                if (ic != node->saved_right) {
+                    ocean_tensor_release(ic);
+                }
+                free(device);
+                free(indices_device);
+
+                ocean_autograd_accumulate(
+                    node->left,
+                    contribution
+                );
+            }
+            break;
+        }
+
+        case OCEAN_AUTOGRAD_CROSS_ENTROPY: {
+            if (node->left) {
+                ocean_tensor_handle_t probabilities =
+                    node->saved_left;
+                ocean_tensor_handle_t targets =
+                    node->saved_right;
+
+                int rank = ocean_tensor_ndim(probabilities);
+                size_t vocab =
+                    (size_t)ocean_tensor_shape(
+                        probabilities,
+                        rank - 1
+                    );
+                size_t examples =
+                    ocean_tensor_size(targets);
+                size_t total =
+                    ocean_tensor_size(probabilities);
+
+                char *device =
+                    ocean_tensor_device(probabilities);
+                ocean_tensor_handle_t pc =
+                    strcmp(device, "cpu") == 0
+                    ? probabilities
+                    : ocean_tensor_to(
+                        probabilities,
+                        "cpu"
+                    );
+
+                char *target_device =
+                    ocean_tensor_device(targets);
+                ocean_tensor_handle_t tc =
+                    strcmp(target_device, "cpu") == 0
+                    ? targets
+                    : ocean_tensor_to(targets, "cpu");
+
+                float *data = total
+                    ? (float *)malloc(
+                        total * sizeof(float)
+                    )
+                    : NULL;
+                size_t *shape = (size_t *)malloc(
+                    (size_t)rank * sizeof(size_t)
+                );
+                size_t *strides = (size_t *)malloc(
+                    (size_t)rank * sizeof(size_t)
+                );
+
+                if (
+                    (total && !data)
+                    || !shape
+                    || !strides
+                ) {
+                    free(data);
+                    free(shape);
+                    free(strides);
+                    if (pc != probabilities) {
+                        ocean_tensor_release(pc);
+                    }
+                    if (tc != targets) {
+                        ocean_tensor_release(tc);
+                    }
+                    free(device);
+                    free(target_device);
+                    ocean_tensor_fail(
+                        "out of memory in CrossEntropyLoss backward"
+                    );
+                }
+
+                for (int axis = 0; axis < rank; ++axis) {
+                    shape[(size_t)axis] =
+                        (size_t)ocean_tensor_shape(
+                            pc,
+                            axis
+                        );
+                }
+                ocean_autograd_contiguous_strides_v04(
+                    shape,
+                    (size_t)rank,
+                    strides
+                );
+
+                float upstream_scale =
+                    ocean_tensor_get_flat_f32(upstream, 0)
+                    / (float)examples;
+
+                for (size_t example = 0; example < examples; ++example) {
+                    int64_t target =
+                        ocean_tensor_get_flat_i64(
+                            tc,
+                            example
+                        );
+                    size_t base = example * vocab;
+
+                    for (size_t cls = 0; cls < vocab; ++cls) {
+                        float gradient =
+                            ocean_tensor_get_flat_f32(
+                                pc,
+                                base + cls
+                            );
+                        if (cls == (size_t)target) {
+                            gradient -= 1.0f;
+                        }
+                        data[base + cls] =
+                            gradient * upstream_scale;
+                    }
+                }
+
+                ocean_tensor_handle_t cpu =
+                    ocean_tensor_from_cpu_strided(
+                        data,
+                        shape,
+                        strides,
+                        (size_t)rank,
+                        "float32",
+                        "cpu"
+                    );
+                ocean_tensor_handle_t contribution = cpu;
+
+                if (strcmp(device, "cpu") != 0) {
+                    contribution =
+                        ocean_tensor_to(cpu, device);
+                    ocean_tensor_release(cpu);
+                }
+
+                free(data);
+                free(shape);
+                free(strides);
+                if (pc != probabilities) {
+                    ocean_tensor_release(pc);
+                }
+                if (tc != targets) {
+                    ocean_tensor_release(tc);
+                }
+                free(device);
+                free(target_device);
+
+                ocean_autograd_accumulate(
+                    node->left,
+                    contribution
+                );
+            }
+            break;
+        }
+
         case OCEAN_AUTOGRAD_PERMUTE: {
             if (node->left) {
                 int *inverse = node->axes_count
