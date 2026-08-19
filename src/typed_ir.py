@@ -454,7 +454,7 @@ class TypedIRBuilder:
                 "add", "sub", "mul", "div",
                 "add_scalar", "sub_scalar", "mul_scalar", "div_scalar",
                 "reshape", "sum", "sum_dim", "mean_dim",
-                "exp", "log", "sqrt", "pow", "softmax", "layer_norm",
+                "exp", "log", "sqrt", "pow", "softmax", "layer_norm", "masked_fill",
                 "relu", "to", "contiguous", "grad",
                 "shape", "ndim", "size", "device", "get", "set",
                 "mean", "max", "min", "dtype", "is_contiguous", "item",

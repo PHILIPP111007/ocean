@@ -5302,7 +5302,7 @@ class Parser:
                 "fill", "sum", "sum_dim", "mean_dim", "copy",
                 "transpose", "transpose_dims", "row", "column", "slice",
                 "reshape", "matmul", "to",
-                "exp", "log", "sqrt", "pow", "softmax", "layer_norm",
+                "exp", "log", "sqrt", "pow", "softmax", "layer_norm", "masked_fill",
                 "relu",
                 "shape", "ndim", "size", "device", "get", "set", "release",
                 "mean", "max", "min", "dtype",

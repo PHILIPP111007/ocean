@@ -176,6 +176,14 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+    def masked_fill(self, mask: &Tensor, value: float64) -> Tensor:
+        var neg_mask: Tensor = mask.mul_scalar(-1.0)
+        var keep_mask: Tensor = neg_mask.add_scalar(1.0)
+        var kept: Tensor = self.mul(keep_mask)
+        var replacement: Tensor = mask.mul_scalar(value)
+        var result: Tensor = kept.add(replacement)
+        return result
+
     def row(self, row: int) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_row(self.handle, row)
         var value: Tensor = Tensor(handle)
