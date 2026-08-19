@@ -65,6 +65,7 @@ class TernaryLinear(Module):
         # Raw Tensor.copy() creates the detached value snapshot used to
         # construct the STE expression.
         var detached: Tensor[float32] = master.copy()
+        var detached_cpu: Tensor[float32] = detached.to("cpu")
 
         var rows: int = self.out_features
         var cols: int = self.in_features
@@ -76,7 +77,7 @@ class TernaryLinear(Module):
             var col: int = 0
 
             while col < cols:
-                var value: float64 = detached.get(row, col)
+                var value: float64 = detached_cpu.get(row, col)
 
                 if value < 0.0:
                     sum_abs = sum_abs - value
@@ -97,7 +98,7 @@ class TernaryLinear(Module):
         # thresholds at +/- 0.5 * scale.
         var threshold: float64 = 0.5 * scale
 
-        var quantized: Tensor[float32] = Tensor.zeros(rows, cols, "cpu")
+        var quantized_cpu: Tensor[float32] = Tensor.zeros(rows, cols, "cpu")
 
         row = 0
 
@@ -105,15 +106,15 @@ class TernaryLinear(Module):
             var col2: int = 0
 
             while col2 < cols:
-                var value2: float64 = detached.get(row, col2)
+                var value2: float64 = detached_cpu.get(row, col2)
 
                 if value2 > threshold:
-                    quantized.set(row, col2, scale)
+                    quantized_cpu.set(row, col2, scale)
                 else:
                     if value2 < -threshold:
-                        quantized.set(row, col2, -scale)
+                        quantized_cpu.set(row, col2, -scale)
                     else:
-                        quantized.set(row, col2, 0.0)
+                        quantized_cpu.set(row, col2, 0.0)
 
                 col2 = col2 + 1
 
@@ -126,6 +127,7 @@ class TernaryLinear(Module):
         #
         # backward:
         #   only master participates in autograd => gradient is identity.
+        var quantized: Tensor[float32] = quantized_cpu.to("gpu")
         var delta: Tensor[float32] = quantized.sub(detached)
         var ste_weight: Tensor[float32] = master.add(delta)
 
@@ -148,6 +150,7 @@ class TernaryLinear(Module):
     def zero_fraction(self) -> float64:
         var master: Tensor[float32] = self.weight.tensor()
         var detached: Tensor[float32] = master.copy()
+        var detached_cpu: Tensor[float32] = detached.to("cpu")
 
         var rows: int = self.out_features
         var cols: int = self.in_features
@@ -159,7 +162,7 @@ class TernaryLinear(Module):
             var col: int = 0
 
             while col < cols:
-                var value: float64 = detached.get(row, col)
+                var value: float64 = detached_cpu.get(row, col)
 
                 if value < 0.0:
                     sum_abs = sum_abs - value
@@ -185,7 +188,7 @@ class TernaryLinear(Module):
             var col2: int = 0
 
             while col2 < cols:
-                var value2: float64 = detached.get(row, col2)
+                var value2: float64 = detached_cpu.get(row, col2)
 
                 if value2 <= threshold:
                     if value2 >= -threshold:
@@ -529,15 +532,25 @@ def main() -> int:
 
     var ternary_model: MediumTernaryGPT = MediumTernaryGPT(vocab_size, context_length, d_model, n_heads, d_ff)
 
+    fp_model.to("gpu")
+    ternary_model.to("gpu")
+
+    var train_tokens_gpu: Tensor[int64] = train_tokens.to("gpu")
+    var train_targets_gpu: Tensor[int64] = train_targets.to("gpu")
+    var eval_tokens_gpu: Tensor[int64] = eval_tokens.to("gpu")
+    var eval_targets_gpu: Tensor[int64] = eval_targets.to("gpu")
+    var positions_gpu: Tensor[int64] = positions.to("gpu")
+    var mask_gpu: Tensor[float32] = mask.to("gpu")
+
     var criterion: CrossEntropyLoss = CrossEntropyLoss()
 
-    var fp_initial_train: float64 = evaluate_fp(fp_model, train_tokens, train_targets, positions, mask, criterion)
+    var fp_initial_train: float64 = evaluate_fp(fp_model, train_tokens_gpu, train_targets_gpu, positions_gpu, mask_gpu, criterion)
 
-    var fp_initial_eval: float64 = evaluate_fp(fp_model, eval_tokens, eval_targets, positions, mask, criterion)
+    var fp_initial_eval: float64 = evaluate_fp(fp_model, eval_tokens_gpu, eval_targets_gpu, positions_gpu, mask_gpu, criterion)
 
-    var ternary_initial_train: float64 = evaluate_ternary(ternary_model, train_tokens, train_targets, positions, mask, criterion)
+    var ternary_initial_train: float64 = evaluate_ternary(ternary_model, train_tokens_gpu, train_targets_gpu, positions_gpu, mask_gpu, criterion)
 
-    var ternary_initial_eval: float64 = evaluate_ternary(ternary_model, eval_tokens, eval_targets, positions, mask, criterion)
+    var ternary_initial_eval: float64 = evaluate_ternary(ternary_model, eval_tokens_gpu, eval_targets_gpu, positions_gpu, mask_gpu, criterion)
 
     print("")
     print("INITIAL")
@@ -548,19 +561,19 @@ def main() -> int:
 
     print("")
     print("TRAIN FP32")
-    train_fp(fp_model, train_tokens, train_targets, positions, mask, training_steps)
+    train_fp(fp_model, train_tokens_gpu, train_targets_gpu, positions_gpu, mask_gpu, training_steps)
 
     print("")
     print("TRAIN TERNARY")
-    train_ternary(ternary_model, train_tokens, train_targets, positions, mask, training_steps)
+    train_ternary(ternary_model, train_tokens_gpu, train_targets_gpu, positions_gpu, mask_gpu, training_steps)
 
-    var fp_final_train: float64 = evaluate_fp(fp_model, train_tokens, train_targets, positions, mask, criterion)
+    var fp_final_train: float64 = evaluate_fp(fp_model, train_tokens_gpu, train_targets_gpu, positions_gpu, mask_gpu, criterion)
 
-    var fp_final_eval: float64 = evaluate_fp(fp_model, eval_tokens, eval_targets, positions, mask, criterion)
+    var fp_final_eval: float64 = evaluate_fp(fp_model, eval_tokens_gpu, eval_targets_gpu, positions_gpu, mask_gpu, criterion)
 
-    var ternary_final_train: float64 = evaluate_ternary(ternary_model, train_tokens, train_targets, positions, mask, criterion)
+    var ternary_final_train: float64 = evaluate_ternary(ternary_model, train_tokens_gpu, train_targets_gpu, positions_gpu, mask_gpu, criterion)
 
-    var ternary_final_eval: float64 = evaluate_ternary(ternary_model, eval_tokens, eval_targets, positions, mask, criterion)
+    var ternary_final_eval: float64 = evaluate_ternary(ternary_model, eval_tokens_gpu, eval_targets_gpu, positions_gpu, mask_gpu, criterion)
 
     var zero_fraction: float64 = ternary_model.representative_zero_fraction()
 
