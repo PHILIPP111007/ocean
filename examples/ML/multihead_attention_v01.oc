@@ -1,0 +1,34 @@
+import <std/tensor/tensor.oc>
+import <std/ml/nn.oc>
+
+
+def main() -> int:
+    var x: Tensor[float32] = Tensor.zeros(2, 3, 8, "cpu")
+    var target: Tensor[float32] = Tensor.zeros(2, 3, 8, "cpu")
+    var mask: Tensor[float32] = Tensor.zeros(3, 3, "cpu")
+
+    x.fill(0.25)
+
+    mask[0, 1] = 1.0
+    mask[0, 2] = 1.0
+    mask[1, 2] = 1.0
+
+    x.requires_grad_(True)
+
+    var attention: MultiHeadAttention = MultiHeadAttention(8, 2)
+    var output: Tensor[float32] = attention.forward(x, mask)
+
+    print("output shape =", output.shape(0), output.shape(1), output.shape(2))
+
+    var criterion: MSELoss = MSELoss()
+    var loss: Tensor[float32] = criterion.forward(output, target)
+    loss.backward()
+
+    print("loss =", loss.item())
+    print("x has grad =", x.has_grad())
+    print("q weight has grad =", attention.q_weight_has_grad())
+    print("k weight has grad =", attention.k_weight_has_grad())
+    print("v weight has grad =", attention.v_weight_has_grad())
+    print("out weight has grad =", attention.out_weight_has_grad())
+    print("[ok] Ocean MultiHeadAttention v0.1")
+    return 0
