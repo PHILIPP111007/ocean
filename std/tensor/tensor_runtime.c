@@ -3124,3 +3124,94 @@ void ocean_tensor_release(ocean_tensor_handle_t tensor) {
     free(tensor->strides);
     free(tensor);
 }
+
+ocean_tensor_handle_t ocean_tensor_permute(
+    ocean_tensor_handle_t tensor,
+    const int *axes,
+    size_t ndim
+) {
+    if (!tensor) {
+        ocean_tensor_fail("Tensor.permute requires a Tensor");
+    }
+    if (!axes) {
+        ocean_tensor_fail("Tensor.permute requires axes");
+    }
+
+    int rank = ocean_tensor_ndim(tensor);
+    if (rank <= 0 || (size_t)rank != ndim) {
+        ocean_tensor_fail("Tensor.permute axes must match Tensor rank");
+    }
+
+    int *normalized = (int *)malloc(ndim * sizeof(int));
+    int *order = (int *)malloc(ndim * sizeof(int));
+    bool *seen = (bool *)calloc(ndim, sizeof(bool));
+
+    if (!normalized || !order || !seen) {
+        free(normalized);
+        free(order);
+        free(seen);
+        ocean_tensor_fail("out of memory in Tensor.permute");
+    }
+
+    for (size_t i = 0; i < ndim; ++i) {
+        long long axis = (long long)axes[i];
+        if (axis < 0) axis += (long long)rank;
+        if (axis < 0 || axis >= (long long)rank) {
+            free(normalized);
+            free(order);
+            free(seen);
+            ocean_tensor_fail("Tensor.permute axis is out of bounds");
+        }
+        if (seen[(size_t)axis]) {
+            free(normalized);
+            free(order);
+            free(seen);
+            ocean_tensor_fail("Tensor.permute axes must be unique");
+        }
+
+        normalized[i] = (int)axis;
+        seen[(size_t)axis] = true;
+        order[i] = (int)i;
+    }
+
+    ocean_tensor_handle_t result = ocean_tensor_copy(tensor);
+
+    for (size_t target = 0; target < ndim; ++target) {
+        size_t current = target;
+
+        while (
+            current < ndim
+            && order[current] != normalized[target]
+        ) {
+            ++current;
+        }
+
+        if (current == ndim) {
+            ocean_tensor_release(result);
+            free(normalized);
+            free(order);
+            free(seen);
+            ocean_tensor_fail("invalid Tensor.permute permutation");
+        }
+
+        if (current != target) {
+            ocean_tensor_handle_t swapped =
+                ocean_tensor_transpose_dims(
+                    result,
+                    (int)target,
+                    (int)current
+                );
+            ocean_tensor_release(result);
+            result = swapped;
+
+            int tmp = order[target];
+            order[target] = order[current];
+            order[current] = tmp;
+        }
+    }
+
+    free(normalized);
+    free(order);
+    free(seen);
+    return result;
+}

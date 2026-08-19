@@ -65,6 +65,11 @@ void ocean_autograd_sgd_step(
 ocean_tensor_handle_t ocean_autograd_reshape_3d(ocean_tensor_handle_t tensor, int d0, int d1, int d2);
 ocean_tensor_handle_t ocean_autograd_reshape_4d(ocean_tensor_handle_t tensor, int d0, int d1, int d2, int d3);
 ocean_tensor_handle_t ocean_autograd_transpose_dims(ocean_tensor_handle_t tensor, int dim0, int dim1);
+ocean_tensor_handle_t ocean_autograd_permute(
+    ocean_tensor_handle_t tensor,
+    const int *axes,
+    size_t ndim
+);
 ocean_tensor_handle_t ocean_autograd_sum_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim);
 ocean_tensor_handle_t ocean_autograd_mean_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim);
 

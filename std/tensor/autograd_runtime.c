@@ -27,6 +27,7 @@ enum {
     OCEAN_AUTOGRAD_POW = 22,
     OCEAN_AUTOGRAD_SOFTMAX = 23,
     OCEAN_AUTOGRAD_LAYER_NORM = 24,
+    OCEAN_AUTOGRAD_PERMUTE = 25,
 };
 
 typedef struct ocean_autograd_meta ocean_autograd_meta;
@@ -42,6 +43,8 @@ typedef struct ocean_autograd_node {
     int dim0;
     int dim1;
     bool keepdim;
+    int *axes;
+    size_t axes_count;
 } ocean_autograd_node;
 
 struct ocean_autograd_meta {
@@ -131,6 +134,7 @@ static void ocean_autograd_node_free(ocean_autograd_node *node) {
     if (!node) return;
     ocean_tensor_release(node->saved_left);
     ocean_tensor_release(node->saved_right);
+    free(node->axes);
     free(node);
 }
 
@@ -1335,6 +1339,80 @@ ocean_tensor_handle_t ocean_autograd_layer_norm(
     return result;
 }
 
+
+ocean_tensor_handle_t ocean_autograd_permute(
+    ocean_tensor_handle_t tensor,
+    const int *axes,
+    size_t ndim
+) {
+    ocean_tensor_handle_t result =
+        ocean_tensor_permute(tensor, axes, ndim);
+
+    ocean_autograd_meta *parent = ocean_autograd_find(tensor);
+    if (!parent || !parent->requires_grad) {
+        return result;
+    }
+
+    if (parent->ndim != ndim) {
+        ocean_tensor_release(result);
+        ocean_tensor_fail(
+            "autograd Tensor.permute axes must match Tensor rank"
+        );
+    }
+
+    ocean_autograd_node *node =
+        ocean_autograd_node_new(OCEAN_AUTOGRAD_PERMUTE);
+    node->left = parent;
+    node->axes_count = ndim;
+    node->axes = ndim
+        ? (int *)malloc(ndim * sizeof(int))
+        : NULL;
+
+    if (ndim && !node->axes) {
+        ocean_autograd_node_free(node);
+        ocean_tensor_release(result);
+        ocean_tensor_fail(
+            "out of memory storing Tensor.permute autograd axes"
+        );
+    }
+
+    bool *seen = ndim
+        ? (bool *)calloc(ndim, sizeof(bool))
+        : NULL;
+    if (ndim && !seen) {
+        ocean_autograd_node_free(node);
+        ocean_tensor_release(result);
+        ocean_tensor_fail(
+            "out of memory validating Tensor.permute autograd axes"
+        );
+    }
+
+    for (size_t i = 0; i < ndim; ++i) {
+        long long axis = (long long)axes[i];
+        if (axis < 0) axis += (long long)ndim;
+
+        if (
+            axis < 0
+            || axis >= (long long)ndim
+            || seen[(size_t)axis]
+        ) {
+            free(seen);
+            ocean_autograd_node_free(node);
+            ocean_tensor_release(result);
+            ocean_tensor_fail(
+                "invalid Tensor.permute autograd permutation"
+            );
+        }
+
+        node->axes[i] = (int)axis;
+        seen[(size_t)axis] = true;
+    }
+
+    free(seen);
+    ocean_autograd_attach(result, node);
+    return result;
+}
+
 typedef struct ocean_autograd_topology {
     ocean_autograd_meta **items;
     size_t count;
@@ -1534,6 +1612,37 @@ static void ocean_autograd_backward_node(ocean_autograd_meta *meta) {
 
         case OCEAN_AUTOGRAD_TRANSPOSE: { if(node->left)ocean_autograd_accumulate(node->left,ocean_tensor_transpose_dims(upstream,0,1)); break; }
         case OCEAN_AUTOGRAD_TRANSPOSE_DIMS: { if(node->left)ocean_autograd_accumulate(node->left,ocean_tensor_transpose_dims(upstream,node->dim0,node->dim1)); break; }
+        case OCEAN_AUTOGRAD_PERMUTE: {
+            if (node->left) {
+                int *inverse = node->axes_count
+                    ? (int *)malloc(node->axes_count * sizeof(int))
+                    : NULL;
+
+                if (node->axes_count && !inverse) {
+                    ocean_tensor_fail(
+                        "out of memory in Tensor.permute backward"
+                    );
+                }
+
+                for (size_t i = 0; i < node->axes_count; ++i) {
+                    inverse[(size_t)node->axes[i]] = (int)i;
+                }
+
+                ocean_tensor_handle_t contribution =
+                    ocean_tensor_permute(
+                        upstream,
+                        inverse,
+                        node->axes_count
+                    );
+                free(inverse);
+                ocean_autograd_accumulate(
+                    node->left,
+                    contribution
+                );
+            }
+            break;
+        }
+
         case OCEAN_AUTOGRAD_RESHAPE: { if(node->left){ocean_tensor_handle_t r=ocean_tensor_reshape(upstream,node->left->shape,node->left->ndim);ocean_autograd_accumulate(node->left,r);} break; }
         case OCEAN_AUTOGRAD_SUM_DIM:
         case OCEAN_AUTOGRAD_MEAN_DIM: { if(node->left){int ax=ocean_autograd_normalize_dim_v02(node->left,node->dim0);double sc=node->operation==OCEAN_AUTOGRAD_MEAN_DIM?1.0/(double)node->left->shape[(size_t)ax]:1.0;ocean_tensor_handle_t g=ocean_autograd_expand_reduction_v02(upstream,node->left,node->dim0,node->keepdim,sc);ocean_autograd_accumulate(node->left,g);} break; }

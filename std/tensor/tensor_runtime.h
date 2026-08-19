@@ -64,6 +64,11 @@ ocean_tensor_handle_t ocean_tensor_reshape_2d(
     int cols
 );
 ocean_tensor_handle_t ocean_tensor_transpose(ocean_tensor_handle_t tensor);
+ocean_tensor_handle_t ocean_tensor_permute(
+    ocean_tensor_handle_t tensor,
+    const int *axes,
+    size_t ndim
+);
 ocean_tensor_handle_t ocean_tensor_row(ocean_tensor_handle_t tensor, int row);
 ocean_tensor_handle_t ocean_tensor_column(ocean_tensor_handle_t tensor, int column);
 ocean_tensor_handle_t ocean_tensor_slice(

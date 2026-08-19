@@ -166,6 +166,34 @@ class TensorCodegenMixin:
                 f"{object_name}->handle, {d0}, {d1}))"
             )
 
+
+        if method == "permute" and len(args) == 1:
+            axes_ast = args[0]
+            if axes_ast.get("type") != "list_literal":
+                raise RuntimeError(
+                    "Tensor.permute(axes) expects a list literal"
+                )
+            axes = axes_ast.get("items", []) or []
+            if not axes:
+                raise RuntimeError(
+                    "Tensor.permute(axes) requires rank >= 1"
+                )
+
+            suffix = self.temp_var_counter
+            self.temp_var_counter += 1
+            name = f"ocean_device_tensor_permute_axes_{suffix}"
+            values = ", ".join(
+                f"(int)({gen(axis)})"
+                for axis in axes
+            )
+            self.add_line(
+                f"int {name}[{len(axes)}] = {{ {values} }};"
+            )
+            return (
+                f"create_Tensor(ocean_autograd_permute("
+                f"{object_name}->handle, {name}, {len(axes)}))"
+            )
+
         return None
 
     def _tensor_list_types(self, source_type: str) -> List[str]:
