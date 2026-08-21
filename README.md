@@ -300,7 +300,7 @@ correctness-first CPU fallback internally. A CUDA backend can later live behind
 the same `"gpu"` API.
 
 ```bash
-ocean build examples/ML/gpt/medium_gpt_native_ternary_train_gpu.oc \
+ocean build examples/ML/medium_gpt_native_ternary_train_gpu.oc \
     --cflag=-lOpenCL \
     --cflag=-I"/usr/include/CL/" \
     --cflag=-L"/usr/lib/x86_64-linux-gnu/libOpenCL.so" \
