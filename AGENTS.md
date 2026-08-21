@@ -15,7 +15,7 @@ changes.
 The main development branch is:
 
 ```text
-dev
+main
 ```
 
 ---
