@@ -26,6 +26,11 @@ generated C includes `std/tensor/tensor_runtime.h`.
   index semantics;
 - embedding kernels validate token bounds on the device and report invalid
   indices through a small device-side error flag.
+- float32 `CrossEntropyLoss` computes stable softmax probabilities and
+  per-row negative log-likelihood on the device for `int64` targets;
+- CrossEntropy backward computes `(softmax(logits) - one_hot(target)) /
+  batch_size` on the device and validates target bounds without a host data
+  round-trip.
 
 ## Runtime objects
 
@@ -89,10 +94,10 @@ optional at compile time: without
 error instead of silently falling back to CPU.
 
 The additional hot paths are runtime primitives rather than public OpenCL ABI:
-`softmax`, `layer_norm`, `sum_dim`, `mean_dim`, SGD, AdamW, and Embedding receive
-opaque Tensor handles. The current native kernels target contiguous float32
-tensors (and contiguous int64 indices for Embedding) and the last axis where
-applicable. Other axes, dtypes, and unsupported layouts retain the
+`softmax`, `layer_norm`, `sum_dim`, `mean_dim`, SGD, AdamW, Embedding, and
+CrossEntropy receive opaque Tensor handles. The current native kernels target
+contiguous float32 tensors (and contiguous int64 indices/targets where
+applicable) and the last axis where applicable. Other axes, dtypes, and unsupported layouts retain the
 correctness-first CPU round-trip behavior. Autograd backward for softmax,
 LayerNorm, and Embedding also has native float32 kernels for supported layouts.
 

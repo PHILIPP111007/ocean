@@ -66,6 +66,60 @@ int main(void) {
     }
     ocean_tensor_handle_t gpu = ocean_tensor_to(cpu, "gpu");
 
+    size_t cross_entropy_target_shape[1] = {2};
+    ocean_tensor_handle_t cross_entropy_targets_cpu = ocean_tensor_zeros_nd(
+        cross_entropy_target_shape, 1, "int64", "cpu"
+    );
+    ocean_tensor_set_flat_i64(cross_entropy_targets_cpu, 0, 1);
+    ocean_tensor_set_flat_i64(cross_entropy_targets_cpu, 1, 3);
+    ocean_tensor_handle_t cross_entropy_targets_gpu = ocean_tensor_to(
+        cross_entropy_targets_cpu, "gpu"
+    );
+    ocean_tensor_handle_t cross_entropy_probabilities_cpu = NULL;
+    ocean_tensor_handle_t cross_entropy_probabilities_gpu = NULL;
+    ocean_tensor_handle_t cross_entropy_loss_cpu =
+        ocean_tensor_cross_entropy_forward(
+            cpu,
+            cross_entropy_targets_cpu,
+            &cross_entropy_probabilities_cpu
+        );
+    ocean_tensor_handle_t cross_entropy_loss_gpu =
+        ocean_tensor_cross_entropy_forward(
+            gpu,
+            cross_entropy_targets_gpu,
+            &cross_entropy_probabilities_gpu
+        );
+    check_close(
+        cross_entropy_probabilities_cpu,
+        cross_entropy_probabilities_gpu,
+        "cross entropy probabilities"
+    );
+    check_close(cross_entropy_loss_cpu, cross_entropy_loss_gpu,
+                "cross entropy loss");
+    ocean_tensor_handle_t cross_entropy_upstream_cpu =
+        ocean_tensor_zeros(1, 1, "cpu");
+    ocean_tensor_fill(cross_entropy_upstream_cpu, 1.0);
+    ocean_tensor_handle_t cross_entropy_upstream_gpu = ocean_tensor_to(
+        cross_entropy_upstream_cpu, "gpu"
+    );
+    ocean_tensor_handle_t cross_entropy_gradient_cpu =
+        ocean_tensor_cross_entropy_backward(
+            cross_entropy_upstream_cpu,
+            cross_entropy_probabilities_cpu,
+            cross_entropy_targets_cpu
+        );
+    ocean_tensor_handle_t cross_entropy_gradient_gpu =
+        ocean_tensor_cross_entropy_backward(
+            cross_entropy_upstream_gpu,
+            cross_entropy_probabilities_gpu,
+            cross_entropy_targets_gpu
+        );
+    check_close(
+        cross_entropy_gradient_cpu,
+        cross_entropy_gradient_gpu,
+        "cross entropy backward"
+    );
+
     size_t embedding_weight_shape[2] = {4, 3};
     ocean_tensor_handle_t embedding_weight_cpu = ocean_tensor_zeros_nd(
         embedding_weight_shape, 2, "float32", "cpu"
@@ -311,6 +365,16 @@ int main(void) {
     ocean_tensor_release(cpu_softmax);
     ocean_tensor_release(embedding_gradient_gpu);
     ocean_tensor_release(embedding_gradient_cpu);
+    ocean_tensor_release(cross_entropy_gradient_gpu);
+    ocean_tensor_release(cross_entropy_gradient_cpu);
+    ocean_tensor_release(cross_entropy_upstream_gpu);
+    ocean_tensor_release(cross_entropy_upstream_cpu);
+    ocean_tensor_release(cross_entropy_loss_gpu);
+    ocean_tensor_release(cross_entropy_loss_cpu);
+    ocean_tensor_release(cross_entropy_probabilities_gpu);
+    ocean_tensor_release(cross_entropy_probabilities_cpu);
+    ocean_tensor_release(cross_entropy_targets_gpu);
+    ocean_tensor_release(cross_entropy_targets_cpu);
     ocean_tensor_release(autograd_gradient_gpu);
     ocean_tensor_release(autograd_gradient_cpu);
     ocean_tensor_release(autograd_loss_gpu);

@@ -49,6 +49,16 @@ ocean_tensor_handle_t ocean_tensor_embedding_backward(
     size_t vocab,
     size_t dim
 );
+ocean_tensor_handle_t ocean_tensor_cross_entropy_forward(
+    ocean_tensor_handle_t logits,
+    ocean_tensor_handle_t targets,
+    ocean_tensor_handle_t *probabilities_out
+);
+ocean_tensor_handle_t ocean_tensor_cross_entropy_backward(
+    ocean_tensor_handle_t upstream,
+    ocean_tensor_handle_t probabilities,
+    ocean_tensor_handle_t targets
+);
 void ocean_tensor_copy_into(ocean_tensor_handle_t destination, ocean_tensor_handle_t source);
 ocean_tensor_handle_t ocean_tensor_to(ocean_tensor_handle_t tensor, const char *device);
 ocean_tensor_handle_t ocean_tensor_matmul(

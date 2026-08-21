@@ -1256,6 +1256,7 @@ SGD update для GPU float32
 AdamW update и GPU m/v buffers для float32
 Embedding forward для GPU float32 weights + GPU int64 indices
 Embedding backward с atomic accumulation для повторяющихся token IDs
+CrossEntropy forward/backward для GPU float32 logits + GPU int64 targets
 ```
 
 В первую очередь оптимизированы:
@@ -1856,7 +1857,6 @@ batched matmul
 broadcast binary
 softmax
 LayerNorm
-CrossEntropy
 reductions
 transpose/permute where possible
 ```

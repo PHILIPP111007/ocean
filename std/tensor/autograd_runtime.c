@@ -1581,6 +1581,17 @@ static ocean_tensor_handle_t ocean_autograd_cross_entropy_forward_v04(
         );
     }
 
+    char *requested_device = ocean_tensor_device(logits);
+    if (strcmp(requested_device, "cpu") != 0) {
+        free(requested_device);
+        return ocean_tensor_cross_entropy_forward(
+            logits,
+            targets,
+            probabilities_out
+        );
+    }
+    free(requested_device);
+
     char *device = ocean_tensor_device(logits);
     ocean_tensor_handle_t lc = strcmp(device, "cpu") == 0
         ? logits
@@ -1982,6 +1993,24 @@ static void ocean_autograd_backward_node(ocean_autograd_meta *meta) {
                     node->saved_left;
                 ocean_tensor_handle_t targets =
                     node->saved_right;
+
+                char *probabilities_device =
+                    ocean_tensor_device(probabilities);
+                if (strcmp(probabilities_device, "cpu") != 0) {
+                    ocean_tensor_handle_t contribution =
+                        ocean_tensor_cross_entropy_backward(
+                            upstream,
+                            probabilities,
+                            targets
+                        );
+                    free(probabilities_device);
+                    ocean_autograd_accumulate(
+                        node->left,
+                        contribution
+                    );
+                    break;
+                }
+                free(probabilities_device);
 
                 int rank = ocean_tensor_ndim(probabilities);
                 size_t vocab =

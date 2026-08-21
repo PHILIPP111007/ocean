@@ -29,6 +29,13 @@ typedef enum ocean_tensor_dtype {
     OCEAN_TENSOR_FLOAT64,
 } ocean_tensor_dtype;
 
+enum {
+    OCEAN_TENSOR_ADD = 0,
+    OCEAN_TENSOR_SUB = 1,
+    OCEAN_TENSOR_MUL = 2,
+    OCEAN_TENSOR_DIV = 3,
+};
+
 struct ocean_tensor_handle {
     uint64_t identity;
     ocean_tensor_backend_kind device;
@@ -95,6 +102,16 @@ static ocean_tensor_handle_t ocean_tensor_embedding_backward_cpu(
     size_t vocab,
     size_t dim
 );
+static ocean_tensor_handle_t ocean_tensor_cross_entropy_forward_cpu(
+    const ocean_tensor_handle_t logits,
+    const ocean_tensor_handle_t targets,
+    ocean_tensor_handle_t *probabilities_out
+);
+static ocean_tensor_handle_t ocean_tensor_cross_entropy_backward_cpu(
+    const ocean_tensor_handle_t upstream,
+    const ocean_tensor_handle_t probabilities,
+    const ocean_tensor_handle_t targets
+);
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
 static void ocean_tensor_opencl_ternary_quantize(
     const ocean_tensor_handle_t input,
@@ -117,6 +134,24 @@ static void ocean_tensor_opencl_embedding_backward(
     int index_count,
     int vocab,
     int dim
+);
+static void ocean_tensor_opencl_cross_entropy_forward(
+    const ocean_tensor_handle_t logits,
+    const ocean_tensor_handle_t targets,
+    ocean_tensor_handle_t probabilities,
+    ocean_tensor_handle_t row_losses,
+    ocean_tensor_handle_t error,
+    int rows,
+    int vocab
+);
+static void ocean_tensor_opencl_cross_entropy_backward(
+    const ocean_tensor_handle_t upstream,
+    const ocean_tensor_handle_t probabilities,
+    const ocean_tensor_handle_t targets,
+    ocean_tensor_handle_t gradient,
+    ocean_tensor_handle_t error,
+    int rows,
+    int vocab
 );
 #endif
 static void ocean_tensor_write_scalar(
@@ -567,6 +602,59 @@ static const char *ocean_tensor_embedding_kernel_source =
     "gradient + (int)token * dim + feature, upstream[index]);"
     "}";
 
+static const char *ocean_tensor_cross_entropy_kernel_source =
+    "__kernel void ocean_tensor_cross_entropy_forward("
+    "__global const float *logits, __global const long *targets, "
+    "__global float *probabilities, __global float *row_losses, "
+    "__global int *error, const int rows, const int vocab) {"
+    "int row = (int)get_global_id(0);"
+    "if (row >= rows) return;"
+    "int offset = row * vocab;"
+    "float maximum = -3.402823466e+38f;"
+    "for (int cls = 0; cls < vocab; ++cls) {"
+    "float value = logits[offset + cls];"
+    "if (value > maximum) maximum = value;"
+    "}"
+    "float denominator = 0.0f;"
+    "for (int cls = 0; cls < vocab; ++cls) {"
+    "float exponential = exp(logits[offset + cls] - maximum);"
+    "probabilities[offset + cls] = exponential;"
+    "denominator += exponential;"
+    "}"
+    "long target = targets[row];"
+    "if (target < 0 || target >= (long)vocab) {"
+    "atomic_or(error, 1);"
+    "row_losses[row] = 0.0f;"
+    "} else {"
+    "float target_logit = logits[offset + (int)target];"
+    "row_losses[row] = log(denominator) + maximum - target_logit;"
+    "}"
+    "for (int cls = 0; cls < vocab; ++cls) {"
+    "probabilities[offset + cls] /= denominator;"
+    "}"
+    "}"
+    "__kernel void ocean_tensor_cross_entropy_backward("
+    "__global const float *upstream, "
+    "__global const float *probabilities, "
+    "__global const long *targets, __global float *gradient, "
+    "__global int *error, const int rows, const int vocab) {"
+    "int row = (int)get_global_id(0);"
+    "if (row >= rows) return;"
+    "long target = targets[row];"
+    "int offset = row * vocab;"
+    "if (target < 0 || target >= (long)vocab) {"
+    "atomic_or(error, 1);"
+    "for (int cls = 0; cls < vocab; ++cls) gradient[offset + cls] = 0.0f;"
+    "return;"
+    "}"
+    "float scale = upstream[0] / (float)rows;"
+    "for (int cls = 0; cls < vocab; ++cls) {"
+    "float value = probabilities[offset + cls];"
+    "if (cls == (int)target) value -= 1.0f;"
+    "gradient[offset + cls] = value * scale;"
+    "}"
+    "}";
+
 static const char *ocean_tensor_backward_kernel_source =
     "__kernel void ocean_tensor_softmax_backward_last_dim("
     "__global const float *upstream, __global const float *output, "
@@ -632,6 +720,8 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_kernel ternary_quantize_kernel;
     cl_kernel embedding_forward_kernel;
     cl_kernel embedding_backward_kernel;
+    cl_kernel cross_entropy_forward_kernel;
+    cl_kernel cross_entropy_backward_kernel;
     cl_kernel softmax_backward_kernel;
     cl_kernel layer_norm_backward_kernel;
 } ocean_tensor_opencl_runtime;
@@ -651,6 +741,8 @@ typedef enum ocean_tensor_opencl_kernel_key {
     OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_QUANTIZE_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_FORWARD_FLOAT32_INT64,
     OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_BACKWARD_FLOAT32_INT64,
+    OCEAN_TENSOR_OPENCL_KERNEL_CROSS_ENTROPY_FORWARD_FLOAT32_INT64,
+    OCEAN_TENSOR_OPENCL_KERNEL_CROSS_ENTROPY_BACKWARD_FLOAT32_INT64,
     OCEAN_TENSOR_OPENCL_KERNEL_SOFTMAX_BACKWARD_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_LAYER_NORM_BACKWARD_FLOAT32,
 } ocean_tensor_opencl_kernel_key;
@@ -715,6 +807,14 @@ static void ocean_tensor_opencl_shutdown(void) {
     if (ocean_tensor_opencl.embedding_backward_kernel) {
         clReleaseKernel(ocean_tensor_opencl.embedding_backward_kernel);
         ocean_tensor_opencl.embedding_backward_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.cross_entropy_forward_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.cross_entropy_forward_kernel);
+        ocean_tensor_opencl.cross_entropy_forward_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.cross_entropy_backward_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.cross_entropy_backward_kernel);
+        ocean_tensor_opencl.cross_entropy_backward_kernel = NULL;
     }
     if (ocean_tensor_opencl.softmax_backward_kernel) {
         clReleaseKernel(ocean_tensor_opencl.softmax_backward_kernel);
@@ -804,10 +904,11 @@ static void ocean_tensor_opencl_init(void) {
         ocean_tensor_matmul_kernel_source,
         ocean_tensor_hotpath_kernel_source,
         ocean_tensor_embedding_kernel_source,
+        ocean_tensor_cross_entropy_kernel_source,
         ocean_tensor_backward_kernel_source,
     };
     ocean_tensor_opencl.program = clCreateProgramWithSource(
-        ocean_tensor_opencl.context, 4, sources, NULL, &status
+        ocean_tensor_opencl.context, 5, sources, NULL, &status
     );
     ocean_tensor_opencl_check(status, "clCreateProgramWithSource");
     status = clBuildProgram(
@@ -894,6 +995,14 @@ static cl_kernel ocean_tensor_opencl_get_kernel(
         case OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_BACKWARD_FLOAT32_INT64:
             slot = &ocean_tensor_opencl.embedding_backward_kernel;
             name = "ocean_tensor_embedding_backward";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_CROSS_ENTROPY_FORWARD_FLOAT32_INT64:
+            slot = &ocean_tensor_opencl.cross_entropy_forward_kernel;
+            name = "ocean_tensor_cross_entropy_forward";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_CROSS_ENTROPY_BACKWARD_FLOAT32_INT64:
+            slot = &ocean_tensor_opencl.cross_entropy_backward_kernel;
+            name = "ocean_tensor_cross_entropy_backward";
             break;
         case OCEAN_TENSOR_OPENCL_KERNEL_SOFTMAX_BACKWARD_FLOAT32:
             slot = &ocean_tensor_opencl.softmax_backward_kernel;
@@ -1581,6 +1690,254 @@ ocean_tensor_handle_t ocean_tensor_embedding_backward(
     return result;
 }
 
+static void ocean_tensor_validate_cross_entropy_shapes(
+    const ocean_tensor_handle_t logits,
+    const ocean_tensor_handle_t targets
+) {
+    if (!logits || !targets) {
+        ocean_tensor_fail("CrossEntropyLoss requires non-null tensors");
+    }
+    if (logits->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("CrossEntropyLoss logits must be Tensor[float32]");
+    }
+    if (targets->dtype != OCEAN_TENSOR_INT64) {
+        ocean_tensor_fail(
+            "CrossEntropyLoss targets must be Tensor[int64]"
+        );
+    }
+    if (logits->ndim < 2 || targets->ndim != logits->ndim - 1) {
+        ocean_tensor_fail(
+            "CrossEntropyLoss expects logits [...,V] and targets [...]"
+        );
+    }
+    for (size_t axis = 0; axis < targets->ndim; ++axis) {
+        if (logits->shape[axis] != targets->shape[axis]) {
+            ocean_tensor_fail(
+                "CrossEntropyLoss target shape must match logits prefix"
+            );
+        }
+    }
+    if (logits->shape[logits->ndim - 1] == 0 || targets->size == 0) {
+        ocean_tensor_fail(
+            "CrossEntropyLoss requires non-empty vocab and targets"
+        );
+    }
+}
+
+ocean_tensor_handle_t ocean_tensor_cross_entropy_forward(
+    ocean_tensor_handle_t logits,
+    ocean_tensor_handle_t targets,
+    ocean_tensor_handle_t *probabilities_out
+) {
+    if (!probabilities_out) {
+        ocean_tensor_fail(
+            "CrossEntropyLoss forward requires a probabilities output"
+        );
+    }
+    *probabilities_out = NULL;
+    ocean_tensor_validate_cross_entropy_shapes(logits, targets);
+
+    size_t rows = targets->size;
+    size_t vocab = logits->shape[logits->ndim - 1];
+    if (vocab != 0 && rows > SIZE_MAX / vocab) {
+        ocean_tensor_fail("CrossEntropyLoss tensor is too large");
+    }
+
+    ocean_tensor_handle_t contiguous_logits =
+        ocean_tensor_is_contiguous(logits)
+        ? logits : ocean_tensor_contiguous(logits);
+    ocean_tensor_handle_t contiguous_targets =
+        ocean_tensor_is_contiguous(targets)
+        ? targets : ocean_tensor_contiguous(targets);
+    ocean_tensor_handle_t result = NULL;
+
+    if (logits->device == OCEAN_TENSOR_CPU) {
+        ocean_tensor_handle_t cpu_targets = contiguous_targets;
+        if (cpu_targets->device != OCEAN_TENSOR_CPU) {
+            cpu_targets = ocean_tensor_to(cpu_targets, "cpu");
+        }
+        result = ocean_tensor_cross_entropy_forward_cpu(
+            contiguous_logits,
+            cpu_targets,
+            probabilities_out
+        );
+        if (cpu_targets != contiguous_targets) ocean_tensor_release(cpu_targets);
+    } else {
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+        if (rows > (size_t)INT32_MAX || vocab > (size_t)INT32_MAX ||
+            rows * vocab > (size_t)INT32_MAX) {
+            if (contiguous_logits != logits) ocean_tensor_release(contiguous_logits);
+            if (contiguous_targets != targets) ocean_tensor_release(contiguous_targets);
+            ocean_tensor_fail(
+                "CrossEntropyLoss is too large for OpenCL kernel indexing"
+            );
+        }
+        ocean_tensor_handle_t gpu_targets = contiguous_targets;
+        if (gpu_targets->device != OCEAN_TENSOR_GPU) {
+            gpu_targets = ocean_tensor_to(gpu_targets, "gpu");
+        }
+        ocean_tensor_handle_t probabilities = ocean_tensor_alloc_uninitialized(
+            logits->shape,
+            logits->ndim,
+            OCEAN_TENSOR_FLOAT32,
+            OCEAN_TENSOR_GPU
+        );
+        size_t row_shape[1] = {rows};
+        ocean_tensor_handle_t row_losses = ocean_tensor_alloc_uninitialized(
+            row_shape, 1, OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_GPU
+        );
+        size_t error_shape[1] = {1};
+        ocean_tensor_handle_t error = ocean_tensor_zeros_nd(
+            error_shape, 1, "int32", "gpu"
+        );
+        ocean_tensor_opencl_cross_entropy_forward(
+            contiguous_logits,
+            gpu_targets,
+            probabilities,
+            row_losses,
+            error,
+            (int)rows,
+            (int)vocab
+        );
+        int32_t error_value = ocean_tensor_get_flat_i32(error, 0);
+        ocean_tensor_release(error);
+        if (error_value != 0) {
+            ocean_tensor_release(row_losses);
+            ocean_tensor_release(probabilities);
+            if (gpu_targets != contiguous_targets) ocean_tensor_release(gpu_targets);
+            if (contiguous_logits != logits) ocean_tensor_release(contiguous_logits);
+            if (contiguous_targets != targets) ocean_tensor_release(contiguous_targets);
+            ocean_tensor_fail("CrossEntropyLoss target is out of range");
+        }
+
+        ocean_tensor_handle_t total = ocean_tensor_sum_dim(
+            row_losses, -1, false
+        );
+        ocean_tensor_handle_t mean = ocean_tensor_scalar(
+            total, (double)rows, OCEAN_TENSOR_DIV
+        );
+        size_t loss_shape[2] = {1, 1};
+        ocean_tensor_handle_t loss = ocean_tensor_reshape(
+            mean, loss_shape, 2
+        );
+        ocean_tensor_release(mean);
+        ocean_tensor_release(total);
+        ocean_tensor_release(row_losses);
+        *probabilities_out = probabilities;
+        result = loss;
+        if (gpu_targets != contiguous_targets) ocean_tensor_release(gpu_targets);
+#else
+        if (contiguous_logits != logits) ocean_tensor_release(contiguous_logits);
+        if (contiguous_targets != targets) ocean_tensor_release(contiguous_targets);
+        ocean_tensor_fail(
+            "GPU backend is unavailable: rebuild with OpenCL support"
+        );
+#endif
+    }
+
+    if (contiguous_logits != logits) ocean_tensor_release(contiguous_logits);
+    if (contiguous_targets != targets) ocean_tensor_release(contiguous_targets);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_tensor_cross_entropy_backward(
+    ocean_tensor_handle_t upstream,
+    ocean_tensor_handle_t probabilities,
+    ocean_tensor_handle_t targets
+) {
+    ocean_tensor_validate_cross_entropy_shapes(probabilities, targets);
+    if (!upstream || upstream->dtype != OCEAN_TENSOR_FLOAT32 ||
+        upstream->size != 1) {
+        ocean_tensor_fail(
+            "CrossEntropyLoss backward requires a float32 scalar upstream"
+        );
+    }
+    if (upstream->device != probabilities->device) {
+        ocean_tensor_fail(
+            "CrossEntropyLoss backward requires matching Tensor devices"
+        );
+    }
+
+    size_t rows = targets->size;
+    size_t vocab = probabilities->shape[probabilities->ndim - 1];
+    if (vocab != 0 && rows > SIZE_MAX / vocab) {
+        ocean_tensor_fail("CrossEntropyLoss gradient is too large");
+    }
+
+    ocean_tensor_handle_t contiguous_upstream =
+        ocean_tensor_is_contiguous(upstream)
+        ? upstream : ocean_tensor_contiguous(upstream);
+    ocean_tensor_handle_t contiguous_probabilities =
+        ocean_tensor_is_contiguous(probabilities)
+        ? probabilities : ocean_tensor_contiguous(probabilities);
+    ocean_tensor_handle_t contiguous_targets =
+        ocean_tensor_is_contiguous(targets)
+        ? targets : ocean_tensor_contiguous(targets);
+    ocean_tensor_handle_t result = NULL;
+
+    if (probabilities->device == OCEAN_TENSOR_CPU) {
+        ocean_tensor_handle_t cpu_targets = contiguous_targets;
+        if (cpu_targets->device != OCEAN_TENSOR_CPU) {
+            cpu_targets = ocean_tensor_to(cpu_targets, "cpu");
+        }
+        result = ocean_tensor_cross_entropy_backward_cpu(
+            contiguous_upstream,
+            contiguous_probabilities,
+            cpu_targets
+        );
+        if (cpu_targets != contiguous_targets) ocean_tensor_release(cpu_targets);
+    } else {
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+        if (rows > (size_t)INT32_MAX || vocab > (size_t)INT32_MAX ||
+            rows * vocab > (size_t)INT32_MAX) {
+            ocean_tensor_fail(
+                "CrossEntropyLoss gradient is too large for OpenCL indexing"
+            );
+        }
+        ocean_tensor_handle_t gpu_targets = contiguous_targets;
+        if (gpu_targets->device != OCEAN_TENSOR_GPU) {
+            gpu_targets = ocean_tensor_to(gpu_targets, "gpu");
+        }
+        result = ocean_tensor_alloc_uninitialized(
+            probabilities->shape,
+            probabilities->ndim,
+            OCEAN_TENSOR_FLOAT32,
+            OCEAN_TENSOR_GPU
+        );
+        size_t error_shape[1] = {1};
+        ocean_tensor_handle_t error = ocean_tensor_zeros_nd(
+            error_shape, 1, "int32", "gpu"
+        );
+        ocean_tensor_opencl_cross_entropy_backward(
+            contiguous_upstream,
+            contiguous_probabilities,
+            gpu_targets,
+            result,
+            error,
+            (int)rows,
+            (int)vocab
+        );
+        int32_t error_value = ocean_tensor_get_flat_i32(error, 0);
+        ocean_tensor_release(error);
+        if (error_value != 0) {
+            ocean_tensor_release(result);
+            if (gpu_targets != contiguous_targets) ocean_tensor_release(gpu_targets);
+            ocean_tensor_fail("CrossEntropyLoss target is out of range");
+        }
+        if (gpu_targets != contiguous_targets) ocean_tensor_release(gpu_targets);
+#else
+        ocean_tensor_fail(
+            "GPU backend is unavailable: rebuild with OpenCL support"
+        );
+#endif
+    }
+
+    if (contiguous_upstream != upstream) ocean_tensor_release(contiguous_upstream);
+    if (contiguous_probabilities != probabilities) ocean_tensor_release(contiguous_probabilities);
+    if (contiguous_targets != targets) ocean_tensor_release(contiguous_targets);
+    return result;
+}
+
 void ocean_tensor_copy_into(
     ocean_tensor_handle_t destination,
     ocean_tensor_handle_t source
@@ -1772,13 +2129,6 @@ static bool ocean_tensor_contains_zero(const ocean_tensor_handle_t tensor) {
     return found;
 }
 #endif
-
-enum {
-    OCEAN_TENSOR_ADD = 0,
-    OCEAN_TENSOR_SUB = 1,
-    OCEAN_TENSOR_MUL = 2,
-    OCEAN_TENSOR_DIV = 3,
-};
 
 static long double ocean_tensor_apply_binary(
     long double left,
@@ -2185,6 +2535,126 @@ static ocean_tensor_handle_t ocean_tensor_embedding_backward_cpu(
     return result;
 }
 
+static ocean_tensor_handle_t ocean_tensor_cross_entropy_forward_cpu(
+    const ocean_tensor_handle_t logits,
+    const ocean_tensor_handle_t targets,
+    ocean_tensor_handle_t *probabilities_out
+) {
+    size_t vocab = logits->shape[logits->ndim - 1];
+    size_t rows = targets->size;
+    ocean_tensor_handle_t probabilities = ocean_tensor_alloc_uninitialized(
+        logits->shape,
+        logits->ndim,
+        OCEAN_TENSOR_FLOAT32,
+        OCEAN_TENSOR_CPU
+    );
+    double total_loss = 0.0;
+
+    for (size_t row = 0; row < rows; ++row) {
+        size_t offset = row * vocab;
+        float maximum = -INFINITY;
+        for (size_t cls = 0; cls < vocab; ++cls) {
+            float value = ocean_tensor_get_flat_f32(
+                (ocean_tensor_handle_t)logits,
+                offset + cls
+            );
+            if (value > maximum) maximum = value;
+        }
+
+        double denominator = 0.0;
+        for (size_t cls = 0; cls < vocab; ++cls) {
+            float exponential = expf(
+                ocean_tensor_get_flat_f32(
+                    (ocean_tensor_handle_t)logits,
+                    offset + cls
+                ) - maximum
+            );
+            ocean_tensor_write_scalar(
+                probabilities,
+                offset + cls,
+                (long double)exponential
+            );
+            denominator += (double)exponential;
+        }
+
+        int64_t target = ocean_tensor_get_flat_i64(
+            (ocean_tensor_handle_t)targets,
+            row
+        );
+        if (target < 0 || (uint64_t)target >= (uint64_t)vocab) {
+            ocean_tensor_release(probabilities);
+            ocean_tensor_fail("CrossEntropyLoss target is out of range");
+        }
+        float target_logit = ocean_tensor_get_flat_f32(
+            (ocean_tensor_handle_t)logits,
+            offset + (size_t)target
+        );
+        total_loss += log(denominator) + (double)maximum
+            - (double)target_logit;
+
+        for (size_t cls = 0; cls < vocab; ++cls) {
+            float probability = ocean_tensor_get_flat_f32(
+                probabilities,
+                offset + cls
+            );
+            ocean_tensor_write_scalar(
+                probabilities,
+                offset + cls,
+                (long double)((double)probability / denominator)
+            );
+        }
+    }
+
+    ocean_tensor_handle_t loss = ocean_tensor_zeros(1, 1, "cpu");
+    ocean_tensor_fill(loss, total_loss / (double)rows);
+    *probabilities_out = probabilities;
+    return loss;
+}
+
+static ocean_tensor_handle_t ocean_tensor_cross_entropy_backward_cpu(
+    const ocean_tensor_handle_t upstream,
+    const ocean_tensor_handle_t probabilities,
+    const ocean_tensor_handle_t targets
+) {
+    size_t vocab = probabilities->shape[probabilities->ndim - 1];
+    size_t rows = targets->size;
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        probabilities->shape,
+        probabilities->ndim,
+        OCEAN_TENSOR_FLOAT32,
+        OCEAN_TENSOR_CPU
+    );
+    float scale = ocean_tensor_get_flat_f32(
+        (ocean_tensor_handle_t)upstream,
+        0
+    ) / (float)rows;
+
+    for (size_t row = 0; row < rows; ++row) {
+        int64_t target = ocean_tensor_get_flat_i64(
+            (ocean_tensor_handle_t)targets,
+            row
+        );
+        if (target < 0 || (uint64_t)target >= (uint64_t)vocab) {
+            ocean_tensor_release(result);
+            ocean_tensor_fail("CrossEntropyLoss target is out of range");
+        }
+        size_t offset = row * vocab;
+        for (size_t cls = 0; cls < vocab; ++cls) {
+            float value = ocean_tensor_get_flat_f32(
+                (ocean_tensor_handle_t)probabilities,
+                offset + cls
+            );
+            if (cls == (size_t)target) value -= 1.0f;
+            ocean_tensor_write_scalar(
+                result,
+                offset + cls,
+                (long double)(value * scale)
+            );
+        }
+    }
+    return result;
+}
+
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
 static int ocean_tensor_same_shape(
@@ -2494,6 +2964,116 @@ static void ocean_tensor_opencl_embedding_backward(
         "clSetKernelArg"
     );
     size_t global_size = (size_t)index_count * (size_t)dim;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_cross_entropy_forward(
+    const ocean_tensor_handle_t logits,
+    const ocean_tensor_handle_t targets,
+    ocean_tensor_handle_t probabilities,
+    ocean_tensor_handle_t row_losses,
+    ocean_tensor_handle_t error,
+    int rows,
+    int vocab
+) {
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_CROSS_ENTROPY_FORWARD_FLOAT32_INT64
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &logits->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &targets->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(cl_mem), &probabilities->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(cl_mem), &row_losses->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(cl_mem), &error->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 5, sizeof(int), &rows),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 6, sizeof(int), &vocab),
+        "clSetKernelArg"
+    );
+    size_t global_size = (size_t)rows;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_cross_entropy_backward(
+    const ocean_tensor_handle_t upstream,
+    const ocean_tensor_handle_t probabilities,
+    const ocean_tensor_handle_t targets,
+    ocean_tensor_handle_t gradient,
+    ocean_tensor_handle_t error,
+    int rows,
+    int vocab
+) {
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_CROSS_ENTROPY_BACKWARD_FLOAT32_INT64
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &upstream->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &probabilities->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(cl_mem), &targets->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(cl_mem), &gradient->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(cl_mem), &error->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 5, sizeof(int), &rows),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 6, sizeof(int), &vocab),
+        "clSetKernelArg"
+    );
+    size_t global_size = (size_t)rows;
     cl_event event = NULL;
     ocean_tensor_opencl_check(
         clEnqueueNDRangeKernel(
