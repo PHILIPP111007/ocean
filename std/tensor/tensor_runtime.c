@@ -455,6 +455,7 @@ static const char *ocean_tensor_hotpath_kernel_source =
     "float value = parameter[index];"
     "parameter[index] = value - learning_rate * weight_decay * value "
     "- learning_rate * adaptive;"
+    "}"
     "}";
 
 typedef struct ocean_tensor_opencl_runtime {
