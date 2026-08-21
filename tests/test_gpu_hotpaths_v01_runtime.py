@@ -66,6 +66,10 @@ int main(void) {
     }
     ocean_tensor_handle_t gpu = ocean_tensor_to(cpu, "gpu");
 
+    ocean_tensor_handle_t cpu_ternary = ocean_tensor_ternary_quantize(cpu);
+    ocean_tensor_handle_t gpu_ternary = ocean_tensor_ternary_quantize(gpu);
+    check_close(cpu_ternary, gpu_ternary, "ternary quantize");
+
     ocean_tensor_handle_t cpu_softmax = ocean_tensor_softmax(cpu, -1);
     ocean_tensor_handle_t gpu_softmax = ocean_tensor_softmax(gpu, -1);
     check_close(cpu_softmax, gpu_softmax, "softmax");
@@ -192,6 +196,9 @@ int main(void) {
     ocean_tensor_release(gpu_softmax_input);
     ocean_tensor_release(cpu_softmax_input);
 
+    ocean_tensor_release(gpu_ternary);
+    ocean_tensor_release(cpu_ternary);
+
     ocean_tensor_release(gpu_second);
     ocean_tensor_release(gpu_first);
     ocean_tensor_release(cpu_second);
@@ -243,6 +250,16 @@ def test_gpu_hotpaths_v01_runtime(tmp_path):
         check=True,
     )
     result = subprocess.run(
-        [str(binary)], check=True, capture_output=True, text=True
+        [str(binary)], check=False, capture_output=True, text=True
     )
+    if result.returncode != 0 and (
+        "clGetPlatformIDs failed" in result.stderr
+        or "no OpenCL platform is available" in result.stderr
+    ):
+        pytest.skip("OpenCL headers are installed but no runtime platform is available")
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args,
+            output=result.stdout, stderr=result.stderr
+        )
     assert "GPU hotpaths v0.1: OK" in result.stdout

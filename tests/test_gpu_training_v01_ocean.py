@@ -49,11 +49,21 @@ def test_gpu_training_v01(tmp_path):
 
     result = subprocess.run(
         [str(binary)],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         cwd=ROOT,
     )
+    if result.returncode != 0 and (
+        "clGetPlatformIDs failed" in result.stderr
+        or "no OpenCL platform is available" in result.stderr
+    ):
+        pytest.skip("OpenCL headers are installed but no runtime platform is available")
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args,
+            output=result.stdout, stderr=result.stderr
+        )
 
     assert "model parameter device = gpu" in result.stdout
     assert "prediction device = gpu" in result.stdout

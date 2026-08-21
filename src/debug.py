@@ -142,6 +142,7 @@ class Validator:
                             "ocean_tensor_set_flat_f64",
                             "ocean_tensor_len",
                             "ocean_tensor_copy",
+                            "ocean_tensor_ternary_quantize",
                             "ocean_tensor_copy_into",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",

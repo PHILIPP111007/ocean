@@ -40,9 +40,8 @@ cimport <math.h>
 #   forward(W_ste)  == quantized
 #   dW_ste/dmaster  == 1
 #
-# Ternarization still uses CPU Tensor.get()/set() loops, but the quantized
-# result is uploaded once per forward and the model executes on the selected device. The
-# master weights use the matmul-ready [in_features, out_features] layout so
+# Ternarization is performed by the Tensor runtime on the selected device.
+# The master weights use the matmul-ready [in_features, out_features] layout so
 # every forward avoids a device transpose (the generic transpose path is a
 # CPU round-trip today).
 
@@ -67,62 +66,10 @@ class TernaryLinear(Module):
         var master: Tensor[float32] = self.weight.tensor()
 
         # Raw Tensor.copy() creates the detached value snapshot used to
-        # construct the STE expression.
+        # construct the STE expression. Quantization and scale computation
+        # stay on the Tensor backend; this path has no host element access.
         var detached: Tensor[float32] = master.copy()
-        var detached_cpu: Tensor[float32] = detached.to("cpu")
-
-        var rows: int = self.in_features
-        var cols: int = self.out_features
-
-        var sum_abs: float64 = 0.0
-        var row: int = 0
-
-        while row < rows:
-            var col: int = 0
-
-            while col < cols:
-                var value: float64 = detached_cpu.get(row, col)
-
-                if value < 0.0:
-                    sum_abs = sum_abs - value
-                else:
-                    sum_abs = sum_abs + value
-
-                col = col + 1
-
-            row = row + 1
-
-        var count: float64 = rows * cols
-        var scale: float64 = sum_abs / count
-
-        if scale < 0.00000001:
-            scale = 0.00000001
-
-        # round(w / scale) clipped to {-1, 0, +1} is equivalent to
-        # thresholds at +/- 0.5 * scale.
-        var threshold: float64 = 0.5 * scale
-
-        var quantized_cpu: Tensor[float32] = Tensor.zeros(rows, cols, "cpu")
-
-        row = 0
-
-        while row < rows:
-            var col2: int = 0
-
-            while col2 < cols:
-                var value2: float64 = detached_cpu.get(row, col2)
-
-                if value2 > threshold:
-                    quantized_cpu.set(row, col2, scale)
-                else:
-                    if value2 < -threshold:
-                        quantized_cpu.set(row, col2, -scale)
-                    else:
-                        quantized_cpu.set(row, col2, 0.0)
-
-                col2 = col2 + 1
-
-            row = row + 1
+        var quantized: Tensor[float32] = master.ternary_quantize()
 
         # Straight-through estimator:
         #
@@ -131,7 +78,6 @@ class TernaryLinear(Module):
         #
         # backward:
         #   only master participates in autograd => gradient is identity.
-        var quantized: Tensor[float32] = quantized_cpu.to("gpu")
         var delta: Tensor[float32] = quantized.sub(detached)
         var ste_weight: Tensor[float32] = master.add(delta)
 
@@ -152,56 +98,22 @@ class TernaryLinear(Module):
 
     def zero_fraction(self) -> float64:
         var master: Tensor[float32] = self.weight.tensor()
-        var detached: Tensor[float32] = master.copy()
-        var detached_cpu: Tensor[float32] = detached.to("cpu")
+        var quantized: Tensor[float32] = master.ternary_quantize()
+        var squared: Tensor[float32] = quantized.mul(quantized)
+        var nonzero_energy: float64 = squared.sum()
+        var max_value: float64 = quantized.max()
+        var min_value: float64 = quantized.min()
+        var scale: float64 = max_value
 
-        var rows: int = self.in_features
-        var cols: int = self.out_features
+        if -min_value > scale:
+            scale = -min_value
+        var count: float64 = self.in_features * self.out_features
+        var denominator: float64 = count * scale * scale
 
-        var sum_abs: float64 = 0.0
-        var row: int = 0
+        if denominator <= 0.0:
+            return 1.0
 
-        while row < rows:
-            var col: int = 0
-
-            while col < cols:
-                var value: float64 = detached_cpu.get(row, col)
-
-                if value < 0.0:
-                    sum_abs = sum_abs - value
-                else:
-                    sum_abs = sum_abs + value
-
-                col = col + 1
-
-            row = row + 1
-
-        var count: float64 = rows * cols
-        var scale: float64 = sum_abs / count
-
-        if scale < 0.00000001:
-            scale = 0.00000001
-
-        var threshold: float64 = 0.5 * scale
-        var zeros: int = 0
-
-        row = 0
-
-        while row < rows:
-            var col2: int = 0
-
-            while col2 < cols:
-                var value2: float64 = detached_cpu.get(row, col2)
-
-                if value2 <= threshold:
-                    if value2 >= -threshold:
-                        zeros = zeros + 1
-
-                col2 = col2 + 1
-
-            row = row + 1
-
-        return zeros / count
+        return 1.0 - nonzero_energy / denominator
 
 
 class TernaryMultiHeadAttention(Module):

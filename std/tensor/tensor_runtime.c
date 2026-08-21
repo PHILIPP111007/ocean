@@ -82,6 +82,15 @@ static ocean_tensor_handle_t ocean_tensor_scalar_opencl(
     double scalar,
     int operation
 );
+static ocean_tensor_handle_t ocean_tensor_ternary_quantize_cpu(
+    const ocean_tensor_handle_t tensor
+);
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+static void ocean_tensor_opencl_ternary_quantize(
+    const ocean_tensor_handle_t input,
+    ocean_tensor_handle_t output
+);
+#endif
 static void ocean_tensor_write_scalar(
     const ocean_tensor_handle_t tensor,
     size_t index,
@@ -456,6 +465,31 @@ static const char *ocean_tensor_hotpath_kernel_source =
     "parameter[index] = value - learning_rate * weight_decay * value "
     "- learning_rate * adaptive;"
     "}"
+    "}"
+    "__kernel void ocean_tensor_ternary_quantize("
+    "__global const float *input, __global float *output, "
+    "__local float *partial, const int size) {"
+    "int local_index = (int)get_local_id(0);"
+    "int local_size = (int)get_local_size(0);"
+    "float sum_abs = 0.0f;"
+    "for (int index = local_index; index < size; index += local_size) {"
+    "float value = input[index];"
+    "sum_abs += value < 0.0f ? -value : value;"
+    "}"
+    "partial[local_index] = sum_abs;"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "for (int stride = local_size / 2; stride > 0; stride /= 2) {"
+    "if (local_index < stride) partial[local_index] += partial[local_index + stride];"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "}"
+    "float scale = partial[0] / (float)size;"
+    "if (scale < 1.0e-8f) scale = 1.0e-8f;"
+    "float threshold = 0.5f * scale;"
+    "for (int index = local_index; index < size; index += local_size) {"
+    "float value = input[index];"
+    "output[index] = value > threshold ? scale : "
+    "(value < -threshold ? -scale : 0.0f);"
+    "}"
     "}";
 
 static const char *ocean_tensor_backward_kernel_source =
@@ -520,6 +554,7 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_kernel reduce_kernel;
     cl_kernel sgd_update_kernel;
     cl_kernel adamw_update_kernel;
+    cl_kernel ternary_quantize_kernel;
     cl_kernel softmax_backward_kernel;
     cl_kernel layer_norm_backward_kernel;
 } ocean_tensor_opencl_runtime;
@@ -536,6 +571,7 @@ typedef enum ocean_tensor_opencl_kernel_key {
     OCEAN_TENSOR_OPENCL_KERNEL_REDUCE_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_SGD_UPDATE_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_ADAMW_UPDATE_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_QUANTIZE_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_SOFTMAX_BACKWARD_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_LAYER_NORM_BACKWARD_FLOAT32,
 } ocean_tensor_opencl_kernel_key;
@@ -588,6 +624,10 @@ static void ocean_tensor_opencl_shutdown(void) {
     if (ocean_tensor_opencl.adamw_update_kernel) {
         clReleaseKernel(ocean_tensor_opencl.adamw_update_kernel);
         ocean_tensor_opencl.adamw_update_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.ternary_quantize_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.ternary_quantize_kernel);
+        ocean_tensor_opencl.ternary_quantize_kernel = NULL;
     }
     if (ocean_tensor_opencl.softmax_backward_kernel) {
         clReleaseKernel(ocean_tensor_opencl.softmax_backward_kernel);
@@ -754,6 +794,10 @@ static cl_kernel ocean_tensor_opencl_get_kernel(
         case OCEAN_TENSOR_OPENCL_KERNEL_ADAMW_UPDATE_FLOAT32:
             slot = &ocean_tensor_opencl.adamw_update_kernel;
             name = "ocean_tensor_adamw_update";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_QUANTIZE_FLOAT32:
+            slot = &ocean_tensor_opencl.ternary_quantize_kernel;
+            name = "ocean_tensor_ternary_quantize";
             break;
         case OCEAN_TENSOR_OPENCL_KERNEL_SOFTMAX_BACKWARD_FLOAT32:
             slot = &ocean_tensor_opencl.softmax_backward_kernel;
@@ -1176,6 +1220,40 @@ ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor) {
     backend->allocate(result);
     backend->copy(result, tensor);
     return result;
+}
+
+ocean_tensor_handle_t ocean_tensor_ternary_quantize(
+    ocean_tensor_handle_t tensor
+) {
+    if (!tensor) ocean_tensor_fail("Tensor.ternary_quantize on null handle");
+    if (tensor->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Tensor.ternary_quantize currently requires float32");
+    }
+
+    ocean_tensor_handle_t contiguous = NULL;
+    const ocean_tensor_handle_t source = !ocean_tensor_is_contiguous(tensor)
+        ? (contiguous = ocean_tensor_contiguous(tensor))
+        : tensor;
+
+    if (source->device == OCEAN_TENSOR_CPU) {
+        ocean_tensor_handle_t result = ocean_tensor_ternary_quantize_cpu(source);
+        if (contiguous) ocean_tensor_release(contiguous);
+        return result;
+    }
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        source->shape, source->ndim, source->dtype, OCEAN_TENSOR_GPU
+    );
+    if (source->size != 0) {
+        ocean_tensor_opencl_ternary_quantize(source, result);
+    }
+    if (contiguous) ocean_tensor_release(contiguous);
+    return result;
+#else
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+    return NULL;
+#endif
 }
 
 void ocean_tensor_copy_into(
@@ -1668,6 +1746,37 @@ static ocean_tensor_handle_t ocean_tensor_scalar_cpu(
     return result;
 }
 
+static ocean_tensor_handle_t ocean_tensor_ternary_quantize_cpu(
+    const ocean_tensor_handle_t tensor
+) {
+    if (tensor->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Tensor.ternary_quantize currently requires float32");
+    }
+
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_CPU
+    );
+    if (tensor->size == 0) return result;
+
+    const float *input = (const float *)tensor->cpu_data;
+    float *output = (float *)result->cpu_data;
+    double sum_abs = 0.0;
+    for (size_t index = 0; index < tensor->size; ++index) {
+        sum_abs += fabs((double)input[index]);
+    }
+
+    float scale = (float)(sum_abs / (double)tensor->size);
+    if (scale < 1.0e-8f) scale = 1.0e-8f;
+    float threshold = 0.5f * scale;
+    for (size_t index = 0; index < tensor->size; ++index) {
+        float value = input[index];
+        output[index] = value > threshold
+            ? scale
+            : (value < -threshold ? -scale : 0.0f);
+    }
+    return result;
+}
+
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
 static int ocean_tensor_same_shape(
@@ -1824,6 +1933,54 @@ static void ocean_tensor_opencl_rowwise(
         clEnqueueNDRangeKernel(
             ocean_tensor_opencl.queue, kernel, 1, NULL,
             &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_ternary_quantize(
+    const ocean_tensor_handle_t input,
+    ocean_tensor_handle_t output
+) {
+    if (input->size > (size_t)INT32_MAX) {
+        ocean_tensor_fail("GPU Tensor is too large for OpenCL kernel indexing");
+    }
+
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_QUANTIZE_FLOAT32
+    );
+    int size = (int)input->size;
+    const size_t local_size = 64u;
+
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &input->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &output->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(
+            kernel, 2, local_size * sizeof(float), NULL
+        ),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(int), &size),
+        "clSetKernelArg"
+    );
+
+    size_t global_size = local_size;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, &local_size, 0, NULL, &event
         ),
         "clEnqueueNDRangeKernel"
     );

@@ -453,6 +453,8 @@ tensor.save_npy(...)
 tensor.to(device)
 tensor.copy()
 
+tensor.ternary_quantize()
+
 tensor.matmul(...)
 tensor.add(...)
 tensor.sub(...)
@@ -1243,6 +1245,7 @@ OpenCL backend уже имеет native kernels / backend paths для част�
 matmul
 binary arithmetic
 scalar arithmetic
+ternary quantization
 fill
 softmax по последней оси для float32
 LayerNorm по последней оси для float32

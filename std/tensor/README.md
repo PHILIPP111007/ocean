@@ -65,6 +65,7 @@ class Tensor:
     def contiguous(self) -> Tensor[T]
     def fill(self, value: float64) -> None
     def copy(self) -> Tensor[T]
+    def ternary_quantize(self) -> Tensor[float32]
     def shape(self, axis: int) -> int
     def ndim() -> int
     def size() -> size_t
@@ -207,6 +208,11 @@ For Transformer hot paths, OpenCL has native float32 kernels for softmax and Lay
 and backward over the last axis, plus `sum_dim`/`mean_dim` reductions over the last axis. SGD and AdamW update GPU
 resident parameters, gradients, and AdamW moment tensors in place. Unsupported axes or dtypes
 continue to use the documented correctness-first fallback; the public API remains device-neutral.
+
+`ternary_quantize()` is currently defined for float32 tensors. It computes the mean absolute
+weight scale, the `0.5 * scale` threshold, and the ternary values `{-scale, 0, +scale}` inside
+the selected backend. The OpenCL implementation uses one work-group reduction and quantization
+kernel, so GPU weights are not downloaded for host-side element access.
 
 The OpenCL runtime caches its context, queue, program, and kernels for the process and releases
 them through an exit handler. Individual GPU buffers are released with their owning `Tensor`

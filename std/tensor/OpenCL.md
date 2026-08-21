@@ -16,6 +16,9 @@ generated C includes `std/tensor/tensor_runtime.h`.
   last axis;
 - float32 SGD and AdamW update parameter and moment buffers in place on the
   device, without a host round-trip.
+- float32 `Tensor.ternary_quantize()` computes the mean absolute scale,
+  threshold, and `{-scale, 0, +scale}` output in one OpenCL work-group; it
+  does not download weights for host-side `get()`/`set()` loops.
 
 ## Runtime objects
 
