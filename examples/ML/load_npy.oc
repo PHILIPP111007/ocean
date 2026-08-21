@@ -2,8 +2,8 @@ import <std/tensor/tensor.oc>
 
 
 def main() -> int:
-    var weights: Tensor[int64] = Tensor.load_npy("./examples/data/weights.npy", "cpu")
-    weights.save_npy("./examples/data/weights_copy.npy")
+    var weights: Tensor[float32] = Tensor.load_npy("./examples/ML/MNIST/weights/fc1_bias.npy", "cpu")
+    weights.save_npy("./examples/ML/MNIST/weights/fc1_bias_copy.npy")
 
     
     var w_len: int = len(weights)

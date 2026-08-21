@@ -329,7 +329,7 @@ def parse_cli_paths(args: argparse.Namespace) -> tuple[Path, Path, Path, Path]:
     elif package:
         source_path = package.entry_path
     else:
-        source_path = Path("examples/tensor_std.oc").resolve()
+        source_path = Path("examples/std/tensor.oc").resolve()
 
     if package:
         default_c, default_binary = package.artifact_paths(args.profile)

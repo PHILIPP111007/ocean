@@ -32,7 +32,7 @@ def test_cli_uses_package_default_paths():
 
     base_path, source_path, c_path, binary_path = parse_cli_paths(args)
 
-    expected_source = Path("examples/tensor_std.oc").resolve()
+    expected_source = Path("examples/std/tensor.oc").resolve()
     assert base_path == expected_source.parent
     assert source_path == expected_source
     assert c_path == expected_source.with_suffix(".generated.c")

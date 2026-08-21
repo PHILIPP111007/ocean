@@ -28,6 +28,32 @@ class ArrayCodegenMixin:
             )
         return dtype
 
+    def device_tensor_accessor_suffix(self, py_type: str) -> str:
+        """Return the C runtime accessor suffix for ``Tensor[T]``."""
+        dtype = self.device_tensor_dtype(py_type)
+        aliases = {
+            "bool": "bool",
+            "int": "i32",
+            "int8": "i8", "int8_t": "i8",
+            "int16": "i16", "int16_t": "i16",
+            "int32": "i32", "int32_t": "i32",
+            "int64": "i64", "int64_t": "i64",
+            "uint": "u32",
+            "uint8": "u8", "uint8_t": "u8",
+            "uint16": "u16", "uint16_t": "u16",
+            "uint32": "u32", "uint32_t": "u32",
+            "uint64": "u64", "uint64_t": "u64",
+            "size_t": "u64", "uintptr_t": "u64", "intptr_t": "i64",
+            "float16": "f16", "float32": "f32",
+            "float": "f64", "float64": "f64", "double": "f64",
+        }
+        try:
+            return aliases[dtype]
+        except KeyError as error:
+            raise RuntimeError(
+                f"Tensor dtype '{dtype}' has no typed runtime accessor"
+            ) from error
+
     def is_owned_buffer_type(self, py_type: str) -> bool:
         return self.is_array_type(py_type)
 

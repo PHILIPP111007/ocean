@@ -485,7 +485,7 @@ class CallsMixin:
                         data_type = arg.get("data_type", "")
                         if data_type == "str":
                             format_parts.append("%s")
-                            value_parts.append(f'"{value}"')
+                            value_parts.append(self._c_string_literal(value))
                         elif data_type in {"float", "float16", "float32", "float64", "double"}:
                             format_parts.append("%f")
                             value_parts.append(str(value))
@@ -565,9 +565,32 @@ class CallsMixin:
                             if self.is_array_type(source_type):
                                 element_type = self.array_element_type(source_type)
                             elif self.is_device_tensor_type(source_type):
-                                # Public Tensor.get() exposes numeric values
-                                # through the stable float64 scalar ABI.
-                                element_type = "float64"
+                                element_type = self.device_tensor_dtype(source_type)
+                        if source_info and self.is_device_tensor_type(source_type):
+                            # Preserve the established print contract for
+                            # the narrow/integer Tensor facades (they were
+                            # historically rendered as floating-point
+                            # values), while keeping 64-bit integers exact.
+                            if element_type in {
+                                "int64", "int64_t", "uint64", "uint64_t"
+                            }:
+                                printf_format, printf_expr = self._printf_value_for_type(
+                                    element_type, expr
+                                )
+                            elif element_type in {
+                                "int", "int8", "int16", "int32",
+                                "int8_t", "int16_t", "int32_t",
+                                "uint", "uint8", "uint16", "uint32",
+                                "uint8_t", "uint16_t", "uint32_t",
+                            }:
+                                printf_format, printf_expr = "%f", f"(double)({expr})"
+                            else:
+                                printf_format, printf_expr = self._printf_value_for_type(
+                                    element_type, expr
+                                )
+                            format_parts.append(printf_format or "%d")
+                            value_parts.append(printf_expr)
+                            continue
                         format_parts.append("%f" if element_type in {"float", "float16", "float32", "float64", "double"} else "%d")
                         value_parts.append(expr)
                     else:
@@ -585,7 +608,12 @@ class CallsMixin:
             end = end_node.get("value", "\\n")
 
             # Собираем форматную строку
-            format_str = '"' + sep.join(format_parts) + f'{end}"'
+            if end == "\\n":
+                end = "\n"
+            format_fragment = self._c_string_literal(
+                sep.join(format_parts) + str(end)
+            )[1:-1]
+            format_str = f'"{format_fragment}"'
             args_str = ", ".join(value_parts)
 
             self.add_line(f"printf({format_str}, {args_str});")

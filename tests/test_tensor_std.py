@@ -160,6 +160,44 @@ def main() -> int:
     ]
 
 
+def test_standard_tensor_typed_flat_indexing_preserves_int64(tmp_path):
+    source = tmp_path / "tensor_typed_index.oc"
+    source.write_text(
+        """
+import <std/tensor/tensor.oc>
+
+def main() -> int:
+    var values: Tensor[int64] = Tensor.from_list([[9007199254740993, 2]], "cpu")
+    print(values[0])
+    values[0] = 9007199254740995
+    values[0] *= 2
+    values[0, 1] = 7
+    print(values[0])
+    print(values[0, 1])
+    return 0
+""",
+        encoding="utf-8",
+    )
+    c_path = tmp_path / "tensor_typed_index.generated.c"
+    binary_path = tmp_path / "tensor_typed_index"
+    repository_root = Path(__file__).resolve().parents[1]
+
+    compile_pipeline(str(repository_root), source, c_path, quiet=True)
+    compile_c(c_path, binary_path)
+    result = subprocess.run(
+        [str(binary_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "9007199254740993",
+        "18014398509481990",
+        "7",
+    ]
+
+
 def test_standard_tensor_float32_matmul_uses_correct_row_major_result(tmp_path):
     source = tmp_path / "tensor_matmul_float32.oc"
     source.write_text(

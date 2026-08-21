@@ -363,8 +363,9 @@ class TensorCodegenMixin:
         if not indices:
             raise RuntimeError("Tensor indexing expects at least one index")
         literal = ", ".join(f"(size_t)({index})" for index in indices)
+        accessor = self.device_tensor_accessor_suffix(py_type)
         return (
-            f"ocean_tensor_get_nd({variable}->handle, "
+            f"ocean_tensor_get_nd_{accessor}({variable}->handle, "
             f"(const size_t[]){{{literal}}}, {len(indices)})"
         )
 
@@ -377,7 +378,21 @@ class TensorCodegenMixin:
         if not expressions:
             raise RuntimeError("Tensor indexing expects at least one index")
         literal = ", ".join(f"(size_t)({index})" for index in expressions)
+        accessor = self.device_tensor_accessor_suffix(py_type)
         self.add_line(
-            f"ocean_tensor_set_nd({variable}->handle, (const size_t[]){{{literal}}}, "
+            f"ocean_tensor_set_nd_{accessor}({variable}->handle, "
+            f"(const size_t[]){{{literal}}}, "
             f"{len(expressions)}, {value});"
+        )
+
+    def generate_tensor_flat_index_assignment(
+        self, variable: str, py_type: str, index: Dict, value: str
+    ) -> None:
+        if not self.is_device_tensor_type(py_type):
+            raise RuntimeError("indexed assignment is supported only for Tensor[T]")
+        index_expr = self.generate_expression(index)
+        accessor = self.device_tensor_accessor_suffix(py_type)
+        self.add_line(
+            f"ocean_tensor_set_flat_{accessor}({variable}->handle, "
+            f"(size_t)({index_expr}), {value});"
         )

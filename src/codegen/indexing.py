@@ -51,8 +51,8 @@ class IndexingMixin:
             field = self.class_registry.field(current_class, attr_name) if current_class else None
             attr_type = field.py_type if field else ""
             if attr_type and self.is_device_tensor_type(attr_type):
-                self.generate_tensor_index_assignment(
-                    f"self->{attr_name}", attr_type, [index_ast], value_expr
+                self.generate_tensor_flat_index_assignment(
+                    f"self->{attr_name}", attr_type, index_ast, value_expr
                 )
                 return
 
@@ -126,6 +126,10 @@ class IndexingMixin:
                 )
 
             # Обычный массив или другой тип
+            elif self.is_device_tensor_type(py_type):
+                self.generate_tensor_flat_index_assignment(
+                    variable, py_type, index_ast, value_expr
+                )
             else:
                 self.add_line(f"{variable}[{index_expr}] = {value_expr};")
 
@@ -258,7 +262,14 @@ class IndexingMixin:
         py_type = var_info.get("py_type", "")
 
         if self.is_device_tensor_type(py_type):
-            self.generate_tensor_index_assignment(var_name, py_type, indices_ast, value_expr)
+            if len(indices_ast) == 1:
+                self.generate_tensor_flat_index_assignment(
+                    var_name, py_type, indices_ast[0], value_expr
+                )
+            else:
+                self.generate_tensor_index_assignment(
+                    var_name, py_type, indices_ast, value_expr
+                )
             return
 
         logger.debug(f"nested assignment type={py_type} value={value_expr}")
@@ -396,15 +407,28 @@ class IndexingMixin:
             if variable.startswith("self."):
                 target_expr = f"self->{variable[5:]}"
             literal = ", ".join(f"(size_t)({index})" for index in index_exprs)
-            current_expr = (
-                f"ocean_tensor_get_nd({target_expr}->handle, "
-                f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
-            )
+            accessor = self.device_tensor_accessor_suffix(target_type)
+            if len(indices_ast) == 1:
+                current_expr = (
+                    f"ocean_tensor_get_flat_{accessor}({target_expr}->handle, "
+                    f"(size_t)({index_exprs[0]}))"
+                )
+            else:
+                current_expr = (
+                    f"ocean_tensor_get_nd_{accessor}({target_expr}->handle, "
+                    f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
+                )
             op_symbol = operator.replace("=", "")
             updated_expr = f"({current_expr} {op_symbol} {value_expr})"
-            self.generate_tensor_index_assignment(
-                target_expr, target_type, indices_ast, updated_expr
-            )
+            if len(indices_ast) == 1:
+                self.add_line(
+                    f"ocean_tensor_set_flat_{accessor}({target_expr}->handle, "
+                    f"(size_t)({index_exprs[0]}), {updated_expr});"
+                )
+            else:
+                self.generate_tensor_index_assignment(
+                    target_expr, target_type, indices_ast, updated_expr
+                )
             return
 
         if var_info and var_info.get("py_type", "").startswith("list["):
@@ -463,7 +487,11 @@ class IndexingMixin:
                 py_type = var_info.get("py_type", "")
 
                 if self.is_device_tensor_type(py_type):
-                    return f"ocean_tensor_get_flat({variable}->handle, (size_t)({index_expr}))"
+                    accessor = self.device_tensor_accessor_suffix(py_type)
+                    return (
+                        f"ocean_tensor_get_flat_{accessor}({variable}->handle, "
+                        f"(size_t)({index_expr}))"
+                    )
                 if py_type.startswith("list["):
                     struct_name = self.generate_list_struct_name(py_type)
                     return f"get_{struct_name}({variable}, {index_expr})"
@@ -568,6 +596,14 @@ class IndexingMixin:
         result = var_name
         current_type = py_type
 
+        if self.is_device_tensor_type(py_type):
+            literal = ", ".join(f"(size_t)({idx})" for idx in indices)
+            accessor = self.device_tensor_accessor_suffix(py_type)
+            return (
+                f"ocean_tensor_get_nd_{accessor}({var_name}->handle, "
+                f"(const size_t[]){{{literal}}}, {len(indices)})"
+            )
+
         for idx in indices:
             if current_type.startswith("list["):
                 struct_name = self.generate_list_struct_name(current_type)
@@ -602,8 +638,9 @@ class IndexingMixin:
                     attr_type = field.py_type if field else None
                     if attr_type and self.is_device_tensor_type(attr_type):
                         literal = ", ".join(f"(size_t)({index})" for index in index_exprs)
+                        accessor = self.device_tensor_accessor_suffix(attr_type)
                         return (
-                            f"ocean_tensor_get_nd(self->{attr_name}->handle, "
+                            f"ocean_tensor_get_nd_{accessor}(self->{attr_name}->handle, "
                             f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
                         )
                     if attr_type and attr_type.startswith("list["):
@@ -627,8 +664,9 @@ class IndexingMixin:
                 attr_type = field.py_type if field else None
                 if attr_type and self.is_device_tensor_type(attr_type):
                     literal = ", ".join(f"(size_t)({index})" for index in index_exprs)
+                    accessor = self.device_tensor_accessor_suffix(attr_type)
                     return (
-                        f"ocean_tensor_get_nd({obj_name}->{attr_name}->handle, "
+                        f"ocean_tensor_get_nd_{accessor}({obj_name}->{attr_name}->handle, "
                         f"(const size_t[]){{{literal}}}, {len(index_exprs)})"
                     )
                 if attr_type and attr_type.startswith("list["):

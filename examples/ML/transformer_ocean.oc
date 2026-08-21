@@ -9,8 +9,7 @@ import <std/tensor/tensor.oc>
 
 # -------------------- Конфигурация --------------------
 class TransformerConfig:
-    def __init__(self, vocab_size: int, max_seq_len: int, d_model: int,
-                 heads: int, hidden_size: int, num_layers: int) -> None:
+    def __init__(self, vocab_size: int, max_seq_len: int, d_model: int, heads: int, hidden_size: int, num_layers: int) -> None:
         self.vocab_size: int = vocab_size
         self.max_seq_len: int = max_seq_len
         self.d_model: int = d_model
@@ -118,7 +117,11 @@ class LayerNorm:
 
                 var inv_std: float32 = 1.0 / @sqrtf(variance + eps)
                 for j in range(self.width):
-                    var val: float32 = (inputs[i, j] - mean) * inv_std
+                    # Keep the subtraction separate from the multiplication:
+                    # this also avoids treating a parenthesized scalar as a
+                    # one-element tuple in the legacy expression parser.
+                    var val: float32 = inputs[i, j] - mean
+                    val *= inv_std
                     val = val * self.gamma[0, j] + self.beta[0, j]
                     outputs[i, j] = val
             return outputs
@@ -201,15 +204,19 @@ class TransformerBlock:
         var normed1: Tensor[float32] = self.norm1.forward(inputs)
         var attn_out: Tensor[float32] = self.attention.forward(normed1)
         var residual1: Tensor[float32] = inputs.copy()
-        for i in range(residual1.shape(0)):
-            for j in range(residual1.shape(1)):
+        var residual1_rows: int = residual1.shape(0)
+        var residual1_cols: int = residual1.shape(1)
+        for i in range(residual1_rows):
+            for j in range(residual1_cols):
                 residual1[i, j] += attn_out[i, j]
 
         var normed2: Tensor[float32] = self.norm2.forward(residual1)
         var ff_out: Tensor[float32] = self.feed_forward.forward(normed2)
         var residual2: Tensor[float32] = residual1.copy()
-        for i in range(residual2.shape(0)):
-            for j in range(residual2.shape(1)):
+        var residual2_rows: int = residual2.shape(0)
+        var residual2_cols: int = residual2.shape(1)
+        for i in range(residual2_rows):
+            for j in range(residual2_cols):
                 residual2[i, j] += ff_out[i, j]
         return residual2
 
@@ -259,6 +266,6 @@ def main() -> int:
     var model: TransformerLM = TransformerLM(config)
 
     var prompt: list[int] = [1, 4, 6, 2, 5, 3]
-    var generated: list[int] = model.generate(prompt, max_new_tokens=10)
+    var generated: list[int] = model.generate(prompt, 10)
 
     return 0

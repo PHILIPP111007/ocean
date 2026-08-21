@@ -404,6 +404,13 @@ class ExpressionsMixin:
         if object_expression != obj_name or obj_name == "self":
             return f"{object_expression}->{attr_name}"
 
+        # ``self`` is always the borrowed pointer receiver in a generated
+        # class method.  Keep this fallback pointer-aware even when the class
+        # registry cannot resolve a field (for example while compiling a
+        # newly-declared field whose type is inferred from its initializer).
+        if obj_name == "self":
+            return f"self->{attr_name}"
+
         var_info = self.get_variable_info(obj_name)
         if var_info and (
             var_info.get("is_pointer", False)
@@ -479,6 +486,17 @@ class ExpressionsMixin:
             # Если это не параметр, возможно это атрибут self
             logger.debug(f"Not a constructor parameter")
             return var_name
+
+        elif node_type == "attribute_access":
+            object_name = ast.get("object", "")
+            attribute_name = ast.get("attribute", "")
+            if object_name == "self":
+                return f"obj->{attribute_name}"
+            if object_name in param_names:
+                # Constructor parameters whose type is an Ocean class lower
+                # to pointers, so their fields use C's ``->`` operator.
+                return f"{object_name}->{attribute_name}"
+            return f"{object_name}.{attribute_name}"
 
         elif node_type == "constructor_call":
             class_name = ast.get("class_name", "")
@@ -678,12 +696,11 @@ class ExpressionsMixin:
 
             logger.debug(f"Attribute access: {obj_name}.{attr_name}")
 
-            # В конструкторе атрибуты объекта еще не инициализированы
-            # Это не должно случиться при правильном анализе
-            self.add_line(
-                f"// WARNING: Accessing attribute {attr_name} of {obj_name} in constructor"
-            )
-            return f"obj->{attr_name}"
+            if obj_name == "self":
+                return f"self->{attr_name}"
+            if obj_name in param_names:
+                return f"{obj_name}->{attr_name}"
+            return f"{obj_name}.{attr_name}"
 
         logger.debug(f"Unknown AST type: {node_type}")
         return ""

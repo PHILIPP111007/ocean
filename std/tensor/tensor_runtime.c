@@ -2097,6 +2097,54 @@ double ocean_tensor_get_flat(ocean_tensor_handle_t tensor, size_t index) {
     return result;
 }
 
+static void ocean_tensor_set_flat_long_double(
+    ocean_tensor_handle_t tensor, size_t index, long double value
+) {
+    if (!tensor) ocean_tensor_fail("Tensor set received a null Tensor");
+    if (index >= tensor->size) ocean_tensor_fail("Tensor flat index is out of bounds");
+    if (tensor->device == OCEAN_TENSOR_CPU) {
+        ocean_tensor_write_scalar(tensor, index, value);
+        return;
+    }
+    ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
+    ocean_tensor_write_scalar(cpu, index, value);
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    ocean_tensor_gpu_write(tensor, cpu->cpu_data);
+#else
+    ocean_tensor_release(cpu);
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+#endif
+    ocean_tensor_release(cpu);
+}
+
+void ocean_tensor_set_flat(
+    ocean_tensor_handle_t tensor, size_t index, double value
+) {
+    ocean_tensor_set_flat_long_double(tensor, index, (long double)value);
+}
+
+#define OCEAN_DEFINE_TYPED_SET_FLAT(name, c_type) \
+void ocean_tensor_set_flat_##name( \
+    ocean_tensor_handle_t tensor, size_t index, c_type value \
+) { \
+    ocean_tensor_set_flat_long_double(tensor, index, (long double)value); \
+}
+
+OCEAN_DEFINE_TYPED_SET_FLAT(bool, bool)
+OCEAN_DEFINE_TYPED_SET_FLAT(i8, int8_t)
+OCEAN_DEFINE_TYPED_SET_FLAT(i16, int16_t)
+OCEAN_DEFINE_TYPED_SET_FLAT(i32, int32_t)
+OCEAN_DEFINE_TYPED_SET_FLAT(i64, int64_t)
+OCEAN_DEFINE_TYPED_SET_FLAT(u8, uint8_t)
+OCEAN_DEFINE_TYPED_SET_FLAT(u16, uint16_t)
+OCEAN_DEFINE_TYPED_SET_FLAT(u32, uint32_t)
+OCEAN_DEFINE_TYPED_SET_FLAT(u64, uint64_t)
+OCEAN_DEFINE_TYPED_SET_FLAT(f16, float)
+OCEAN_DEFINE_TYPED_SET_FLAT(f32, float)
+OCEAN_DEFINE_TYPED_SET_FLAT(f64, double)
+
+#undef OCEAN_DEFINE_TYPED_SET_FLAT
+
 void ocean_tensor_set_nd(
     ocean_tensor_handle_t tensor,
     const size_t *indices,

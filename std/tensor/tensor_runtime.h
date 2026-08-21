@@ -94,6 +94,7 @@ double ocean_tensor_get_nd(
     size_t ndim
 );
 double ocean_tensor_get_flat(ocean_tensor_handle_t tensor, size_t index);
+void ocean_tensor_set_flat(ocean_tensor_handle_t tensor, size_t index, double value);
 bool ocean_tensor_get_flat_bool(ocean_tensor_handle_t tensor, size_t index);
 int8_t ocean_tensor_get_flat_i8(ocean_tensor_handle_t tensor, size_t index);
 int16_t ocean_tensor_get_flat_i16(ocean_tensor_handle_t tensor, size_t index);
@@ -106,6 +107,18 @@ uint64_t ocean_tensor_get_flat_u64(ocean_tensor_handle_t tensor, size_t index);
 float ocean_tensor_get_flat_f16(ocean_tensor_handle_t tensor, size_t index);
 float ocean_tensor_get_flat_f32(ocean_tensor_handle_t tensor, size_t index);
 double ocean_tensor_get_flat_f64(ocean_tensor_handle_t tensor, size_t index);
+void ocean_tensor_set_flat_bool(ocean_tensor_handle_t tensor, size_t index, bool value);
+void ocean_tensor_set_flat_i8(ocean_tensor_handle_t tensor, size_t index, int8_t value);
+void ocean_tensor_set_flat_i16(ocean_tensor_handle_t tensor, size_t index, int16_t value);
+void ocean_tensor_set_flat_i32(ocean_tensor_handle_t tensor, size_t index, int32_t value);
+void ocean_tensor_set_flat_i64(ocean_tensor_handle_t tensor, size_t index, int64_t value);
+void ocean_tensor_set_flat_u8(ocean_tensor_handle_t tensor, size_t index, uint8_t value);
+void ocean_tensor_set_flat_u16(ocean_tensor_handle_t tensor, size_t index, uint16_t value);
+void ocean_tensor_set_flat_u32(ocean_tensor_handle_t tensor, size_t index, uint32_t value);
+void ocean_tensor_set_flat_u64(ocean_tensor_handle_t tensor, size_t index, uint64_t value);
+void ocean_tensor_set_flat_f16(ocean_tensor_handle_t tensor, size_t index, float value);
+void ocean_tensor_set_flat_f32(ocean_tensor_handle_t tensor, size_t index, float value);
+void ocean_tensor_set_flat_f64(ocean_tensor_handle_t tensor, size_t index, double value);
 bool ocean_tensor_get_nd_bool(
     ocean_tensor_handle_t tensor, const size_t *indices, size_t ndim
 );

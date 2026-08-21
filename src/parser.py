@@ -2665,6 +2665,28 @@ class Parser:
 
         # ========== 4. ВЫЗОВЫ ФУНКЦИЙ И МЕТОДОВ ==========
 
+        # Unsafe C calls are valid expressions as well as standalone
+        # statements, for example ``1.0 / @sqrtf(self.width)``.  Parse the
+        # complete call here so its arguments go through normal typed
+        # expression lowering instead of falling back to a raw ``unknown``
+        # node (which would emit the Ocean ``self.field`` spelling in C).
+        c_function_pattern = (
+            r"^@([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$"
+        )
+        c_function_match = re.match(c_function_pattern, expression)
+        if c_function_match:
+            func_name, args_str = c_function_match.groups()
+            args = (
+                self.parse_function_arguments_to_ast(args_str)
+                if args_str.strip()
+                else []
+            )
+            return {
+                "type": "function_call",
+                "function": f"@{func_name}",
+                "arguments": args,
+            }
+
         # 4.1 Выражения типа self.data[index]
         complex_attr_pattern = (
             r"^([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]$"
