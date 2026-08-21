@@ -379,6 +379,84 @@ static const char *ocean_tensor_matmul_kernel_source =
     "}"
     "}";
 
+static const char *ocean_tensor_hotpath_kernel_source =
+    "__kernel void ocean_tensor_softmax_last_dim("
+    "__global const float *input, __global float *output, "
+    "const int rows, const int width) {"
+    "int row = (int)get_global_id(0);"
+    "if (row >= rows) return;"
+    "int offset = row * width;"
+    "float max_value = -3.402823466e+38f;"
+    "for (int j = 0; j < width; ++j) {"
+    "float value = input[offset + j];"
+    "if (value > max_value) max_value = value;"
+    "}"
+    "float denominator = 0.0f;"
+    "for (int j = 0; j < width; ++j) {"
+    "denominator += exp(input[offset + j] - max_value);"
+    "}"
+    "for (int j = 0; j < width; ++j) {"
+    "output[offset + j] = exp(input[offset + j] - max_value) / denominator;"
+    "}"
+    "}"
+    "__kernel void ocean_tensor_layer_norm_last_dim("
+    "__global const float *input, __global float *output, "
+    "const int rows, const int width, const float epsilon) {"
+    "int row = (int)get_global_id(0);"
+    "if (row >= rows) return;"
+    "int offset = row * width;"
+    "float mean = 0.0f;"
+    "for (int j = 0; j < width; ++j) mean += input[offset + j];"
+    "mean /= (float)width;"
+    "float variance = 0.0f;"
+    "for (int j = 0; j < width; ++j) {"
+    "float delta = input[offset + j] - mean;"
+    "variance += delta * delta;"
+    "}"
+    "variance /= (float)width;"
+    "float inverse_std = rsqrt(variance + epsilon);"
+    "for (int j = 0; j < width; ++j) {"
+    "output[offset + j] = (input[offset + j] - mean) * inverse_std;"
+    "}"
+    "}"
+    "__kernel void ocean_tensor_reduce_last_dim("
+    "__global const float *input, __global float *output, "
+    "const int rows, const int width, const int mean) {"
+    "int row = (int)get_global_id(0);"
+    "if (row >= rows) return;"
+    "int offset = row * width;"
+    "float value = 0.0f;"
+    "for (int j = 0; j < width; ++j) value += input[offset + j];"
+    "output[row] = mean ? value / (float)width : value;"
+    "}"
+    "__kernel void ocean_tensor_sgd_update("
+    "__global float *parameter, __global const float *gradient, "
+    "const int size, const float learning_rate) {"
+    "int index = (int)get_global_id(0);"
+    "if (index < size) parameter[index] -= learning_rate * gradient[index];"
+    "}"
+    "__kernel void ocean_tensor_adamw_update("
+    "__global float *parameter, __global const float *gradient, "
+    "__global float *first_moment, __global float *second_moment, "
+    "const int size, const float learning_rate, const float beta1, "
+    "const float beta2, const float epsilon, const float weight_decay, "
+    "const float bias_correction1, const float bias_correction2) {"
+    "int index = (int)get_global_id(0);"
+    "if (index < size) {"
+    "float gradient_value = gradient[index];"
+    "float first = beta1 * first_moment[index] + (1.0f - beta1) * gradient_value;"
+    "float second = beta2 * second_moment[index] + "
+    "(1.0f - beta2) * gradient_value * gradient_value;"
+    "first_moment[index] = first;"
+    "second_moment[index] = second;"
+    "float first_unbiased = first / bias_correction1;"
+    "float second_unbiased = second / bias_correction2;"
+    "float adaptive = first_unbiased / (sqrt(second_unbiased) + epsilon);"
+    "float value = parameter[index];"
+    "parameter[index] = value - learning_rate * weight_decay * value "
+    "- learning_rate * adaptive;"
+    "}";
+
 typedef struct ocean_tensor_opencl_runtime {
     cl_context context;
     cl_command_queue queue;
@@ -389,6 +467,11 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_kernel binary_int32_kernel;
     cl_kernel scalar_kernel;
     cl_kernel scalar_int32_kernel;
+    cl_kernel softmax_kernel;
+    cl_kernel layer_norm_kernel;
+    cl_kernel reduce_kernel;
+    cl_kernel sgd_update_kernel;
+    cl_kernel adamw_update_kernel;
 } ocean_tensor_opencl_runtime;
 
 typedef enum ocean_tensor_opencl_kernel_key {
@@ -398,6 +481,11 @@ typedef enum ocean_tensor_opencl_kernel_key {
     OCEAN_TENSOR_OPENCL_KERNEL_BINARY_INT32,
     OCEAN_TENSOR_OPENCL_KERNEL_SCALAR_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_SCALAR_INT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_SOFTMAX_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_LAYER_NORM_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_REDUCE_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_SGD_UPDATE_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_ADAMW_UPDATE_FLOAT32,
 } ocean_tensor_opencl_kernel_key;
 
 static ocean_tensor_opencl_runtime ocean_tensor_opencl;
@@ -428,6 +516,26 @@ static void ocean_tensor_opencl_shutdown(void) {
     if (ocean_tensor_opencl.binary_int32_kernel) {
         clReleaseKernel(ocean_tensor_opencl.binary_int32_kernel);
         ocean_tensor_opencl.binary_int32_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.softmax_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.softmax_kernel);
+        ocean_tensor_opencl.softmax_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.layer_norm_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.layer_norm_kernel);
+        ocean_tensor_opencl.layer_norm_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.reduce_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.reduce_kernel);
+        ocean_tensor_opencl.reduce_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.sgd_update_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.sgd_update_kernel);
+        ocean_tensor_opencl.sgd_update_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.adamw_update_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.adamw_update_kernel);
+        ocean_tensor_opencl.adamw_update_kernel = NULL;
     }
     if (ocean_tensor_opencl.program) {
         clReleaseProgram(ocean_tensor_opencl.program);
@@ -505,9 +613,12 @@ static void ocean_tensor_opencl_init(void) {
 #endif
     ocean_tensor_opencl_check(status, "clCreateCommandQueue");
 
-    const char *sources[] = {ocean_tensor_matmul_kernel_source};
+    const char *sources[] = {
+        ocean_tensor_matmul_kernel_source,
+        ocean_tensor_hotpath_kernel_source,
+    };
     ocean_tensor_opencl.program = clCreateProgramWithSource(
-        ocean_tensor_opencl.context, 1, sources, NULL, &status
+        ocean_tensor_opencl.context, 2, sources, NULL, &status
     );
     ocean_tensor_opencl_check(status, "clCreateProgramWithSource");
     status = clBuildProgram(
@@ -562,6 +673,26 @@ static cl_kernel ocean_tensor_opencl_get_kernel(
         case OCEAN_TENSOR_OPENCL_KERNEL_SCALAR_INT32:
             slot = &ocean_tensor_opencl.scalar_int32_kernel;
             name = "ocean_tensor_scalar_int32";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_SOFTMAX_FLOAT32:
+            slot = &ocean_tensor_opencl.softmax_kernel;
+            name = "ocean_tensor_softmax_last_dim";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_LAYER_NORM_FLOAT32:
+            slot = &ocean_tensor_opencl.layer_norm_kernel;
+            name = "ocean_tensor_layer_norm_last_dim";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_REDUCE_FLOAT32:
+            slot = &ocean_tensor_opencl.reduce_kernel;
+            name = "ocean_tensor_reduce_last_dim";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_SGD_UPDATE_FLOAT32:
+            slot = &ocean_tensor_opencl.sgd_update_kernel;
+            name = "ocean_tensor_sgd_update";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_ADAMW_UPDATE_FLOAT32:
+            slot = &ocean_tensor_opencl.adamw_update_kernel;
+            name = "ocean_tensor_adamw_update";
             break;
     }
     if (!slot || !name) ocean_tensor_fail("invalid OpenCL Tensor kernel key");
@@ -1566,6 +1697,174 @@ static void ocean_tensor_opencl_scalar(
         "clSetKernelArg"
     );
     size_t global_size = tensor->size ? tensor->size : 1;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_rowwise(
+    const ocean_tensor_handle_t input,
+    ocean_tensor_handle_t output,
+    ocean_tensor_opencl_kernel_key key,
+    int width,
+    float epsilon,
+    int mean
+) {
+    if (input->size > (size_t)INT32_MAX) {
+        ocean_tensor_fail("GPU Tensor is too large for OpenCL kernel indexing");
+    }
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(key);
+    int rows = width > 0 ? (int)(input->size / (size_t)width) : 0;
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &input->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &output->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(int), &rows), "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(int), &width), "clSetKernelArg"
+    );
+    if (key == OCEAN_TENSOR_OPENCL_KERNEL_LAYER_NORM_FLOAT32) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(kernel, 4, sizeof(float), &epsilon),
+            "clSetKernelArg"
+        );
+    } else if (key == OCEAN_TENSOR_OPENCL_KERNEL_REDUCE_FLOAT32) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(kernel, 4, sizeof(int), &mean), "clSetKernelArg"
+        );
+    }
+    if (rows == 0) return;
+    size_t global_size = (size_t)rows;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_sgd_update(
+    ocean_tensor_handle_t parameter,
+    const ocean_tensor_handle_t gradient,
+    double learning_rate
+) {
+    if (parameter->size > (size_t)INT32_MAX) {
+        ocean_tensor_fail("GPU Tensor is too large for OpenCL kernel indexing");
+    }
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_SGD_UPDATE_FLOAT32
+    );
+    int size = (int)parameter->size;
+    float rate = (float)learning_rate;
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &parameter->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &gradient->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(int), &size), "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(float), &rate), "clSetKernelArg"
+    );
+    if (size == 0) return;
+    size_t global_size = parameter->size;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_adamw_update(
+    ocean_tensor_handle_t parameter,
+    const ocean_tensor_handle_t gradient,
+    ocean_tensor_handle_t first_moment,
+    ocean_tensor_handle_t second_moment,
+    double learning_rate,
+    double beta1,
+    double beta2,
+    double epsilon,
+    double weight_decay,
+    double bias_correction1,
+    double bias_correction2
+) {
+    if (parameter->size > (size_t)INT32_MAX) {
+        ocean_tensor_fail("GPU Tensor is too large for OpenCL kernel indexing");
+    }
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_ADAMW_UPDATE_FLOAT32
+    );
+    int size = (int)parameter->size;
+    float values[7] = {
+        (float)learning_rate,
+        (float)beta1,
+        (float)beta2,
+        (float)epsilon,
+        (float)weight_decay,
+        (float)bias_correction1,
+        (float)bias_correction2,
+    };
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &parameter->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &gradient->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(cl_mem), &first_moment->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(cl_mem), &second_moment->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(int), &size), "clSetKernelArg"
+    );
+    for (int index = 0; index < 7; ++index) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(
+                kernel, (cl_uint)(5 + index), sizeof(float), &values[index]
+            ),
+            "clSetKernelArg"
+        );
+    }
+    if (size == 0) return;
+    size_t global_size = parameter->size;
     cl_event event = NULL;
     ocean_tensor_opencl_check(
         clEnqueueNDRangeKernel(
@@ -2615,6 +2914,36 @@ static ocean_tensor_handle_t ocean_tensor_reduce_dim_v02(ocean_tensor_handle_t t
         size_t j=0; for (size_t i=0;i<tensor->ndim;++i) if (i!=axis) shape[j++] = tensor->shape[i];
     }
 
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (tensor->device == OCEAN_TENSOR_GPU &&
+        tensor->dtype == OCEAN_TENSOR_FLOAT32 &&
+        axis == tensor->ndim - 1) {
+        size_t width = tensor->shape[axis];
+        ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+            shape, out_ndim, tensor->dtype, OCEAN_TENSOR_GPU
+        );
+        if (width != 0 && tensor->size != 0) {
+            if (width > (size_t)INT32_MAX) {
+                ocean_tensor_release(result);
+                free(shape);
+                ocean_tensor_fail("GPU reduction dimension is too large for OpenCL");
+            }
+            ocean_tensor_opencl_rowwise(
+                tensor,
+                result,
+                OCEAN_TENSOR_OPENCL_KERNEL_REDUCE_FLOAT32,
+                (int)width,
+                0.0f,
+                mean ? 1 : 0
+            );
+        } else if (tensor->size != 0) {
+            ocean_tensor_backend_for_device(OCEAN_TENSOR_GPU)->zero(result);
+        }
+        free(shape);
+        return result;
+    }
+#endif
+
     ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU ? tensor : ocean_tensor_to(tensor, "cpu");
     ocean_tensor_handle_t out = ocean_tensor_alloc_zeros(shape, out_ndim, tensor->dtype, OCEAN_TENSOR_CPU);
     free(shape);
@@ -2643,6 +2972,300 @@ static ocean_tensor_handle_t ocean_tensor_reduce_dim_v02(ocean_tensor_handle_t t
 
 ocean_tensor_handle_t ocean_tensor_sum_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim) { return ocean_tensor_reduce_dim_v02(tensor,dim,keepdim,false); }
 ocean_tensor_handle_t ocean_tensor_mean_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim) { return ocean_tensor_reduce_dim_v02(tensor,dim,keepdim,true); }
+
+ocean_tensor_handle_t ocean_tensor_softmax(
+    ocean_tensor_handle_t tensor,
+    int dim
+) {
+    if (!tensor) ocean_tensor_fail("Tensor.softmax on null handle");
+    if (tensor->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Tensor.softmax currently requires float32");
+    }
+    size_t axis = ocean_tensor_normalize_dim_v02(tensor, dim);
+    size_t axis_size = tensor->shape[axis];
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (tensor->device == OCEAN_TENSOR_GPU &&
+        axis == tensor->ndim - 1) {
+        ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+            tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_GPU
+        );
+        if (axis_size != 0 && tensor->size != 0) {
+            if (axis_size > (size_t)INT32_MAX) {
+                ocean_tensor_release(result);
+                ocean_tensor_fail("GPU softmax dimension is too large for OpenCL");
+            }
+            ocean_tensor_opencl_rowwise(
+                tensor,
+                result,
+                OCEAN_TENSOR_OPENCL_KERNEL_SOFTMAX_FLOAT32,
+                (int)axis_size,
+                0.0f,
+                0
+            );
+        }
+        return result;
+    }
+#endif
+
+    char *device = ocean_tensor_device(tensor);
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor
+        : ocean_tensor_to(tensor, "cpu");
+    size_t outer = 1;
+    size_t inner = 1;
+    for (size_t i = 0; i < axis; ++i) outer *= tensor->shape[i];
+    for (size_t i = axis + 1; i < tensor->ndim; ++i) inner *= tensor->shape[i];
+    if (axis_size == 0) {
+        if (cpu != tensor) ocean_tensor_release(cpu);
+        free(device);
+        ocean_tensor_fail("Tensor.softmax cannot normalize an empty dimension");
+    }
+
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        cpu->shape, cpu->ndim, cpu->dtype, OCEAN_TENSOR_CPU
+    );
+    for (size_t o = 0; o < outer; ++o) {
+        for (size_t in = 0; in < inner; ++in) {
+            float max_value = -INFINITY;
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                float value = ocean_tensor_get_flat_f32(cpu, index);
+                if (value > max_value) max_value = value;
+            }
+            double denominator = 0.0;
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                float value = expf(
+                    ocean_tensor_get_flat_f32(cpu, index) - max_value
+                );
+                ocean_tensor_write_scalar(result, index, value);
+                denominator += (double)value;
+            }
+            if (!(denominator > 0.0)) {
+                ocean_tensor_release(result);
+                if (cpu != tensor) ocean_tensor_release(cpu);
+                free(device);
+                ocean_tensor_fail("softmax denominator is not positive");
+            }
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                ocean_tensor_write_scalar(
+                    result, index,
+                    ocean_tensor_read_scalar(result, index) / denominator
+                );
+            }
+        }
+    }
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    free(device);
+    return ocean_tensor_restore_device(tensor, result);
+}
+
+ocean_tensor_handle_t ocean_tensor_layer_norm(
+    ocean_tensor_handle_t tensor,
+    int dim,
+    double epsilon
+) {
+    if (!tensor) ocean_tensor_fail("Tensor.layer_norm on null handle");
+    if (tensor->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Tensor.layer_norm currently requires float32");
+    }
+    if (!(epsilon > 0.0)) {
+        ocean_tensor_fail("LayerNorm epsilon must be positive");
+    }
+    size_t axis = ocean_tensor_normalize_dim_v02(tensor, dim);
+    size_t axis_size = tensor->shape[axis];
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (tensor->device == OCEAN_TENSOR_GPU &&
+        axis == tensor->ndim - 1) {
+        ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+            tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_GPU
+        );
+        if (axis_size != 0 && tensor->size != 0) {
+            if (axis_size > (size_t)INT32_MAX) {
+                ocean_tensor_release(result);
+                ocean_tensor_fail("GPU LayerNorm dimension is too large for OpenCL");
+            }
+            ocean_tensor_opencl_rowwise(
+                tensor,
+                result,
+                OCEAN_TENSOR_OPENCL_KERNEL_LAYER_NORM_FLOAT32,
+                (int)axis_size,
+                (float)epsilon,
+                0
+            );
+        }
+        return result;
+    }
+#endif
+
+    char *device = ocean_tensor_device(tensor);
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor
+        : ocean_tensor_to(tensor, "cpu");
+    if (axis_size == 0) {
+        if (cpu != tensor) ocean_tensor_release(cpu);
+        free(device);
+        ocean_tensor_fail("LayerNorm cannot normalize an empty dimension");
+    }
+    size_t outer = 1;
+    size_t inner = 1;
+    for (size_t i = 0; i < axis; ++i) outer *= tensor->shape[i];
+    for (size_t i = axis + 1; i < tensor->ndim; ++i) inner *= tensor->shape[i];
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        cpu->shape, cpu->ndim, cpu->dtype, OCEAN_TENSOR_CPU
+    );
+    for (size_t o = 0; o < outer; ++o) {
+        for (size_t in = 0; in < inner; ++in) {
+            double mean_value = 0.0;
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                mean_value += ocean_tensor_get_flat_f32(cpu, index);
+            }
+            mean_value /= (double)axis_size;
+            double variance = 0.0;
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                double delta = ocean_tensor_get_flat_f32(cpu, index) - mean_value;
+                variance += delta * delta;
+            }
+            double inverse_std = 1.0 / sqrt(variance / (double)axis_size + epsilon);
+            for (size_t a = 0; a < axis_size; ++a) {
+                size_t index = (o * axis_size + a) * inner + in;
+                double value = ocean_tensor_get_flat_f32(cpu, index);
+                ocean_tensor_write_scalar(
+                    result, index, (value - mean_value) * inverse_std
+                );
+            }
+        }
+    }
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    free(device);
+    return ocean_tensor_restore_device(tensor, result);
+}
+
+static void ocean_tensor_validate_optimizer_tensors(
+    ocean_tensor_handle_t parameter,
+    ocean_tensor_handle_t gradient,
+    ocean_tensor_handle_t first_moment,
+    ocean_tensor_handle_t second_moment
+) {
+    if (!parameter || !gradient ||
+        (first_moment == NULL) != (second_moment == NULL)) {
+        ocean_tensor_fail("optimizer update received a null Tensor");
+    }
+    ocean_tensor_handle_t tensors[4] = {
+        parameter, gradient, first_moment, second_moment
+    };
+    size_t tensor_count = first_moment ? 4 : 2;
+    for (size_t i = 0; i < tensor_count; ++i) {
+        if (tensors[i]->dtype != OCEAN_TENSOR_FLOAT32) {
+            ocean_tensor_fail("optimizer updates currently require float32");
+        }
+        if (tensors[i]->device != parameter->device ||
+            tensors[i]->size != parameter->size ||
+            tensors[i]->ndim != parameter->ndim) {
+            ocean_tensor_fail("optimizer tensors must have matching device and shape");
+        }
+        for (size_t axis = 0; axis < parameter->ndim; ++axis) {
+            if (tensors[i]->shape[axis] != parameter->shape[axis]) {
+                ocean_tensor_fail("optimizer tensors must have matching device and shape");
+            }
+        }
+    }
+}
+
+void ocean_tensor_sgd_update(
+    ocean_tensor_handle_t parameter,
+    ocean_tensor_handle_t gradient,
+    double learning_rate
+) {
+    ocean_tensor_validate_optimizer_tensors(parameter, gradient, NULL, NULL);
+    if (learning_rate < 0.0) {
+        ocean_tensor_fail("SGD learning rate must be non-negative");
+    }
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (parameter->device == OCEAN_TENSOR_GPU) {
+        ocean_tensor_opencl_sgd_update(parameter, gradient, learning_rate);
+        return;
+    }
+#else
+    if (parameter->device == OCEAN_TENSOR_GPU) {
+        ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+    }
+#endif
+    float *values = (float *)parameter->cpu_data;
+    const float *gradients = (const float *)gradient->cpu_data;
+    float rate = (float)learning_rate;
+    for (size_t i = 0; i < parameter->size; ++i) {
+        values[i] -= rate * gradients[i];
+    }
+}
+
+void ocean_tensor_adamw_update(
+    ocean_tensor_handle_t parameter,
+    ocean_tensor_handle_t gradient,
+    ocean_tensor_handle_t first_moment,
+    ocean_tensor_handle_t second_moment,
+    double learning_rate,
+    double beta1,
+    double beta2,
+    double epsilon,
+    double weight_decay,
+    double bias_correction1,
+    double bias_correction2
+) {
+    ocean_tensor_validate_optimizer_tensors(
+        parameter, gradient, first_moment, second_moment
+    );
+    if (learning_rate < 0.0 || beta1 < 0.0 || beta1 >= 1.0 ||
+        beta2 < 0.0 || beta2 >= 1.0 || epsilon <= 0.0 ||
+        weight_decay < 0.0 || bias_correction1 <= 0.0 ||
+        bias_correction2 <= 0.0) {
+        ocean_tensor_fail("invalid AdamW optimizer arguments");
+    }
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (parameter->device == OCEAN_TENSOR_GPU) {
+        ocean_tensor_opencl_adamw_update(
+            parameter, gradient, first_moment, second_moment,
+            learning_rate, beta1, beta2, epsilon, weight_decay,
+            bias_correction1, bias_correction2
+        );
+        return;
+    }
+#else
+    if (parameter->device == OCEAN_TENSOR_GPU) {
+        ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+    }
+#endif
+    float *values = (float *)parameter->cpu_data;
+    const float *gradients = (const float *)gradient->cpu_data;
+    float *first = (float *)first_moment->cpu_data;
+    float *second = (float *)second_moment->cpu_data;
+    for (size_t i = 0; i < parameter->size; ++i) {
+        float gradient_value = gradients[i];
+        float first_value = (float)(
+            beta1 * (double)first[i]
+            + (1.0 - beta1) * (double)gradient_value
+        );
+        float second_value = (float)(
+            beta2 * (double)second[i]
+            + (1.0 - beta2) * (double)gradient_value * (double)gradient_value
+        );
+        first[i] = first_value;
+        second[i] = second_value;
+        double adaptive =
+            ((double)first_value / bias_correction1)
+            / (sqrt((double)second_value / bias_correction2) + epsilon);
+        values[i] = (float)(
+            (double)values[i]
+            - learning_rate * weight_decay * (double)values[i]
+            - learning_rate * adaptive
+        );
+    }
+}
 
 static ocean_tensor_handle_t ocean_tensor_matmul_nd_cpu_v02(ocean_tensor_handle_t left, ocean_tensor_handle_t right) {
     size_t out_ndim = left->ndim > right->ndim ? left->ndim : right->ndim;

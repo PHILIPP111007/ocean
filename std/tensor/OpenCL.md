@@ -10,6 +10,12 @@ generated C includes `std/tensor/tensor_runtime.h`.
   accepts a device buffer for `B`, launches a 2D NDRange, and downloads `C`;
 - local workgroup size is `8 x 8`; partial tiles are zero-padded, so matrix
   dimensions do not need to be multiples of eight.
+- float32 softmax and LayerNorm use one OpenCL work-item per row when the
+  normalized dimension is the last axis;
+- float32 `sum_dim` and `mean_dim` use a row-wise reduction kernel for the
+  last axis;
+- float32 SGD and AdamW update parameter and moment buffers in place on the
+  device, without a host round-trip.
 
 ## Runtime objects
 
@@ -71,6 +77,13 @@ for `matmul`, binary arithmetic, scalar arithmetic, and `fill`. OpenCL remains
 optional at compile time: without
 `OCEAN_TENSOR_ENABLE_OPENCL`, selecting `"gpu"` produces the explicit runtime
 error instead of silently falling back to CPU.
+
+The additional hot paths are runtime primitives rather than public OpenCL ABI:
+`softmax`, `layer_norm`, `sum_dim`, `mean_dim`, SGD, and AdamW receive opaque
+Tensor handles. The current native kernels target contiguous float32 tensors
+and the last axis. Other axes, dtypes, and unsupported layouts retain the
+correctness-first CPU round-trip behavior. Autograd backward for softmax and
+LayerNorm is still CPU-based for now.
 
 ## Safety boundary
 

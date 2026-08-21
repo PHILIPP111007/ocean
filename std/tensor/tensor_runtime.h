@@ -215,5 +215,30 @@ ocean_tensor_handle_t ocean_tensor_reshape_4d(ocean_tensor_handle_t tensor, int 
 ocean_tensor_handle_t ocean_tensor_transpose_dims(ocean_tensor_handle_t tensor, int dim0, int dim1);
 ocean_tensor_handle_t ocean_tensor_sum_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim);
 ocean_tensor_handle_t ocean_tensor_mean_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim);
+ocean_tensor_handle_t ocean_tensor_softmax(ocean_tensor_handle_t tensor, int dim);
+ocean_tensor_handle_t ocean_tensor_layer_norm(
+    ocean_tensor_handle_t tensor, int dim, double epsilon
+);
+
+/* Device-aware optimizer update primitives. Moment tensors remain opaque
+   Tensor handles, so GPU optimizers never need to expose OpenCL objects. */
+void ocean_tensor_sgd_update(
+    ocean_tensor_handle_t parameter,
+    ocean_tensor_handle_t gradient,
+    double learning_rate
+);
+void ocean_tensor_adamw_update(
+    ocean_tensor_handle_t parameter,
+    ocean_tensor_handle_t gradient,
+    ocean_tensor_handle_t first_moment,
+    ocean_tensor_handle_t second_moment,
+    double learning_rate,
+    double beta1,
+    double beta2,
+    double epsilon,
+    double weight_decay,
+    double bias_correction1,
+    double bias_correction2
+);
 
 #endif

@@ -203,6 +203,11 @@ requires `0 <= start <= stop <= shape[axis]`.
 operation table. The OpenCL backend keeps its fast equal-shape kernels and performs the existing
 CPU round-trip fallback for broadcasting and unsupported dtypes.
 
+For Transformer hot paths, OpenCL has native float32 kernels for softmax and LayerNorm over the
+last axis, plus `sum_dim`/`mean_dim` reductions over the last axis. SGD and AdamW update GPU
+resident parameters, gradients, and AdamW moment tensors in place. Unsupported axes or dtypes
+continue to use the documented correctness-first fallback; the public API remains device-neutral.
+
 The OpenCL runtime caches its context, queue, program, and kernels for the process and releases
 them through an exit handler. Individual GPU buffers are released with their owning `Tensor`
 object. OpenCL failures are converted to a descriptive process error with the operation and error

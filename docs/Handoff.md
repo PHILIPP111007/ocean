@@ -1244,6 +1244,11 @@ matmul
 binary arithmetic
 scalar arithmetic
 fill
+softmax по последней оси для float32
+LayerNorm по последней оси для float32
+sum_dim/mean_dim по последней оси для float32
+SGD update для GPU float32
+AdamW update и GPU m/v buffers для float32
 ```
 
 В первую очередь оптимизированы:
@@ -1285,11 +1290,9 @@ copy result to GPU
 
 ```text
 broadcast-heavy operations
-softmax
-LayerNorm
 Embedding
 some ND/batched paths
-optimizer update
+autograd backward для softmax/LayerNorm
 ```
 
 Поэтому:
@@ -1299,33 +1302,32 @@ optimizer update
 
 ---
 
-# 39. GPU optimizer v0.1
+# 39. GPU optimizer v0.2
 
 SGD и AdamW были расширены для GPU-resident Parameter.
 
-Текущий correctness-first path:
+Для float32 GPU Parameters текущий native path:
 
 ```text
-GPU weight
-GPU grad
+GPU weight + GPU grad
    ↓
-temporary CPU copy
+OpenCL SGD/AdamW update kernel
    ↓
-optimizer update on CPU
-   ↓
-copy updated values into original GPU handle
+weight обновляется in-place
 ```
 
-Optimizer state AdamW (`m/v`) пока остаётся host-side.
+AdamW state (`m/v`) теперь хранится как opaque Tensor на том же device и
+обновляется тем же kernel. CPU Parameters сохраняют отдельный прямой CPU path.
 
-Это не финальная performance architecture.
+Для неподдержанных dtype/device runtime сохраняет корректную явную семантику;
+GPU-native path сейчас ограничен contiguous float32.
 
-Следующий этап:
+Следующие этапы:
 
 ```text
-native GPU SGD kernel
-native GPU AdamW kernel
-GPU m/v buffers
+GPU-native backward для softmax и LayerNorm
+GPU-native Embedding и batched matmul
+GPU-native optimizer kernels для других numeric dtypes
 ```
 
 ---
@@ -1356,12 +1358,13 @@ parameter = tensor.to(...)
 
 ---
 
-# 41. GPU status на 2026-08-19
+# 41. GPU status на 2026-08-21
 
 Добавлен integration test:
 
 ```text
 tests/test_gpu_training_v01_ocean.py
+tests/test_gpu_hotpaths_v01_runtime.py
 ```
 
 Он должен проверить:
@@ -1373,15 +1376,18 @@ target.to("gpu")
 forward on gpu
 backward
 AdamW step
+
+Hotpath test additionally checks CPU/GPU equivalence for softmax, LayerNorm,
+last-axis reductions, SGD, and AdamW moments.
 loss decreases
 output.device() == "gpu"
 parameter.device() == "gpu"
 ```
 
-Но текущий результат:
+Но в текущем окружении оба GPU-теста пропускаются:
 
 ```text
-1 skipped
+2 skipped
 ```
 
 Причина:

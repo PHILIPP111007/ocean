@@ -916,6 +916,14 @@ static ocean_tensor_handle_t ocean_autograd_softmax_impl_v03(
     int rank = ocean_tensor_ndim(tensor);
 
     char *device = ocean_tensor_device(tensor);
+    if (
+        strcmp(device, "gpu") == 0
+        && axis == rank - 1
+    ) {
+        ocean_tensor_handle_t result = ocean_tensor_softmax(tensor, dim);
+        free(device);
+        return result;
+    }
     ocean_tensor_handle_t cpu = strcmp(device, "cpu") == 0
         ? tensor
         : ocean_tensor_to(tensor, "cpu");
@@ -1071,6 +1079,15 @@ static ocean_tensor_handle_t ocean_autograd_layer_norm_impl_v03(
     int rank = ocean_tensor_ndim(tensor);
 
     char *device = ocean_tensor_device(tensor);
+    if (
+        strcmp(device, "gpu") == 0
+        && axis == rank - 1
+    ) {
+        ocean_tensor_handle_t result =
+            ocean_tensor_layer_norm(tensor, dim, epsilon);
+        free(device);
+        return result;
+    }
     ocean_tensor_handle_t cpu = strcmp(device, "cpu") == 0
         ? tensor
         : ocean_tensor_to(tensor, "cpu");
@@ -2490,7 +2507,7 @@ void ocean_autograd_sgd_step(
     ocean_tensor_handle_t tensor,
     double learning_rate
 ) {
-    /* SGD GPU/CPU device-aware v0.1 */
+    /* SGD GPU/CPU device-aware v0.2 */
     ocean_autograd_meta *meta = ocean_autograd_find(tensor);
     if (!meta || !meta->requires_grad || !meta->leaf) {
         ocean_tensor_fail("SGD expects a leaf Parameter");
@@ -2498,55 +2515,7 @@ void ocean_autograd_sgd_step(
     if (!meta->grad) return;
 
     ocean_autograd_require_float32(tensor);
-
-    char *device = ocean_tensor_device(tensor);
-    bool is_cpu = strcmp(device, "cpu") == 0;
-    free(device);
-
-    ocean_tensor_handle_t parameter_cpu = is_cpu
-        ? tensor
-        : ocean_tensor_to(tensor, "cpu");
-
-    ocean_tensor_handle_t gradient_cpu = is_cpu
-        ? meta->grad
-        : ocean_tensor_to(meta->grad, "cpu");
-
-    size_t *indices = (size_t *)calloc(meta->ndim, sizeof(size_t));
-    if (!indices) {
-        if (parameter_cpu != tensor) ocean_tensor_release(parameter_cpu);
-        if (gradient_cpu != meta->grad) ocean_tensor_release(gradient_cpu);
-        ocean_tensor_fail("out of memory in SGD");
-    }
-
-    size_t size = ocean_tensor_size(parameter_cpu);
-    for (size_t linear = 0; linear < size; ++linear) {
-        size_t remaining = linear;
-        for (size_t axis = meta->ndim; axis-- > 0;) {
-            size_t dim = meta->shape[axis];
-            indices[axis] = dim ? remaining % dim : 0;
-            remaining = dim ? remaining / dim : 0;
-        }
-
-        float parameter =
-            ocean_tensor_get_flat_f32(parameter_cpu, linear);
-        float gradient =
-            ocean_tensor_get_flat_f32(gradient_cpu, linear);
-
-        ocean_tensor_set_nd_f32(
-            parameter_cpu,
-            indices,
-            meta->ndim,
-            parameter - (float)learning_rate * gradient
-        );
-    }
-
-    free(indices);
-
-    if (!is_cpu) {
-        ocean_tensor_copy_into(tensor, parameter_cpu);
-        ocean_tensor_release(parameter_cpu);
-        ocean_tensor_release(gradient_cpu);
-    }
+    ocean_tensor_sgd_update(tensor, meta->grad, learning_rate);
 }
 
 /* AdamW v0.1 */
@@ -2554,8 +2523,8 @@ void ocean_autograd_sgd_step(
 typedef struct ocean_adamw_parameter_state {
     uint64_t tensor_identity;
     size_t size;
-    float *first_moment;
-    float *second_moment;
+    ocean_tensor_handle_t first_moment;
+    ocean_tensor_handle_t second_moment;
     struct ocean_adamw_parameter_state *next;
 } ocean_adamw_parameter_state;
 
@@ -2574,8 +2543,8 @@ static void ocean_adamw_free_parameter_state(
     ocean_adamw_parameter_state *state
 ) {
     if (!state) return;
-    free(state->first_moment);
-    free(state->second_moment);
+    ocean_tensor_release(state->first_moment);
+    ocean_tensor_release(state->second_moment);
     free(state);
 }
 
@@ -2643,20 +2612,13 @@ static ocean_adamw_parameter_state *ocean_adamw_get_parameter_state(
 
     state->tensor_identity = identity;
     state->size = size;
-    state->first_moment = size
-        ? (float *)calloc(size, sizeof(float))
-        : NULL;
-    state->second_moment = size
-        ? (float *)calloc(size, sizeof(float))
-        : NULL;
-
-    if (
-        size
-        && (!state->first_moment || !state->second_moment)
-    ) {
-        ocean_adamw_free_parameter_state(state);
-        ocean_tensor_fail("out of memory creating AdamW moments");
-    }
+    /* Moment buffers follow the Parameter device.  The runtime update
+       primitive uses CPU storage for CPU Parameters and OpenCL buffers for
+       GPU Parameters, so optimizer state never needs a host mirror. */
+    state->first_moment = ocean_tensor_copy(tensor);
+    state->second_moment = ocean_tensor_copy(tensor);
+    ocean_tensor_fill(state->first_moment, 0.0);
+    ocean_tensor_fill(state->second_moment, 0.0);
 
     state->next = optimizer->parameters;
     optimizer->parameters = state;
@@ -2709,7 +2671,7 @@ void ocean_autograd_adamw_step(
     double epsilon,
     double weight_decay
 ) {
-    /* AdamW GPU/CPU device-aware v0.1 */
+    /* AdamW GPU/CPU device-aware v0.2 */
     if (step <= 0) ocean_tensor_fail("AdamW step must be positive");
     if (learning_rate < 0.0) ocean_tensor_fail("AdamW learning_rate must be non-negative");
     if (beta1 < 0.0 || beta1 >= 1.0) ocean_tensor_fail("AdamW beta1 must be in [0, 1)");
@@ -2735,91 +2697,24 @@ void ocean_autograd_adamw_step(
     ocean_adamw_parameter_state *parameter_state =
         ocean_adamw_get_parameter_state(optimizer, tensor);
 
-    char *device = ocean_tensor_device(tensor);
-    bool is_cpu = strcmp(device, "cpu") == 0;
-    free(device);
-
-    ocean_tensor_handle_t parameter_cpu = is_cpu
-        ? tensor
-        : ocean_tensor_to(tensor, "cpu");
-
-    ocean_tensor_handle_t gradient_cpu = is_cpu
-        ? meta->grad
-        : ocean_tensor_to(meta->grad, "cpu");
-
-    size_t size = ocean_tensor_size(parameter_cpu);
-    size_t *indices = meta->ndim
-        ? (size_t *)calloc(meta->ndim, sizeof(size_t))
-        : NULL;
-
-    if (meta->ndim && !indices) {
-        if (parameter_cpu != tensor) ocean_tensor_release(parameter_cpu);
-        if (gradient_cpu != meta->grad) ocean_tensor_release(gradient_cpu);
-        ocean_tensor_fail("out of memory in AdamW");
-    }
-
     double bias_correction1 = 1.0 - pow(beta1, (double)step);
     double bias_correction2 = 1.0 - pow(beta2, (double)step);
 
     if (bias_correction1 <= 0.0 || bias_correction2 <= 0.0) {
-        free(indices);
-        if (parameter_cpu != tensor) ocean_tensor_release(parameter_cpu);
-        if (gradient_cpu != meta->grad) ocean_tensor_release(gradient_cpu);
         ocean_tensor_fail("AdamW bias correction became invalid");
     }
 
-    for (size_t linear = 0; linear < size; ++linear) {
-        float parameter =
-            ocean_tensor_get_flat_f32(parameter_cpu, linear);
-        float gradient =
-            ocean_tensor_get_flat_f32(gradient_cpu, linear);
-
-        float first_moment = (float)(
-            beta1 * (double)parameter_state->first_moment[linear]
-            + (1.0 - beta1) * (double)gradient
-        );
-
-        float second_moment = (float)(
-            beta2 * (double)parameter_state->second_moment[linear]
-            + (1.0 - beta2) * (double)gradient * (double)gradient
-        );
-
-        parameter_state->first_moment[linear] = first_moment;
-        parameter_state->second_moment[linear] = second_moment;
-
-        double first_unbiased =
-            (double)first_moment / bias_correction1;
-        double second_unbiased =
-            (double)second_moment / bias_correction2;
-
-        double adaptive_update =
-            first_unbiased / (sqrt(second_unbiased) + epsilon);
-
-        double updated =
-            (double)parameter
-            - learning_rate * weight_decay * (double)parameter
-            - learning_rate * adaptive_update;
-
-        size_t remaining = linear;
-        for (size_t axis = meta->ndim; axis-- > 0;) {
-            size_t dim = meta->shape[axis];
-            indices[axis] = dim ? remaining % dim : 0;
-            remaining = dim ? remaining / dim : 0;
-        }
-
-        ocean_tensor_set_nd_f32(
-            parameter_cpu,
-            indices,
-            meta->ndim,
-            (float)updated
-        );
-    }
-
-    free(indices);
-
-    if (!is_cpu) {
-        ocean_tensor_copy_into(tensor, parameter_cpu);
-        ocean_tensor_release(parameter_cpu);
-        ocean_tensor_release(gradient_cpu);
-    }
+    ocean_tensor_adamw_update(
+        tensor,
+        meta->grad,
+        parameter_state->first_moment,
+        parameter_state->second_moment,
+        learning_rate,
+        beta1,
+        beta2,
+        epsilon,
+        weight_decay,
+        bias_correction1,
+        bias_correction2
+    );
 }
