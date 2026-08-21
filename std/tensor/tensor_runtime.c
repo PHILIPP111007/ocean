@@ -69,6 +69,14 @@ static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right
 );
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+static ocean_tensor_handle_t ocean_tensor_matmul_opencl_batched(
+    ocean_tensor_handle_t left,
+    ocean_tensor_handle_t right,
+    bool transpose_left,
+    bool transpose_right
+);
+#endif
 static ocean_tensor_handle_t ocean_tensor_binary_cpu(
     const ocean_tensor_handle_t left,
     const ocean_tensor_handle_t right,
@@ -451,6 +459,44 @@ static const char *ocean_tensor_matmul_kernel_source =
     "}"
     "}";
 
+static const char *ocean_tensor_batched_matmul_kernel_source =
+    "__kernel void ocean_tensor_batched_matmul("
+    "__global const float *a, __global const float *b, "
+    "__global float *c, __global const int *a_shape, "
+    "__global const int *b_shape, __global const int *out_shape, "
+    "__global const int *a_strides, __global const int *b_strides, "
+    "const int batch_ndim, const int rows, const int inner, "
+    "const int cols, const int transpose_a, const int transpose_b, "
+    "const int output_size) {"
+    "int index = (int)get_global_id(0);"
+    "if (index >= output_size) return;"
+    "int matrix_size = rows * cols;"
+    "int batch_linear = index / matrix_size;"
+    "int matrix_index = index - batch_linear * matrix_size;"
+    "int row = matrix_index / cols;"
+    "int col = matrix_index - row * cols;"
+    "int a_batch_offset = 0;"
+    "int b_batch_offset = 0;"
+    "int remaining = batch_linear;"
+    "for (int axis = batch_ndim - 1; axis >= 0; --axis) {"
+    "int coordinate = remaining % out_shape[axis];"
+    "remaining /= out_shape[axis];"
+    "if (a_shape[axis] != 1) a_batch_offset += coordinate * a_strides[axis];"
+    "if (b_shape[axis] != 1) b_batch_offset += coordinate * b_strides[axis];"
+    "}"
+    "float sum = 0.0f;"
+    "for (int k = 0; k < inner; ++k) {"
+    "int a_index = transpose_a"
+    "? a_batch_offset + k * rows + row"
+    ": a_batch_offset + row * inner + k;"
+    "int b_index = transpose_b"
+    "? b_batch_offset + col * inner + k"
+    ": b_batch_offset + k * cols + col;"
+    "sum += a[a_index] * b[b_index];"
+    "}"
+    "c[index] = sum;"
+    "}";
+
 static const char *ocean_tensor_hotpath_kernel_source =
     "__kernel void ocean_tensor_softmax_last_dim("
     "__global const float *input, __global float *output, "
@@ -708,6 +754,7 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_program program;
     cl_kernel matmul_kernel;
     cl_kernel matmul_int32_kernel;
+    cl_kernel batched_matmul_kernel;
     cl_kernel binary_kernel;
     cl_kernel binary_int32_kernel;
     cl_kernel scalar_kernel;
@@ -729,6 +776,7 @@ typedef struct ocean_tensor_opencl_runtime {
 typedef enum ocean_tensor_opencl_kernel_key {
     OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_INT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_BATCHED_MATMUL_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_BINARY_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_BINARY_INT32,
     OCEAN_TENSOR_OPENCL_KERNEL_SCALAR_FLOAT32,
@@ -767,6 +815,10 @@ static void ocean_tensor_opencl_shutdown(void) {
     if (ocean_tensor_opencl.matmul_int32_kernel) {
         clReleaseKernel(ocean_tensor_opencl.matmul_int32_kernel);
         ocean_tensor_opencl.matmul_int32_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.batched_matmul_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.batched_matmul_kernel);
+        ocean_tensor_opencl.batched_matmul_kernel = NULL;
     }
     if (ocean_tensor_opencl.scalar_int32_kernel) {
         clReleaseKernel(ocean_tensor_opencl.scalar_int32_kernel);
@@ -902,13 +954,14 @@ static void ocean_tensor_opencl_init(void) {
 
     const char *sources[] = {
         ocean_tensor_matmul_kernel_source,
+        ocean_tensor_batched_matmul_kernel_source,
         ocean_tensor_hotpath_kernel_source,
         ocean_tensor_embedding_kernel_source,
         ocean_tensor_cross_entropy_kernel_source,
         ocean_tensor_backward_kernel_source,
     };
     ocean_tensor_opencl.program = clCreateProgramWithSource(
-        ocean_tensor_opencl.context, 5, sources, NULL, &status
+        ocean_tensor_opencl.context, 6, sources, NULL, &status
     );
     ocean_tensor_opencl_check(status, "clCreateProgramWithSource");
     status = clBuildProgram(
@@ -947,6 +1000,10 @@ static cl_kernel ocean_tensor_opencl_get_kernel(
         case OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_INT32:
             slot = &ocean_tensor_opencl.matmul_int32_kernel;
             name = "ocean_tensor_matmul_int32";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_BATCHED_MATMUL_FLOAT32:
+            slot = &ocean_tensor_opencl.batched_matmul_kernel;
+            name = "ocean_tensor_batched_matmul";
             break;
         case OCEAN_TENSOR_OPENCL_KERNEL_BINARY_FLOAT32:
             slot = &ocean_tensor_opencl.binary_kernel;
@@ -4182,6 +4239,251 @@ static ocean_tensor_handle_t ocean_tensor_matmul_cpu(
 }
 
 
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+static ocean_tensor_handle_t ocean_tensor_matmul_opencl_batched(
+    ocean_tensor_handle_t left,
+    ocean_tensor_handle_t right,
+    bool transpose_left,
+    bool transpose_right
+) {
+    if (left->dtype != OCEAN_TENSOR_FLOAT32 ||
+        right->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail(
+            "GPU batched matmul currently requires float32 tensors"
+        );
+    }
+
+    size_t output_ndim = left->ndim > right->ndim
+        ? left->ndim : right->ndim;
+    size_t batch_ndim = output_ndim - 2;
+    size_t left_batch_ndim = left->ndim - 2;
+    size_t right_batch_ndim = right->ndim - 2;
+    size_t left_leading = batch_ndim - left_batch_ndim;
+    size_t right_leading = batch_ndim - right_batch_ndim;
+
+    size_t rows = transpose_left
+        ? left->shape[left->ndim - 1]
+        : left->shape[left->ndim - 2];
+    size_t inner = transpose_left
+        ? left->shape[left->ndim - 2]
+        : left->shape[left->ndim - 1];
+    size_t right_inner = transpose_right
+        ? right->shape[right->ndim - 1]
+        : right->shape[right->ndim - 2];
+    size_t cols = transpose_right
+        ? right->shape[right->ndim - 2]
+        : right->shape[right->ndim - 1];
+    if (inner != right_inner) {
+        ocean_tensor_fail("batched matmul shape mismatch");
+    }
+
+    size_t *output_shape = (size_t *)malloc(
+        output_ndim * sizeof(size_t)
+    );
+    int *left_shape = (int *)calloc(batch_ndim ? batch_ndim : 1, sizeof(int));
+    int *right_shape = (int *)calloc(batch_ndim ? batch_ndim : 1, sizeof(int));
+    int *out_shape = (int *)calloc(batch_ndim ? batch_ndim : 1, sizeof(int));
+    int *left_strides = (int *)calloc(batch_ndim ? batch_ndim : 1, sizeof(int));
+    int *right_strides = (int *)calloc(batch_ndim ? batch_ndim : 1, sizeof(int));
+    if (!output_shape || !left_shape || !right_shape || !out_shape ||
+        !left_strides || !right_strides) {
+        free(output_shape);
+        free(left_shape);
+        free(right_shape);
+        free(out_shape);
+        free(left_strides);
+        free(right_strides);
+        ocean_tensor_fail("out of memory in batched matmul metadata");
+    }
+
+    for (size_t axis = 0; axis < batch_ndim; ++axis) {
+        size_t left_axis = axis >= left_leading
+            ? axis - left_leading : SIZE_MAX;
+        size_t right_axis = axis >= right_leading
+            ? axis - right_leading : SIZE_MAX;
+        size_t left_dim = left_axis == SIZE_MAX
+            ? 1 : left->shape[left_axis];
+        size_t right_dim = right_axis == SIZE_MAX
+            ? 1 : right->shape[right_axis];
+        if (left_dim != right_dim && left_dim != 1 && right_dim != 1) {
+            free(output_shape);
+            free(left_shape);
+            free(right_shape);
+            free(out_shape);
+            free(left_strides);
+            free(right_strides);
+            ocean_tensor_fail(
+                "batched matmul batch dimensions are not broadcastable"
+            );
+        }
+        size_t dimension = left_dim > right_dim ? left_dim : right_dim;
+        output_shape[axis] = dimension;
+        left_shape[axis] = (int)left_dim;
+        right_shape[axis] = (int)right_dim;
+        out_shape[axis] = (int)dimension;
+        left_strides[axis] = left_axis == SIZE_MAX
+            ? 0 : (int)left->strides[left_axis];
+        right_strides[axis] = right_axis == SIZE_MAX
+            ? 0 : (int)right->strides[right_axis];
+        if (left_dim > (size_t)INT32_MAX || right_dim > (size_t)INT32_MAX ||
+            dimension > (size_t)INT32_MAX ||
+            (left_axis != SIZE_MAX && left->strides[left_axis] > (size_t)INT32_MAX) ||
+            (right_axis != SIZE_MAX && right->strides[right_axis] > (size_t)INT32_MAX)) {
+            free(output_shape);
+            free(left_shape);
+            free(right_shape);
+            free(out_shape);
+            free(left_strides);
+            free(right_strides);
+            ocean_tensor_fail(
+                "batched matmul metadata is too large for OpenCL"
+            );
+        }
+    }
+    output_shape[output_ndim - 2] = rows;
+    output_shape[output_ndim - 1] = cols;
+    if (rows > (size_t)INT32_MAX || inner > (size_t)INT32_MAX ||
+        cols > (size_t)INT32_MAX) {
+        free(output_shape);
+        free(left_shape);
+        free(right_shape);
+        free(out_shape);
+        free(left_strides);
+        free(right_strides);
+        ocean_tensor_fail("batched matmul dimensions are too large for OpenCL");
+    }
+
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        output_shape,
+        output_ndim,
+        OCEAN_TENSOR_FLOAT32,
+        OCEAN_TENSOR_GPU
+    );
+    free(output_shape);
+    if (result->size == 0) {
+        free(left_shape);
+        free(right_shape);
+        free(out_shape);
+        free(left_strides);
+        free(right_strides);
+        return result;
+    }
+    if (result->size > (size_t)INT32_MAX) {
+        ocean_tensor_release(result);
+        free(left_shape);
+        free(right_shape);
+        free(out_shape);
+        free(left_strides);
+        free(right_strides);
+        ocean_tensor_fail(
+            "batched matmul output is too large for OpenCL indexing"
+        );
+    }
+
+    size_t metadata_count = batch_ndim ? batch_ndim : 1;
+    cl_int status = CL_SUCCESS;
+    cl_mem left_shape_buffer = clCreateBuffer(
+        ocean_tensor_opencl.context,
+        CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+        metadata_count * sizeof(int), left_shape, &status
+    );
+    ocean_tensor_opencl_check(status, "clCreateBuffer");
+    cl_mem right_shape_buffer = clCreateBuffer(
+        ocean_tensor_opencl.context,
+        CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+        metadata_count * sizeof(int), right_shape, &status
+    );
+    ocean_tensor_opencl_check(status, "clCreateBuffer");
+    cl_mem out_shape_buffer = clCreateBuffer(
+        ocean_tensor_opencl.context,
+        CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+        metadata_count * sizeof(int), out_shape, &status
+    );
+    ocean_tensor_opencl_check(status, "clCreateBuffer");
+    cl_mem left_strides_buffer = clCreateBuffer(
+        ocean_tensor_opencl.context,
+        CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+        metadata_count * sizeof(int), left_strides, &status
+    );
+    ocean_tensor_opencl_check(status, "clCreateBuffer");
+    cl_mem right_strides_buffer = clCreateBuffer(
+        ocean_tensor_opencl.context,
+        CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+        metadata_count * sizeof(int), right_strides, &status
+    );
+    ocean_tensor_opencl_check(status, "clCreateBuffer");
+    free(left_shape);
+    free(right_shape);
+    free(out_shape);
+    free(left_strides);
+    free(right_strides);
+
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_BATCHED_MATMUL_FLOAT32
+    );
+    int batch_count = (int)batch_ndim;
+    int rows_value = (int)rows;
+    int inner_value = (int)inner;
+    int cols_value = (int)cols;
+    int transpose_left_value = transpose_left ? 1 : 0;
+    int transpose_right_value = transpose_right ? 1 : 0;
+    int output_size = (int)result->size;
+    cl_mem buffers[] = {
+        left->gpu_data,
+        right->gpu_data,
+        result->gpu_data,
+        left_shape_buffer,
+        right_shape_buffer,
+        out_shape_buffer,
+        left_strides_buffer,
+        right_strides_buffer,
+    };
+    for (int index = 0; index < 8; ++index) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(kernel, (cl_uint)index, sizeof(cl_mem), &buffers[index]),
+            "clSetKernelArg"
+        );
+    }
+    int values[] = {
+        batch_count,
+        rows_value,
+        inner_value,
+        cols_value,
+        transpose_left_value,
+        transpose_right_value,
+        output_size,
+    };
+    for (int index = 0; index < 7; ++index) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(
+                kernel, (cl_uint)(8 + index), sizeof(int), &values[index]
+            ),
+            "clSetKernelArg"
+        );
+    }
+    size_t global_size = result->size;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+    clReleaseMemObject(left_shape_buffer);
+    clReleaseMemObject(right_shape_buffer);
+    clReleaseMemObject(out_shape_buffer);
+    clReleaseMemObject(left_strides_buffer);
+    clReleaseMemObject(right_strides_buffer);
+    return result;
+}
+#endif
+
+
 static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right
@@ -4841,6 +5143,73 @@ static ocean_tensor_handle_t ocean_tensor_matmul_nd_cpu_v02(ocean_tensor_handle_
 }
 
 
+ocean_tensor_handle_t ocean_tensor_matmul_transposed(
+    ocean_tensor_handle_t left,
+    ocean_tensor_handle_t right,
+    bool transpose_left,
+    bool transpose_right
+) {
+    if (!left || !right) {
+        ocean_tensor_fail("matmul does not accept null Tensors");
+    }
+    if (left->ndim < 2 || right->ndim < 2) {
+        ocean_tensor_fail("matmul expects Tensor rank >= 2");
+    }
+    if (left->dtype != right->dtype) {
+        ocean_tensor_fail("matmul requires matching Tensor dtypes");
+    }
+    if (left->device != right->device) {
+        ocean_tensor_fail("matmul requires Tensors on the same device");
+    }
+
+    size_t left_inner = transpose_left
+        ? left->shape[left->ndim - 2]
+        : left->shape[left->ndim - 1];
+    size_t right_inner = transpose_right
+        ? right->shape[right->ndim - 1]
+        : right->shape[right->ndim - 2];
+    if (left_inner != right_inner) {
+        ocean_tensor_fail("matmul shape mismatch");
+    }
+
+    if (!transpose_left && !transpose_right) {
+        return ocean_tensor_matmul(left, right);
+    }
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (left->device == OCEAN_TENSOR_GPU &&
+        left->dtype == OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_handle_t contiguous_left =
+            ocean_tensor_is_contiguous(left)
+            ? left : ocean_tensor_contiguous(left);
+        ocean_tensor_handle_t contiguous_right =
+            ocean_tensor_is_contiguous(right)
+            ? right : ocean_tensor_contiguous(right);
+        ocean_tensor_handle_t result = ocean_tensor_matmul_opencl_batched(
+            contiguous_left,
+            contiguous_right,
+            transpose_left,
+            transpose_right
+        );
+        if (contiguous_left != left) ocean_tensor_release(contiguous_left);
+        if (contiguous_right != right) ocean_tensor_release(contiguous_right);
+        return result;
+    }
+#endif
+
+    ocean_tensor_handle_t transposed_left = transpose_left
+        ? ocean_tensor_transpose_dims(left, -2, -1) : ocean_tensor_copy(left);
+    ocean_tensor_handle_t transposed_right = transpose_right
+        ? ocean_tensor_transpose_dims(right, -2, -1) : ocean_tensor_copy(right);
+    ocean_tensor_handle_t result = ocean_tensor_matmul(
+        transposed_left,
+        transposed_right
+    );
+    ocean_tensor_release(transposed_left);
+    ocean_tensor_release(transposed_right);
+    return result;
+}
+
 ocean_tensor_handle_t ocean_tensor_matmul(ocean_tensor_handle_t left, ocean_tensor_handle_t right) {
     if (!left || !right) ocean_tensor_fail("matmul does not accept null Tensors");
     if (left->ndim < 2 || right->ndim < 2) ocean_tensor_fail("matmul expects Tensor rank >= 2");
@@ -4848,6 +5217,26 @@ ocean_tensor_handle_t ocean_tensor_matmul(ocean_tensor_handle_t left, ocean_tens
     if (left->dtype != right->dtype) ocean_tensor_fail("matmul requires matching Tensor dtypes");
     if (left->device != right->device) ocean_tensor_fail("matmul requires Tensors on the same device");
     if (left->ndim == 2 && right->ndim == 2) return ocean_tensor_backend_for_device(left->device)->matmul(left,right);
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (left->device == OCEAN_TENSOR_GPU &&
+        left->dtype == OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_handle_t contiguous_left =
+            ocean_tensor_is_contiguous(left)
+            ? left : ocean_tensor_contiguous(left);
+        ocean_tensor_handle_t contiguous_right =
+            ocean_tensor_is_contiguous(right)
+            ? right : ocean_tensor_contiguous(right);
+        ocean_tensor_handle_t result = ocean_tensor_matmul_opencl_batched(
+            contiguous_left,
+            contiguous_right,
+            false,
+            false
+        );
+        if (contiguous_left != left) ocean_tensor_release(contiguous_left);
+        if (contiguous_right != right) ocean_tensor_release(contiguous_right);
+        return result;
+    }
+#endif
     ocean_tensor_handle_t lc = left->device==OCEAN_TENSOR_CPU ? left : ocean_tensor_to(left,"cpu");
     ocean_tensor_handle_t rc = right->device==OCEAN_TENSOR_CPU ? right : ocean_tensor_to(right,"cpu");
     ocean_tensor_handle_t cpu=ocean_tensor_matmul_nd_cpu_v02(lc,rc);

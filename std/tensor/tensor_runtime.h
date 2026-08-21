@@ -65,6 +65,12 @@ ocean_tensor_handle_t ocean_tensor_matmul(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right
 );
+ocean_tensor_handle_t ocean_tensor_matmul_transposed(
+    ocean_tensor_handle_t left,
+    ocean_tensor_handle_t right,
+    bool transpose_left,
+    bool transpose_right
+);
 ocean_tensor_handle_t ocean_tensor_binary(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right,

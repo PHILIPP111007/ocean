@@ -1257,6 +1257,8 @@ AdamW update и GPU m/v buffers для float32
 Embedding forward для GPU float32 weights + GPU int64 indices
 Embedding backward с atomic accumulation для повторяющихся token IDs
 CrossEntropy forward/backward для GPU float32 logits + GPU int64 targets
+Batched matmul для GPU float32 с batch broadcasting
+Transposed batched matmul для GPU autograd backward
 ```
 
 В первую очередь оптимизированы:
@@ -1298,7 +1300,7 @@ copy result to GPU
 
 ```text
 broadcast-heavy operations
-some ND/batched paths
+some ND paths and unsupported batched dtypes
 autograd paths для неподдержанных осей и dtype
 ```
 
@@ -1853,7 +1855,6 @@ tests/test_gpu_training_v01_ocean.py → passed
 Убрать host round-trip из:
 
 ```text
-batched matmul
 broadcast binary
 softmax
 LayerNorm

@@ -1961,8 +1961,8 @@ static void ocean_autograd_backward_node(ocean_autograd_meta *meta) {
         }
 
         case OCEAN_AUTOGRAD_MATMUL: {
-            if (node->left) { ocean_tensor_handle_t rt=ocean_tensor_transpose_dims(node->saved_right,-2,-1); ocean_tensor_handle_t raw=ocean_tensor_matmul(upstream,rt); ocean_tensor_handle_t red=ocean_autograd_sum_to_meta(raw,node->left); ocean_tensor_release(rt); ocean_tensor_release(raw); ocean_autograd_accumulate(node->left,red); }
-            if (node->right) { ocean_tensor_handle_t lt=ocean_tensor_transpose_dims(node->saved_left,-2,-1); ocean_tensor_handle_t raw=ocean_tensor_matmul(lt,upstream); ocean_tensor_handle_t red=ocean_autograd_sum_to_meta(raw,node->right); ocean_tensor_release(lt); ocean_tensor_release(raw); ocean_autograd_accumulate(node->right,red); }
+            if (node->left) { ocean_tensor_handle_t raw=ocean_tensor_matmul_transposed(upstream,node->saved_right,false,true); ocean_tensor_handle_t red=ocean_autograd_sum_to_meta(raw,node->left); ocean_tensor_release(raw); ocean_autograd_accumulate(node->left,red); }
+            if (node->right) { ocean_tensor_handle_t raw=ocean_tensor_matmul_transposed(node->saved_left,upstream,true,false); ocean_tensor_handle_t red=ocean_autograd_sum_to_meta(raw,node->right); ocean_tensor_release(raw); ocean_autograd_accumulate(node->right,red); }
             break;
         }
 

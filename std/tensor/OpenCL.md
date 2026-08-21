@@ -31,6 +31,10 @@ generated C includes `std/tensor/tensor_runtime.h`.
 - CrossEntropy backward computes `(softmax(logits) - one_hot(target)) /
   batch_size` on the device and validates target bounds without a host data
   round-trip.
+- float32 batched matmul supports `A [..., M, K] @ B [..., K, N]`, leading
+  batch broadcasting, and transposed operands used by autograd backward;
+  tensor data stays on the device while small batch metadata buffers are
+  uploaded for indexing.
 
 ## Runtime objects
 
@@ -94,8 +98,8 @@ optional at compile time: without
 error instead of silently falling back to CPU.
 
 The additional hot paths are runtime primitives rather than public OpenCL ABI:
-`softmax`, `layer_norm`, `sum_dim`, `mean_dim`, SGD, AdamW, Embedding, and
-CrossEntropy receive opaque Tensor handles. The current native kernels target
+`softmax`, `layer_norm`, `sum_dim`, `mean_dim`, SGD, AdamW, Embedding,
+CrossEntropy, and batched matmul receive opaque Tensor handles. The current native kernels target
 contiguous float32 tensors (and contiguous int64 indices/targets where
 applicable) and the last axis where applicable. Other axes, dtypes, and unsupported layouts retain the
 correctness-first CPU round-trip behavior. Autograd backward for softmax,

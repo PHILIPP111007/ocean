@@ -120,6 +120,107 @@ int main(void) {
         "cross entropy backward"
     );
 
+    size_t batched_left_shape[3] = {2, 2, 3};
+    size_t batched_right_broadcast_shape[3] = {1, 3, 2};
+    ocean_tensor_handle_t batched_left_cpu = ocean_tensor_zeros_nd(
+        batched_left_shape, 3, "float32", "cpu"
+    );
+    ocean_tensor_handle_t batched_right_broadcast_cpu = ocean_tensor_zeros_nd(
+        batched_right_broadcast_shape, 3, "float32", "cpu"
+    );
+    for (size_t i = 0; i < ocean_tensor_size(batched_left_cpu); ++i) {
+        ocean_tensor_set_flat_f32(
+            batched_left_cpu, i, (float)(i % 5) * 0.25f - 0.5f
+        );
+    }
+    for (size_t i = 0; i < ocean_tensor_size(batched_right_broadcast_cpu); ++i) {
+        ocean_tensor_set_flat_f32(
+            batched_right_broadcast_cpu, i, (float)(i + 1) * 0.2f
+        );
+    }
+    ocean_tensor_handle_t batched_left_gpu = ocean_tensor_to(
+        batched_left_cpu, "gpu"
+    );
+    ocean_tensor_handle_t batched_right_broadcast_gpu = ocean_tensor_to(
+        batched_right_broadcast_cpu, "gpu"
+    );
+    ocean_tensor_handle_t batched_broadcast_cpu = ocean_tensor_matmul(
+        batched_left_cpu, batched_right_broadcast_cpu
+    );
+    ocean_tensor_handle_t batched_broadcast_gpu = ocean_tensor_matmul(
+        batched_left_gpu, batched_right_broadcast_gpu
+    );
+    check_close(
+        batched_broadcast_cpu, batched_broadcast_gpu,
+        "batched matmul broadcast"
+    );
+
+    size_t batched_right_shape[3] = {2, 3, 2};
+    size_t batched_output_shape[3] = {2, 2, 2};
+    ocean_tensor_handle_t batched_right_cpu = ocean_tensor_zeros_nd(
+        batched_right_shape, 3, "float32", "cpu"
+    );
+    for (size_t i = 0; i < ocean_tensor_size(batched_right_cpu); ++i) {
+        ocean_tensor_set_flat_f32(
+            batched_right_cpu, i, (float)(i % 7) * 0.15f - 0.25f
+        );
+    }
+    ocean_tensor_handle_t batched_right_gpu = ocean_tensor_to(
+        batched_right_cpu, "gpu"
+    );
+    ocean_tensor_handle_t train_left_cpu = ocean_tensor_copy(
+        batched_left_cpu
+    );
+    ocean_tensor_handle_t train_right_cpu = ocean_tensor_copy(
+        batched_right_cpu
+    );
+    ocean_tensor_handle_t train_left_gpu = ocean_tensor_to(
+        train_left_cpu, "gpu"
+    );
+    ocean_tensor_handle_t train_right_gpu = ocean_tensor_to(
+        train_right_cpu, "gpu"
+    );
+    ocean_autograd_set_requires_grad(train_left_cpu, true);
+    ocean_autograd_set_requires_grad(train_right_cpu, true);
+    ocean_autograd_set_requires_grad(train_left_gpu, true);
+    ocean_autograd_set_requires_grad(train_right_gpu, true);
+    ocean_tensor_handle_t batched_output_cpu = ocean_autograd_matmul(
+        train_left_cpu, train_right_cpu
+    );
+    ocean_tensor_handle_t batched_output_gpu = ocean_autograd_matmul(
+        train_left_gpu, train_right_gpu
+    );
+    ocean_tensor_handle_t batched_target_cpu = ocean_tensor_zeros_nd(
+        batched_output_shape, 3, "float32", "cpu"
+    );
+    ocean_tensor_handle_t batched_target_gpu = ocean_tensor_to(
+        batched_target_cpu, "gpu"
+    );
+    ocean_tensor_handle_t batched_loss_cpu = ocean_autograd_mse_loss(
+        batched_output_cpu, batched_target_cpu
+    );
+    ocean_tensor_handle_t batched_loss_gpu = ocean_autograd_mse_loss(
+        batched_output_gpu, batched_target_gpu
+    );
+    ocean_autograd_backward(batched_loss_cpu);
+    ocean_autograd_backward(batched_loss_gpu);
+    ocean_tensor_handle_t batched_left_grad_cpu =
+        ocean_autograd_grad_copy(train_left_cpu);
+    ocean_tensor_handle_t batched_left_grad_gpu =
+        ocean_autograd_grad_copy(train_left_gpu);
+    ocean_tensor_handle_t batched_right_grad_cpu =
+        ocean_autograd_grad_copy(train_right_cpu);
+    ocean_tensor_handle_t batched_right_grad_gpu =
+        ocean_autograd_grad_copy(train_right_gpu);
+    check_close(
+        batched_left_grad_cpu, batched_left_grad_gpu,
+        "batched matmul backward left"
+    );
+    check_close(
+        batched_right_grad_cpu, batched_right_grad_gpu,
+        "batched matmul backward right"
+    );
+
     size_t embedding_weight_shape[2] = {4, 3};
     ocean_tensor_handle_t embedding_weight_cpu = ocean_tensor_zeros_nd(
         embedding_weight_shape, 2, "float32", "cpu"
@@ -375,6 +476,28 @@ int main(void) {
     ocean_tensor_release(cross_entropy_probabilities_cpu);
     ocean_tensor_release(cross_entropy_targets_gpu);
     ocean_tensor_release(cross_entropy_targets_cpu);
+    ocean_tensor_release(batched_right_grad_gpu);
+    ocean_tensor_release(batched_right_grad_cpu);
+    ocean_tensor_release(batched_left_grad_gpu);
+    ocean_tensor_release(batched_left_grad_cpu);
+    ocean_tensor_release(batched_loss_gpu);
+    ocean_tensor_release(batched_loss_cpu);
+    ocean_tensor_release(batched_target_gpu);
+    ocean_tensor_release(batched_target_cpu);
+    ocean_tensor_release(batched_output_gpu);
+    ocean_tensor_release(batched_output_cpu);
+    ocean_tensor_release(train_right_gpu);
+    ocean_tensor_release(train_left_gpu);
+    ocean_tensor_release(train_right_cpu);
+    ocean_tensor_release(train_left_cpu);
+    ocean_tensor_release(batched_right_gpu);
+    ocean_tensor_release(batched_right_cpu);
+    ocean_tensor_release(batched_broadcast_gpu);
+    ocean_tensor_release(batched_broadcast_cpu);
+    ocean_tensor_release(batched_right_broadcast_gpu);
+    ocean_tensor_release(batched_left_gpu);
+    ocean_tensor_release(batched_right_broadcast_cpu);
+    ocean_tensor_release(batched_left_cpu);
     ocean_tensor_release(autograd_gradient_gpu);
     ocean_tensor_release(autograd_gradient_cpu);
     ocean_tensor_release(autograd_loss_gpu);

@@ -219,6 +219,10 @@ stable softmax probabilities and the mean negative log-likelihood on the device;
 the normalized `(softmax - one_hot)` gradient on the device. Invalid targets are reported through
 a device-side error flag.
 
+GPU float32 `matmul` also supports arbitrary-rank batched operands with leading-dimension
+broadcasting. The same kernel supports logical transposes for autograd `dA`/`dB` computation,
+while unsupported dtypes retain the existing CPU fallback.
+
 `ternary_quantize()` is currently defined for float32 tensors. It computes the mean absolute
 weight scale, the `0.5 * scale` threshold, and the ternary values `{-scale, 0, +scale}` inside
 the selected backend. The OpenCL implementation uses one work-group reduction and quantization
