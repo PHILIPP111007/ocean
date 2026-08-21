@@ -1003,6 +1003,15 @@ static ocean_tensor_handle_t ocean_autograd_softmax_backward_v03(
     int rank = ocean_tensor_ndim(output);
 
     char *device = ocean_tensor_device(output);
+    if (
+        strcmp(device, "gpu") == 0
+        && axis == rank - 1
+    ) {
+        ocean_tensor_handle_t result =
+            ocean_tensor_softmax_backward(upstream, output, dim);
+        free(device);
+        return result;
+    }
     ocean_tensor_handle_t uc = strcmp(device, "cpu") == 0
         ? upstream
         : ocean_tensor_to(upstream, "cpu");
@@ -1172,6 +1181,15 @@ static ocean_tensor_handle_t ocean_autograd_layer_norm_backward_v03(
     int rank = ocean_tensor_ndim(input);
 
     char *device = ocean_tensor_device(input);
+    if (
+        strcmp(device, "gpu") == 0
+        && axis == rank - 1
+    ) {
+        ocean_tensor_handle_t result =
+            ocean_tensor_layer_norm_backward(upstream, input, dim, epsilon);
+        free(device);
+        return result;
+    }
     ocean_tensor_handle_t gc = strcmp(device, "cpu") == 0
         ? upstream
         : ocean_tensor_to(upstream, "cpu");

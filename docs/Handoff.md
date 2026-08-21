@@ -1246,6 +1246,8 @@ scalar arithmetic
 fill
 softmax по последней оси для float32
 LayerNorm по последней оси для float32
+softmax backward по последней оси для float32
+LayerNorm backward по последней оси для float32
 sum_dim/mean_dim по последней оси для float32
 SGD update для GPU float32
 AdamW update и GPU m/v buffers для float32
@@ -1292,7 +1294,7 @@ copy result to GPU
 broadcast-heavy operations
 Embedding
 some ND/batched paths
-autograd backward для softmax/LayerNorm
+autograd paths для неподдержанных осей и dtype
 ```
 
 Поэтому:
@@ -1325,7 +1327,6 @@ GPU-native path сейчас ограничен contiguous float32.
 Следующие этапы:
 
 ```text
-GPU-native backward для softmax и LayerNorm
 GPU-native Embedding и batched matmul
 GPU-native optimizer kernels для других numeric dtypes
 ```
@@ -1378,7 +1379,7 @@ backward
 AdamW step
 
 Hotpath test additionally checks CPU/GPU equivalence for softmax, LayerNorm,
-last-axis reductions, SGD, and AdamW moments.
+their last-axis backward gradients, reductions, SGD, and AdamW moments.
 loss decreases
 output.device() == "gpu"
 parameter.device() == "gpu"

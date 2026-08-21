@@ -219,6 +219,17 @@ ocean_tensor_handle_t ocean_tensor_softmax(ocean_tensor_handle_t tensor, int dim
 ocean_tensor_handle_t ocean_tensor_layer_norm(
     ocean_tensor_handle_t tensor, int dim, double epsilon
 );
+ocean_tensor_handle_t ocean_tensor_softmax_backward(
+    ocean_tensor_handle_t upstream,
+    ocean_tensor_handle_t output,
+    int dim
+);
+ocean_tensor_handle_t ocean_tensor_layer_norm_backward(
+    ocean_tensor_handle_t upstream,
+    ocean_tensor_handle_t input,
+    int dim,
+    double epsilon
+);
 
 /* Device-aware optimizer update primitives. Moment tensors remain opaque
    Tensor handles, so GPU optimizers never need to expose OpenCL objects. */

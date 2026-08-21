@@ -83,7 +83,8 @@ The additional hot paths are runtime primitives rather than public OpenCL ABI:
 Tensor handles. The current native kernels target contiguous float32 tensors
 and the last axis. Other axes, dtypes, and unsupported layouts retain the
 correctness-first CPU round-trip behavior. Autograd backward for softmax and
-LayerNorm is still CPU-based for now.
+LayerNorm also has native float32 kernels for the last axis; other axes retain
+the CPU fallback.
 
 ## Safety boundary
 

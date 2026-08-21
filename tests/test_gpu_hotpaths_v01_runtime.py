@@ -31,6 +31,7 @@ GPU_HOTPATH_SOURCE = r'''
 #include <stdio.h>
 #include <stdlib.h>
 #include "std/tensor/tensor_runtime.h"
+#include "std/tensor/autograd_runtime.h"
 
 static void check_close(
     ocean_tensor_handle_t left,
@@ -114,6 +115,83 @@ int main(void) {
     check_close(cpu_first, gpu_first, "adamw first moment");
     check_close(cpu_second, gpu_second, "adamw second moment");
 
+    ocean_tensor_handle_t cpu_softmax_input = ocean_tensor_copy(cpu);
+    ocean_tensor_handle_t gpu_softmax_input = ocean_tensor_copy(gpu);
+    ocean_autograd_set_requires_grad(cpu_softmax_input, true);
+    ocean_autograd_set_requires_grad(gpu_softmax_input, true);
+    ocean_tensor_handle_t cpu_softmax_output =
+        ocean_autograd_softmax(cpu_softmax_input, -1);
+    ocean_tensor_handle_t gpu_softmax_output =
+        ocean_autograd_softmax(gpu_softmax_input, -1);
+    ocean_tensor_handle_t cpu_softmax_target = ocean_tensor_zeros_nd(
+        shape, 2, "float32", "cpu"
+    );
+    ocean_tensor_handle_t gpu_softmax_target = ocean_tensor_to(
+        cpu_softmax_target, "gpu"
+    );
+    ocean_tensor_handle_t cpu_softmax_loss = ocean_autograd_mse_loss(
+        cpu_softmax_output, cpu_softmax_target
+    );
+    ocean_tensor_handle_t gpu_softmax_loss = ocean_autograd_mse_loss(
+        gpu_softmax_output, gpu_softmax_target
+    );
+    ocean_autograd_backward(cpu_softmax_loss);
+    ocean_autograd_backward(gpu_softmax_loss);
+    ocean_tensor_handle_t cpu_softmax_grad =
+        ocean_autograd_grad_copy(cpu_softmax_input);
+    ocean_tensor_handle_t gpu_softmax_grad =
+        ocean_autograd_grad_copy(gpu_softmax_input);
+    check_close(cpu_softmax_grad, gpu_softmax_grad, "softmax backward");
+
+    ocean_tensor_handle_t cpu_norm_input = ocean_tensor_copy(cpu);
+    ocean_tensor_handle_t gpu_norm_input = ocean_tensor_copy(gpu);
+    ocean_autograd_set_requires_grad(cpu_norm_input, true);
+    ocean_autograd_set_requires_grad(gpu_norm_input, true);
+    ocean_tensor_handle_t cpu_norm_output =
+        ocean_autograd_layer_norm(cpu_norm_input, -1, 1e-5);
+    ocean_tensor_handle_t gpu_norm_output =
+        ocean_autograd_layer_norm(gpu_norm_input, -1, 1e-5);
+    ocean_tensor_handle_t cpu_norm_target = ocean_tensor_zeros_nd(
+        shape, 2, "float32", "cpu"
+    );
+    ocean_tensor_handle_t gpu_norm_target = ocean_tensor_to(
+        cpu_norm_target, "gpu"
+    );
+    ocean_tensor_handle_t cpu_norm_loss = ocean_autograd_mse_loss(
+        cpu_norm_output, cpu_norm_target
+    );
+    ocean_tensor_handle_t gpu_norm_loss = ocean_autograd_mse_loss(
+        gpu_norm_output, gpu_norm_target
+    );
+    ocean_autograd_backward(cpu_norm_loss);
+    ocean_autograd_backward(gpu_norm_loss);
+    ocean_tensor_handle_t cpu_norm_grad =
+        ocean_autograd_grad_copy(cpu_norm_input);
+    ocean_tensor_handle_t gpu_norm_grad =
+        ocean_autograd_grad_copy(gpu_norm_input);
+    check_close(cpu_norm_grad, gpu_norm_grad, "layer_norm backward");
+
+    ocean_tensor_release(gpu_norm_grad);
+    ocean_tensor_release(cpu_norm_grad);
+    ocean_tensor_release(gpu_norm_loss);
+    ocean_tensor_release(cpu_norm_loss);
+    ocean_tensor_release(gpu_norm_target);
+    ocean_tensor_release(cpu_norm_target);
+    ocean_tensor_release(gpu_norm_output);
+    ocean_tensor_release(cpu_norm_output);
+    ocean_tensor_release(gpu_norm_input);
+    ocean_tensor_release(cpu_norm_input);
+    ocean_tensor_release(gpu_softmax_grad);
+    ocean_tensor_release(cpu_softmax_grad);
+    ocean_tensor_release(gpu_softmax_loss);
+    ocean_tensor_release(cpu_softmax_loss);
+    ocean_tensor_release(gpu_softmax_target);
+    ocean_tensor_release(cpu_softmax_target);
+    ocean_tensor_release(gpu_softmax_output);
+    ocean_tensor_release(cpu_softmax_output);
+    ocean_tensor_release(gpu_softmax_input);
+    ocean_tensor_release(cpu_softmax_input);
+
     ocean_tensor_release(gpu_second);
     ocean_tensor_release(gpu_first);
     ocean_tensor_release(cpu_second);
@@ -157,7 +235,9 @@ def test_gpu_hotpaths_v01_runtime(tmp_path):
         [
             "gcc", "-std=c11", "-O2", "-Wall", "-Wextra", "-Wpedantic",
             "-Werror", "-DOCEAN_TENSOR_ENABLE_OPENCL", "-I", str(ROOT),
-            *cflags, str(source), str(ROOT / "std/tensor/tensor_runtime.c"),
+            *cflags, str(source),
+            str(ROOT / "std/tensor/autograd_runtime.c"),
+            str(ROOT / "std/tensor/tensor_runtime.c"),
             "-lm", *libs, "-o", str(binary),
         ],
         check=True,
