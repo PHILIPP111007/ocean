@@ -666,17 +666,26 @@ Ocean is an active prototype.
 The current verified CPU/ML regression baseline is:
 
 ```text
-137 passed
+138 passed
 ```
 
-There is also a GPU integration test which may be skipped when OpenCL
-development/runtime support is not available in the environment.
+There is also a GPU integration test. With the micromamba `base` OpenCL setup,
+both GPU integration tests run against the local NVIDIA OpenCL runtime.
 
 Important distinction:
 
 ```text
 GPU test passed  -> GPU execution verified
 GPU test skipped -> environment not verified
+```
+
+For the micromamba base environment:
+
+```bash
+eval "$(micromamba shell hook -s bash)"
+micromamba activate base
+export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+python -m pytest tests/test_gpu_training_v01_ocean.py tests/test_gpu_hotpaths_v01_runtime.py -q
 ```
 
 Current working milestones include:

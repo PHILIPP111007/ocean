@@ -1384,27 +1384,31 @@ output.device() == "gpu"
 parameter.device() == "gpu"
 ```
 
-Но в текущем окружении оба GPU-теста пропускаются:
+После установки OpenCL-пакетов в micromamba `base` оба GPU-теста проходят:
 
 ```text
-2 skipped
+2 passed
 ```
 
-Причина:
+Рабочая настройка окружения:
+
+```bash
+eval "$(micromamba shell hook -s bash)"
+micromamba activate base
+export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+python -m pytest tests/test_gpu_training_v01_ocean.py tests/test_gpu_hotpaths_v01_runtime.py -q
+```
+
+В `base` установлены:
 
 ```text
-OpenCL environment not fully usable
+opencl-headers
+ocl-icd
 ```
 
-Диагностика показала:
-
-```text
-NVIDIA/CUDA available
-OpenCL not fully usable
-```
-
-Возможная причина — отсутствуют OpenCL development headers/pkg-config metadata,
-а не отсутствие GPU.
+Не следует добавлять `$CONDA_PREFIX/lib` в `LD_LIBRARY_PATH` в этом окружении:
+NVIDIA OpenCL loader из системного CUDA runtime работает стабильнее conda
+loader; conda используется для headers и `pkg-config` metadata.
 
 Проверить:
 
