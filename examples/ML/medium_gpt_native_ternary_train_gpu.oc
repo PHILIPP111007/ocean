@@ -42,8 +42,9 @@ cimport <math.h>
 #
 # Ternarization is performed by the Tensor runtime on the selected device.
 # The master weights use the matmul-ready [in_features, out_features] layout so
-# every forward avoids a device transpose (the generic transpose path is a
-# CPU round-trip today).
+# every forward avoids an unnecessary device transpose. Attention's required
+# permute/transpose operations are GPU-native through the Tensor OpenCL
+# backend.
 
 
 class TernaryLinear(Module):
@@ -53,7 +54,7 @@ class TernaryLinear(Module):
         self.out_features: int = out_features
 
         # Store weights in the layout consumed by input.matmul(weight).
-        # This removes a transpose and its CPU round-trip from every forward.
+        # This removes an unnecessary transpose from every forward.
         var weight_tensor: Tensor[float32] = Tensor(ocean_autograd_parameter_uniform(in_features, out_features, 0.1, "cpu"))
         var weight_parameter: Parameter = Parameter(weight_tensor)
         self.weight: Parameter = weight_parameter
