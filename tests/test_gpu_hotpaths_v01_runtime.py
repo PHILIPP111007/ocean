@@ -66,6 +66,100 @@ int main(void) {
     }
     ocean_tensor_handle_t gpu = ocean_tensor_to(cpu, "gpu");
 
+    size_t embedding_weight_shape[2] = {4, 3};
+    ocean_tensor_handle_t embedding_weight_cpu = ocean_tensor_zeros_nd(
+        embedding_weight_shape, 2, "float32", "cpu"
+    );
+    for (size_t i = 0; i < 12; ++i) {
+        ocean_tensor_set_flat_f32(
+            embedding_weight_cpu, i, (float)i + 0.5f
+        );
+    }
+    ocean_tensor_handle_t embedding_weight_gpu = ocean_tensor_to(
+        embedding_weight_cpu, "gpu"
+    );
+    size_t embedding_index_shape[1] = {4};
+    ocean_tensor_handle_t embedding_indices_cpu = ocean_tensor_zeros_nd(
+        embedding_index_shape, 1, "int64", "cpu"
+    );
+    const int64_t embedding_tokens[4] = {0, 2, 2, 3};
+    for (size_t i = 0; i < 4; ++i) {
+        ocean_tensor_set_flat_i64(
+            embedding_indices_cpu, i, embedding_tokens[i]
+        );
+    }
+    ocean_tensor_handle_t embedding_indices_gpu = ocean_tensor_to(
+        embedding_indices_cpu, "gpu"
+    );
+    ocean_tensor_handle_t embedding_cpu = ocean_tensor_embedding_forward(
+        embedding_weight_cpu, embedding_indices_cpu
+    );
+    ocean_tensor_handle_t embedding_gpu = ocean_tensor_embedding_forward(
+        embedding_weight_gpu, embedding_indices_gpu
+    );
+    check_close(embedding_cpu, embedding_gpu, "embedding forward");
+
+    ocean_tensor_handle_t embedding_upstream_cpu = ocean_tensor_zeros_nd(
+        embedding_weight_shape, 2, "float32", "cpu"
+    );
+    for (size_t i = 0; i < 12; ++i) {
+        ocean_tensor_set_flat_f32(
+            embedding_upstream_cpu, i, (float)i + 1.0f
+        );
+    }
+    ocean_tensor_handle_t embedding_upstream_gpu = ocean_tensor_to(
+        embedding_upstream_cpu, "gpu"
+    );
+    ocean_tensor_handle_t embedding_gradient_cpu =
+        ocean_tensor_embedding_backward(
+            embedding_upstream_cpu, embedding_indices_cpu, 4, 3
+        );
+    ocean_tensor_handle_t embedding_gradient_gpu =
+        ocean_tensor_embedding_backward(
+            embedding_upstream_gpu, embedding_indices_gpu, 4, 3
+        );
+    check_close(
+        embedding_gradient_cpu, embedding_gradient_gpu,
+        "embedding backward"
+    );
+
+    ocean_tensor_handle_t autograd_weight_cpu = ocean_tensor_copy(
+        embedding_weight_cpu
+    );
+    ocean_tensor_handle_t autograd_weight_gpu = ocean_tensor_copy(
+        embedding_weight_gpu
+    );
+    ocean_autograd_set_requires_grad(autograd_weight_cpu, true);
+    ocean_autograd_set_requires_grad(autograd_weight_gpu, true);
+    ocean_tensor_handle_t autograd_embedding_cpu = ocean_autograd_embedding(
+        autograd_weight_cpu, embedding_indices_cpu
+    );
+    ocean_tensor_handle_t autograd_embedding_gpu = ocean_autograd_embedding(
+        autograd_weight_gpu, embedding_indices_gpu
+    );
+    ocean_tensor_handle_t autograd_target_cpu = ocean_tensor_zeros_nd(
+        embedding_weight_shape, 2, "float32", "cpu"
+    );
+    ocean_tensor_handle_t autograd_target_gpu = ocean_tensor_to(
+        autograd_target_cpu, "gpu"
+    );
+    ocean_tensor_handle_t autograd_loss_cpu = ocean_autograd_mse_loss(
+        autograd_embedding_cpu, autograd_target_cpu
+    );
+    ocean_tensor_handle_t autograd_loss_gpu = ocean_autograd_mse_loss(
+        autograd_embedding_gpu, autograd_target_gpu
+    );
+    ocean_autograd_backward(autograd_loss_cpu);
+    ocean_autograd_backward(autograd_loss_gpu);
+    ocean_tensor_handle_t autograd_gradient_cpu =
+        ocean_autograd_grad_copy(autograd_weight_cpu);
+    ocean_tensor_handle_t autograd_gradient_gpu =
+        ocean_autograd_grad_copy(autograd_weight_gpu);
+    check_close(
+        autograd_gradient_cpu, autograd_gradient_gpu,
+        "embedding autograd backward"
+    );
+
     ocean_tensor_handle_t cpu_ternary = ocean_tensor_ternary_quantize(cpu);
     ocean_tensor_handle_t gpu_ternary = ocean_tensor_ternary_quantize(gpu);
     check_close(cpu_ternary, gpu_ternary, "ternary quantize");
@@ -215,6 +309,26 @@ int main(void) {
     ocean_tensor_release(cpu_norm);
     ocean_tensor_release(gpu_softmax);
     ocean_tensor_release(cpu_softmax);
+    ocean_tensor_release(embedding_gradient_gpu);
+    ocean_tensor_release(embedding_gradient_cpu);
+    ocean_tensor_release(autograd_gradient_gpu);
+    ocean_tensor_release(autograd_gradient_cpu);
+    ocean_tensor_release(autograd_loss_gpu);
+    ocean_tensor_release(autograd_loss_cpu);
+    ocean_tensor_release(autograd_target_gpu);
+    ocean_tensor_release(autograd_target_cpu);
+    ocean_tensor_release(autograd_embedding_gpu);
+    ocean_tensor_release(autograd_embedding_cpu);
+    ocean_tensor_release(autograd_weight_gpu);
+    ocean_tensor_release(autograd_weight_cpu);
+    ocean_tensor_release(embedding_upstream_gpu);
+    ocean_tensor_release(embedding_upstream_cpu);
+    ocean_tensor_release(embedding_gpu);
+    ocean_tensor_release(embedding_cpu);
+    ocean_tensor_release(embedding_indices_gpu);
+    ocean_tensor_release(embedding_indices_cpu);
+    ocean_tensor_release(embedding_weight_gpu);
+    ocean_tensor_release(embedding_weight_cpu);
     ocean_tensor_release(gpu);
     ocean_tensor_release(cpu);
     puts("GPU hotpaths v0.1: OK");

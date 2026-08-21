@@ -209,6 +209,11 @@ and backward over the last axis, plus `sum_dim`/`mean_dim` reductions over the l
 resident parameters, gradients, and AdamW moment tensors in place. Unsupported axes or dtypes
 continue to use the documented correctness-first fallback; the public API remains device-neutral.
 
+`Embedding` is also GPU-native for contiguous float32 weights and contiguous int64 indices:
+forward gathers rows directly on the device, while backward accumulates duplicate token IDs with
+an atomic float update. Invalid token IDs are reported through a device-side error flag. The
+public `Embedding.forward()` API remains unchanged.
+
 `ternary_quantize()` is currently defined for float32 tensors. It computes the mean absolute
 weight scale, the `0.5 * scale` threshold, and the ternary values `{-scale, 0, +scale}` inside
 the selected backend. The OpenCL implementation uses one work-group reduction and quantization

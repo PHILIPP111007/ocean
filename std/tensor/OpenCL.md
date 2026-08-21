@@ -19,6 +19,13 @@ generated C includes `std/tensor/tensor_runtime.h`.
 - float32 `Tensor.ternary_quantize()` computes the mean absolute scale,
   threshold, and `{-scale, 0, +scale}` output in one OpenCL work-group; it
   does not download weights for host-side `get()`/`set()` loops.
+- float32 `Embedding` forward gathers rows from a GPU-resident `[V, D]`
+  weight matrix for GPU-resident `int64` indices;
+- `Embedding` backward accumulates repeated token IDs into the `[V, D]`
+  gradient with an atomic compare-and-swap float add, preserving duplicate
+  index semantics;
+- embedding kernels validate token bounds on the device and report invalid
+  indices through a small device-side error flag.
 
 ## Runtime objects
 
@@ -82,12 +89,12 @@ optional at compile time: without
 error instead of silently falling back to CPU.
 
 The additional hot paths are runtime primitives rather than public OpenCL ABI:
-`softmax`, `layer_norm`, `sum_dim`, `mean_dim`, SGD, and AdamW receive opaque
-Tensor handles. The current native kernels target contiguous float32 tensors
-and the last axis. Other axes, dtypes, and unsupported layouts retain the
-correctness-first CPU round-trip behavior. Autograd backward for softmax and
-LayerNorm also has native float32 kernels for the last axis; other axes retain
-the CPU fallback.
+`softmax`, `layer_norm`, `sum_dim`, `mean_dim`, SGD, AdamW, and Embedding receive
+opaque Tensor handles. The current native kernels target contiguous float32
+tensors (and contiguous int64 indices for Embedding) and the last axis where
+applicable. Other axes, dtypes, and unsupported layouts retain the
+correctness-first CPU round-trip behavior. Autograd backward for softmax,
+LayerNorm, and Embedding also has native float32 kernels for supported layouts.
 
 ## Safety boundary
 

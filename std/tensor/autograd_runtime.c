@@ -1516,105 +1516,7 @@ static ocean_tensor_handle_t ocean_autograd_embedding_forward_v04(
     ocean_tensor_handle_t weight,
     ocean_tensor_handle_t indices
 ) {
-    ocean_autograd_require_float32(weight);
-    ocean_autograd_require_int64_v04(
-        indices,
-        "Embedding indices must be Tensor[int64]"
-    );
-
-    int weight_rank = ocean_tensor_ndim(weight);
-    int index_rank = ocean_tensor_ndim(indices);
-    if (weight_rank != 2 || index_rank < 1) {
-        ocean_tensor_fail(
-            "Embedding expects weight [V,D] and indices rank >= 1"
-        );
-    }
-
-    size_t vocab = (size_t)ocean_tensor_shape(weight, 0);
-    size_t dim = (size_t)ocean_tensor_shape(weight, 1);
-    size_t count = ocean_tensor_size(indices);
-    size_t output_rank = (size_t)index_rank + 1;
-
-    size_t *shape = (size_t *)malloc(output_rank * sizeof(size_t));
-    size_t *strides = (size_t *)malloc(output_rank * sizeof(size_t));
-    float *data = count && dim
-        ? (float *)malloc(count * dim * sizeof(float))
-        : NULL;
-
-    if (!shape || !strides || (count && dim && !data)) {
-        free(shape);
-        free(strides);
-        free(data);
-        ocean_tensor_fail("out of memory in Embedding forward");
-    }
-
-    for (int axis = 0; axis < index_rank; ++axis) {
-        shape[(size_t)axis] =
-            (size_t)ocean_tensor_shape(indices, axis);
-    }
-    shape[output_rank - 1] = dim;
-    ocean_autograd_contiguous_strides_v04(
-        shape,
-        output_rank,
-        strides
-    );
-
-    char *device = ocean_tensor_device(weight);
-    ocean_tensor_handle_t wc = strcmp(device, "cpu") == 0
-        ? weight
-        : ocean_tensor_to(weight, "cpu");
-
-    char *indices_device = ocean_tensor_device(indices);
-    ocean_tensor_handle_t ic = strcmp(indices_device, "cpu") == 0
-        ? indices
-        : ocean_tensor_to(indices, "cpu");
-
-    for (size_t i = 0; i < count; ++i) {
-        int64_t token = ocean_tensor_get_flat_i64(ic, i);
-        if (token < 0 || (uint64_t)token >= (uint64_t)vocab) {
-            free(data);
-            free(shape);
-            free(strides);
-            if (wc != weight) ocean_tensor_release(wc);
-            if (ic != indices) ocean_tensor_release(ic);
-            free(device);
-            free(indices_device);
-            ocean_tensor_fail("Embedding token id is out of range");
-        }
-
-        size_t row = (size_t)token;
-        for (size_t feature = 0; feature < dim; ++feature) {
-            data[i * dim + feature] =
-                ocean_tensor_get_flat_f32(
-                    wc,
-                    row * dim + feature
-                );
-        }
-    }
-
-    ocean_tensor_handle_t cpu = ocean_tensor_from_cpu_strided(
-        data,
-        shape,
-        strides,
-        output_rank,
-        "float32",
-        "cpu"
-    );
-    ocean_tensor_handle_t result = cpu;
-
-    if (strcmp(device, "cpu") != 0) {
-        result = ocean_tensor_to(cpu, device);
-        ocean_tensor_release(cpu);
-    }
-
-    if (wc != weight) ocean_tensor_release(wc);
-    if (ic != indices) ocean_tensor_release(ic);
-    free(device);
-    free(indices_device);
-    free(data);
-    free(shape);
-    free(strides);
-    return result;
+    return ocean_tensor_embedding_forward(weight, indices);
 }
 
 ocean_tensor_handle_t ocean_autograd_embedding(
@@ -2059,84 +1961,13 @@ static void ocean_autograd_backward_node(ocean_autograd_meta *meta) {
             if (node->left) {
                 size_t vocab = node->left->shape[0];
                 size_t dim = node->left->shape[1];
-                size_t index_count =
-                    ocean_tensor_size(node->saved_right);
-
-                char *device =
-                    ocean_tensor_device(upstream);
-                ocean_tensor_handle_t gc =
-                    strcmp(device, "cpu") == 0
-                    ? upstream
-                    : ocean_tensor_to(upstream, "cpu");
-
-                char *indices_device =
-                    ocean_tensor_device(node->saved_right);
-                ocean_tensor_handle_t ic =
-                    strcmp(indices_device, "cpu") == 0
-                    ? node->saved_right
-                    : ocean_tensor_to(
+                ocean_tensor_handle_t contribution =
+                    ocean_tensor_embedding_backward(
+                        upstream,
                         node->saved_right,
-                        "cpu"
+                        vocab,
+                        dim
                     );
-
-                size_t total = vocab * dim;
-                float *data = total
-                    ? (float *)calloc(total, sizeof(float))
-                    : NULL;
-                size_t shape[2] = {vocab, dim};
-                size_t strides[2] = {dim, 1};
-
-                if (total && !data) {
-                    if (gc != upstream) ocean_tensor_release(gc);
-                    if (ic != node->saved_right) {
-                        ocean_tensor_release(ic);
-                    }
-                    free(device);
-                    free(indices_device);
-                    ocean_tensor_fail(
-                        "out of memory in Embedding backward"
-                    );
-                }
-
-                for (size_t i = 0; i < index_count; ++i) {
-                    int64_t token =
-                        ocean_tensor_get_flat_i64(ic, i);
-                    size_t row = (size_t)token;
-
-                    for (size_t feature = 0; feature < dim; ++feature) {
-                        data[row * dim + feature] +=
-                            ocean_tensor_get_flat_f32(
-                                gc,
-                                i * dim + feature
-                            );
-                    }
-                }
-
-                ocean_tensor_handle_t cpu =
-                    ocean_tensor_from_cpu_strided(
-                        data,
-                        shape,
-                        strides,
-                        2,
-                        "float32",
-                        "cpu"
-                    );
-                ocean_tensor_handle_t contribution = cpu;
-
-                if (strcmp(device, "cpu") != 0) {
-                    contribution =
-                        ocean_tensor_to(cpu, device);
-                    ocean_tensor_release(cpu);
-                }
-
-                free(data);
-                if (gc != upstream) ocean_tensor_release(gc);
-                if (ic != node->saved_right) {
-                    ocean_tensor_release(ic);
-                }
-                free(device);
-                free(indices_device);
-
                 ocean_autograd_accumulate(
                     node->left,
                     contribution

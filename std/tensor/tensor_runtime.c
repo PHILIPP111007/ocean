@@ -85,10 +85,38 @@ static ocean_tensor_handle_t ocean_tensor_scalar_opencl(
 static ocean_tensor_handle_t ocean_tensor_ternary_quantize_cpu(
     const ocean_tensor_handle_t tensor
 );
+static ocean_tensor_handle_t ocean_tensor_embedding_forward_cpu(
+    const ocean_tensor_handle_t weight,
+    const ocean_tensor_handle_t indices
+);
+static ocean_tensor_handle_t ocean_tensor_embedding_backward_cpu(
+    const ocean_tensor_handle_t upstream,
+    const ocean_tensor_handle_t indices,
+    size_t vocab,
+    size_t dim
+);
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
 static void ocean_tensor_opencl_ternary_quantize(
     const ocean_tensor_handle_t input,
     ocean_tensor_handle_t output
+);
+static void ocean_tensor_opencl_embedding_forward(
+    const ocean_tensor_handle_t weight,
+    const ocean_tensor_handle_t indices,
+    ocean_tensor_handle_t output,
+    ocean_tensor_handle_t error,
+    int index_count,
+    int vocab,
+    int dim
+);
+static void ocean_tensor_opencl_embedding_backward(
+    const ocean_tensor_handle_t upstream,
+    const ocean_tensor_handle_t indices,
+    ocean_tensor_handle_t gradient,
+    ocean_tensor_handle_t error,
+    int index_count,
+    int vocab,
+    int dim
 );
 #endif
 static void ocean_tensor_write_scalar(
@@ -492,6 +520,53 @@ static const char *ocean_tensor_hotpath_kernel_source =
     "}"
     "}";
 
+static const char *ocean_tensor_embedding_kernel_source =
+    "inline void ocean_tensor_atomic_add_f32("
+    "volatile __global float *address, const float value) {"
+    "volatile __global int *bits = (volatile __global int *)address;"
+    "int old = *bits;"
+    "int assumed;"
+    "do {"
+    "assumed = old;"
+    "old = atomic_cmpxchg(bits, assumed, "
+    "as_int(as_float(assumed) + value));"
+    "} while (old != assumed);"
+    "}"
+    "__kernel void ocean_tensor_embedding_forward("
+    "__global const float *weight, __global const long *indices, "
+    "__global float *output, __global int *error, "
+    "const int index_count, const int vocab, const int dim) {"
+    "int index = (int)get_global_id(0);"
+    "int total = index_count * dim;"
+    "if (index >= total) return;"
+    "int token_position = index / dim;"
+    "int feature = index - token_position * dim;"
+    "long token = indices[token_position];"
+    "if (token < 0 || token >= (long)vocab) {"
+    "atomic_or(error, 1);"
+    "output[index] = 0.0f;"
+    "return;"
+    "}"
+    "output[index] = weight[(int)token * dim + feature];"
+    "}"
+    "__kernel void ocean_tensor_embedding_backward("
+    "__global const float *upstream, __global const long *indices, "
+    "__global float *gradient, __global int *error, "
+    "const int index_count, const int vocab, const int dim) {"
+    "int index = (int)get_global_id(0);"
+    "int total = index_count * dim;"
+    "if (index >= total) return;"
+    "int token_position = index / dim;"
+    "int feature = index - token_position * dim;"
+    "long token = indices[token_position];"
+    "if (token < 0 || token >= (long)vocab) {"
+    "atomic_or(error, 1);"
+    "return;"
+    "}"
+    "ocean_tensor_atomic_add_f32("
+    "gradient + (int)token * dim + feature, upstream[index]);"
+    "}";
+
 static const char *ocean_tensor_backward_kernel_source =
     "__kernel void ocean_tensor_softmax_backward_last_dim("
     "__global const float *upstream, __global const float *output, "
@@ -555,6 +630,8 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_kernel sgd_update_kernel;
     cl_kernel adamw_update_kernel;
     cl_kernel ternary_quantize_kernel;
+    cl_kernel embedding_forward_kernel;
+    cl_kernel embedding_backward_kernel;
     cl_kernel softmax_backward_kernel;
     cl_kernel layer_norm_backward_kernel;
 } ocean_tensor_opencl_runtime;
@@ -572,6 +649,8 @@ typedef enum ocean_tensor_opencl_kernel_key {
     OCEAN_TENSOR_OPENCL_KERNEL_SGD_UPDATE_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_ADAMW_UPDATE_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_QUANTIZE_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_FORWARD_FLOAT32_INT64,
+    OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_BACKWARD_FLOAT32_INT64,
     OCEAN_TENSOR_OPENCL_KERNEL_SOFTMAX_BACKWARD_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_LAYER_NORM_BACKWARD_FLOAT32,
 } ocean_tensor_opencl_kernel_key;
@@ -628,6 +707,14 @@ static void ocean_tensor_opencl_shutdown(void) {
     if (ocean_tensor_opencl.ternary_quantize_kernel) {
         clReleaseKernel(ocean_tensor_opencl.ternary_quantize_kernel);
         ocean_tensor_opencl.ternary_quantize_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.embedding_forward_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.embedding_forward_kernel);
+        ocean_tensor_opencl.embedding_forward_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.embedding_backward_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.embedding_backward_kernel);
+        ocean_tensor_opencl.embedding_backward_kernel = NULL;
     }
     if (ocean_tensor_opencl.softmax_backward_kernel) {
         clReleaseKernel(ocean_tensor_opencl.softmax_backward_kernel);
@@ -716,10 +803,11 @@ static void ocean_tensor_opencl_init(void) {
     const char *sources[] = {
         ocean_tensor_matmul_kernel_source,
         ocean_tensor_hotpath_kernel_source,
+        ocean_tensor_embedding_kernel_source,
         ocean_tensor_backward_kernel_source,
     };
     ocean_tensor_opencl.program = clCreateProgramWithSource(
-        ocean_tensor_opencl.context, 3, sources, NULL, &status
+        ocean_tensor_opencl.context, 4, sources, NULL, &status
     );
     ocean_tensor_opencl_check(status, "clCreateProgramWithSource");
     status = clBuildProgram(
@@ -798,6 +886,14 @@ static cl_kernel ocean_tensor_opencl_get_kernel(
         case OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_QUANTIZE_FLOAT32:
             slot = &ocean_tensor_opencl.ternary_quantize_kernel;
             name = "ocean_tensor_ternary_quantize";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_FORWARD_FLOAT32_INT64:
+            slot = &ocean_tensor_opencl.embedding_forward_kernel;
+            name = "ocean_tensor_embedding_forward";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_BACKWARD_FLOAT32_INT64:
+            slot = &ocean_tensor_opencl.embedding_backward_kernel;
+            name = "ocean_tensor_embedding_backward";
             break;
         case OCEAN_TENSOR_OPENCL_KERNEL_SOFTMAX_BACKWARD_FLOAT32:
             slot = &ocean_tensor_opencl.softmax_backward_kernel;
@@ -1254,6 +1350,235 @@ ocean_tensor_handle_t ocean_tensor_ternary_quantize(
     ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
     return NULL;
 #endif
+}
+
+ocean_tensor_handle_t ocean_tensor_embedding_forward(
+    ocean_tensor_handle_t weight,
+    ocean_tensor_handle_t indices
+) {
+    if (!weight || !indices) {
+        ocean_tensor_fail("Embedding.forward requires non-null tensors");
+    }
+    if (weight->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Embedding weights must be Tensor[float32]");
+    }
+    if (indices->dtype != OCEAN_TENSOR_INT64) {
+        ocean_tensor_fail("Embedding indices must be Tensor[int64]");
+    }
+    if (weight->ndim != 2 || indices->ndim < 1) {
+        ocean_tensor_fail(
+            "Embedding expects weight [V,D] and indices rank >= 1"
+        );
+    }
+
+    size_t vocab = weight->shape[0];
+    size_t dim = weight->shape[1];
+    size_t count = indices->size;
+    (void)vocab;
+    if (dim != 0 && count > SIZE_MAX / dim) {
+        ocean_tensor_fail("Embedding output is too large");
+    }
+
+    ocean_tensor_handle_t contiguous_weight =
+        ocean_tensor_contiguous(weight);
+    ocean_tensor_handle_t contiguous_indices =
+        ocean_tensor_contiguous(indices);
+    ocean_tensor_handle_t result = NULL;
+
+    if (weight->device == OCEAN_TENSOR_CPU) {
+        ocean_tensor_handle_t cpu_indices = contiguous_indices;
+        if (cpu_indices->device != OCEAN_TENSOR_CPU) {
+            cpu_indices = ocean_tensor_to(cpu_indices, "cpu");
+        }
+        result = ocean_tensor_embedding_forward_cpu(
+            contiguous_weight,
+            cpu_indices
+        );
+        if (cpu_indices != contiguous_indices) ocean_tensor_release(cpu_indices);
+    } else {
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+        ocean_tensor_handle_t gpu_indices = contiguous_indices;
+        if (gpu_indices->device != OCEAN_TENSOR_GPU) {
+            gpu_indices = ocean_tensor_to(gpu_indices, "gpu");
+        }
+        size_t output_shape[indices->ndim + 1];
+        for (size_t axis = 0; axis < indices->ndim; ++axis) {
+            output_shape[axis] = indices->shape[axis];
+        }
+        output_shape[indices->ndim] = dim;
+        result = ocean_tensor_alloc_uninitialized(
+            output_shape,
+            indices->ndim + 1,
+            OCEAN_TENSOR_FLOAT32,
+            OCEAN_TENSOR_GPU
+        );
+        if (count && dim) {
+            if (count > (size_t)INT32_MAX || vocab > (size_t)INT32_MAX ||
+                dim > (size_t)INT32_MAX || count > SIZE_MAX / dim ||
+                count * dim > (size_t)INT32_MAX) {
+                ocean_tensor_release(result);
+                if (gpu_indices != contiguous_indices) {
+                    ocean_tensor_release(gpu_indices);
+                }
+                ocean_tensor_release(contiguous_weight);
+                ocean_tensor_release(contiguous_indices);
+                ocean_tensor_fail(
+                    "Embedding is too large for OpenCL kernel indexing"
+                );
+            }
+            size_t error_shape[1] = {1};
+            ocean_tensor_handle_t error = ocean_tensor_zeros_nd(
+                error_shape, 1, "int32", "gpu"
+            );
+            ocean_tensor_opencl_embedding_forward(
+                contiguous_weight,
+                gpu_indices,
+                result,
+                error,
+                (int)count,
+                (int)vocab,
+                (int)dim
+            );
+            int32_t error_value = ocean_tensor_get_flat_i32(error, 0);
+            ocean_tensor_release(error);
+            if (error_value != 0) {
+                ocean_tensor_release(result);
+                if (gpu_indices != contiguous_indices) {
+                    ocean_tensor_release(gpu_indices);
+                }
+                ocean_tensor_release(contiguous_weight);
+                ocean_tensor_release(contiguous_indices);
+                ocean_tensor_fail("Embedding token id is out of range");
+            }
+        }
+        if (gpu_indices != contiguous_indices) ocean_tensor_release(gpu_indices);
+#else
+        ocean_tensor_release(contiguous_weight);
+        ocean_tensor_release(contiguous_indices);
+        ocean_tensor_fail(
+            "GPU backend is unavailable: rebuild with OpenCL support"
+        );
+#endif
+    }
+
+    ocean_tensor_release(contiguous_weight);
+    ocean_tensor_release(contiguous_indices);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_tensor_embedding_backward(
+    ocean_tensor_handle_t upstream,
+    ocean_tensor_handle_t indices,
+    size_t vocab,
+    size_t dim
+) {
+    if (!upstream || !indices) {
+        ocean_tensor_fail("Embedding.backward requires non-null tensors");
+    }
+    if (upstream->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Embedding gradient must be Tensor[float32]");
+    }
+    if (indices->dtype != OCEAN_TENSOR_INT64) {
+        ocean_tensor_fail("Embedding indices must be Tensor[int64]");
+    }
+    size_t count = indices->size;
+    if (dim != 0 && count > SIZE_MAX / dim) {
+        ocean_tensor_fail("Embedding gradient metadata is too large");
+    }
+    if (upstream->ndim != indices->ndim + 1) {
+        ocean_tensor_fail("Embedding gradient rank does not match indices");
+    }
+    for (size_t axis = 0; axis < indices->ndim; ++axis) {
+        if (upstream->shape[axis] != indices->shape[axis]) {
+            ocean_tensor_fail("Embedding gradient shape does not match indices");
+        }
+    }
+    if (upstream->shape[indices->ndim] != dim) {
+        ocean_tensor_fail("Embedding gradient width does not match weight");
+    }
+    if (upstream->size != count * dim) {
+        ocean_tensor_fail("Embedding gradient shape does not match indices");
+    }
+
+    ocean_tensor_handle_t contiguous_upstream =
+        ocean_tensor_contiguous(upstream);
+    ocean_tensor_handle_t contiguous_indices =
+        ocean_tensor_contiguous(indices);
+    ocean_tensor_handle_t result = NULL;
+
+    if (upstream->device == OCEAN_TENSOR_CPU) {
+        ocean_tensor_handle_t cpu_indices = contiguous_indices;
+        if (cpu_indices->device != OCEAN_TENSOR_CPU) {
+            cpu_indices = ocean_tensor_to(cpu_indices, "cpu");
+        }
+        result = ocean_tensor_embedding_backward_cpu(
+            contiguous_upstream,
+            cpu_indices,
+            vocab,
+            dim
+        );
+        if (cpu_indices != contiguous_indices) ocean_tensor_release(cpu_indices);
+    } else {
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+        ocean_tensor_handle_t gpu_indices = contiguous_indices;
+        if (gpu_indices->device != OCEAN_TENSOR_GPU) {
+            gpu_indices = ocean_tensor_to(gpu_indices, "gpu");
+        }
+        size_t gradient_shape[2] = {vocab, dim};
+        result = ocean_tensor_alloc_zeros(
+            gradient_shape, 2, OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_GPU
+        );
+        if (count && dim) {
+            if (count > (size_t)INT32_MAX || vocab > (size_t)INT32_MAX ||
+                dim > (size_t)INT32_MAX || count * dim > (size_t)INT32_MAX) {
+                ocean_tensor_release(result);
+                if (gpu_indices != contiguous_indices) {
+                    ocean_tensor_release(gpu_indices);
+                }
+                ocean_tensor_release(contiguous_upstream);
+                ocean_tensor_release(contiguous_indices);
+                ocean_tensor_fail(
+                    "Embedding is too large for OpenCL kernel indexing"
+                );
+            }
+            size_t error_shape[1] = {1};
+            ocean_tensor_handle_t error = ocean_tensor_zeros_nd(
+                error_shape, 1, "int32", "gpu"
+            );
+            ocean_tensor_opencl_embedding_backward(
+                contiguous_upstream,
+                gpu_indices,
+                result,
+                error,
+                (int)count,
+                (int)vocab,
+                (int)dim
+            );
+            int32_t error_value = ocean_tensor_get_flat_i32(error, 0);
+            ocean_tensor_release(error);
+            if (error_value != 0) {
+                ocean_tensor_release(result);
+                if (gpu_indices != contiguous_indices) {
+                    ocean_tensor_release(gpu_indices);
+                }
+                ocean_tensor_release(contiguous_upstream);
+                ocean_tensor_release(contiguous_indices);
+                ocean_tensor_fail("Embedding token id is out of range");
+            }
+        }
+        if (gpu_indices != contiguous_indices) ocean_tensor_release(gpu_indices);
+#else
+        ocean_tensor_release(contiguous_upstream);
+        ocean_tensor_release(contiguous_indices);
+        ocean_tensor_fail(
+            "GPU backend is unavailable: rebuild with OpenCL support"
+        );
+#endif
+    }
+
+    ocean_tensor_release(contiguous_upstream);
+    ocean_tensor_release(contiguous_indices);
+    return result;
 }
 
 void ocean_tensor_copy_into(
@@ -1777,6 +2102,89 @@ static ocean_tensor_handle_t ocean_tensor_ternary_quantize_cpu(
     return result;
 }
 
+static ocean_tensor_handle_t ocean_tensor_embedding_forward_cpu(
+    const ocean_tensor_handle_t weight,
+    const ocean_tensor_handle_t indices
+) {
+    size_t dim = weight->shape[1];
+    size_t output_shape[indices->ndim + 1];
+    for (size_t axis = 0; axis < indices->ndim; ++axis) {
+        output_shape[axis] = indices->shape[axis];
+    }
+    output_shape[indices->ndim] = dim;
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        output_shape,
+        indices->ndim + 1,
+        OCEAN_TENSOR_FLOAT32,
+        OCEAN_TENSOR_CPU
+    );
+
+    size_t vocab = weight->shape[0];
+    for (size_t position = 0; position < indices->size; ++position) {
+        int64_t token = ocean_tensor_get_flat_i64(
+            (ocean_tensor_handle_t)indices,
+            position
+        );
+        if (token < 0 || (uint64_t)token >= (uint64_t)vocab) {
+            ocean_tensor_release(result);
+            ocean_tensor_fail("Embedding token id is out of range");
+        }
+        size_t row = (size_t)token;
+        for (size_t feature = 0; feature < dim; ++feature) {
+            ocean_tensor_write_scalar(
+                result,
+                position * dim + feature,
+                (long double)ocean_tensor_get_flat_f32(
+                    (ocean_tensor_handle_t)weight,
+                    row * dim + feature
+                )
+            );
+        }
+    }
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_tensor_embedding_backward_cpu(
+    const ocean_tensor_handle_t upstream,
+    const ocean_tensor_handle_t indices,
+    size_t vocab,
+    size_t dim
+) {
+    size_t gradient_shape[2] = {vocab, dim};
+    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+        gradient_shape,
+        2,
+        OCEAN_TENSOR_FLOAT32,
+        OCEAN_TENSOR_CPU
+    );
+
+    for (size_t position = 0; position < indices->size; ++position) {
+        int64_t token = ocean_tensor_get_flat_i64(
+            (ocean_tensor_handle_t)indices,
+            position
+        );
+        if (token < 0 || (uint64_t)token >= (uint64_t)vocab) {
+            ocean_tensor_release(result);
+            ocean_tensor_fail("Embedding token id is out of range");
+        }
+        size_t row = (size_t)token;
+        for (size_t feature = 0; feature < dim; ++feature) {
+            size_t gradient_index = row * dim + feature;
+            float value = ocean_tensor_get_flat_f32(
+                (ocean_tensor_handle_t)upstream,
+                position * dim + feature
+            );
+            float previous = ocean_tensor_get_flat_f32(result, gradient_index);
+            ocean_tensor_write_scalar(
+                result,
+                gradient_index,
+                (long double)(previous + value)
+            );
+        }
+    }
+    return result;
+}
+
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
 static int ocean_tensor_same_shape(
@@ -1981,6 +2389,116 @@ static void ocean_tensor_opencl_ternary_quantize(
         clEnqueueNDRangeKernel(
             ocean_tensor_opencl.queue, kernel, 1, NULL,
             &global_size, &local_size, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_embedding_forward(
+    const ocean_tensor_handle_t weight,
+    const ocean_tensor_handle_t indices,
+    ocean_tensor_handle_t output,
+    ocean_tensor_handle_t error,
+    int index_count,
+    int vocab,
+    int dim
+) {
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_FORWARD_FLOAT32_INT64
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &weight->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &indices->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(cl_mem), &output->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(cl_mem), &error->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(int), &index_count),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 5, sizeof(int), &vocab),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 6, sizeof(int), &dim),
+        "clSetKernelArg"
+    );
+    size_t global_size = (size_t)index_count * (size_t)dim;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_embedding_backward(
+    const ocean_tensor_handle_t upstream,
+    const ocean_tensor_handle_t indices,
+    ocean_tensor_handle_t gradient,
+    ocean_tensor_handle_t error,
+    int index_count,
+    int vocab,
+    int dim
+) {
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_BACKWARD_FLOAT32_INT64
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &upstream->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &indices->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(cl_mem), &gradient->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(cl_mem), &error->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(int), &index_count),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 5, sizeof(int), &vocab),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 6, sizeof(int), &dim),
+        "clSetKernelArg"
+    );
+    size_t global_size = (size_t)index_count * (size_t)dim;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
         ),
         "clEnqueueNDRangeKernel"
     );

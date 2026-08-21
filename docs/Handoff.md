@@ -1254,6 +1254,8 @@ LayerNorm backward по последней оси для float32
 sum_dim/mean_dim по последней оси для float32
 SGD update для GPU float32
 AdamW update и GPU m/v buffers для float32
+Embedding forward для GPU float32 weights + GPU int64 indices
+Embedding backward с atomic accumulation для повторяющихся token IDs
 ```
 
 В первую очередь оптимизированы:
@@ -1295,7 +1297,6 @@ copy result to GPU
 
 ```text
 broadcast-heavy operations
-Embedding
 some ND/batched paths
 autograd paths для неподдержанных осей и dtype
 ```
@@ -1330,7 +1331,7 @@ GPU-native path сейчас ограничен contiguous float32.
 Следующие этапы:
 
 ```text
-GPU-native Embedding и batched matmul
+GPU-native batched matmul
 GPU-native optimizer kernels для других numeric dtypes
 ```
 
@@ -1855,7 +1856,6 @@ batched matmul
 broadcast binary
 softmax
 LayerNorm
-Embedding
 CrossEntropy
 reductions
 transpose/permute where possible
