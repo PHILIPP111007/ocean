@@ -1259,6 +1259,7 @@ Embedding backward с atomic accumulation для повторяющихся toke
 CrossEntropy forward/backward для GPU float32 logits + GPU int64 targets
 Batched matmul для GPU float32 с batch broadcasting
 Transposed batched matmul для GPU autograd backward
+GPU `permute`/`transpose_dims` для arbitrary-rank Tensor с stride-aware gather
 ```
 
 В первую очередь оптимизированы:
@@ -1859,7 +1860,6 @@ broadcast binary
 softmax
 LayerNorm
 reductions
-transpose/permute where possible
 ```
 
 После этого:

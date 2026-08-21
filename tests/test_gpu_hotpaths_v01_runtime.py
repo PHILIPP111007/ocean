@@ -221,6 +221,32 @@ int main(void) {
         "batched matmul backward right"
     );
 
+    size_t permute_shape[3] = {2, 3, 4};
+    int permute_axes[3] = {2, 0, 1};
+    ocean_tensor_handle_t permute_cpu = ocean_tensor_zeros_nd(
+        permute_shape, 3, "float32", "cpu"
+    );
+    for (size_t i = 0; i < ocean_tensor_size(permute_cpu); ++i) {
+        ocean_tensor_set_flat_f32(permute_cpu, i, (float)i * 0.125f);
+    }
+    ocean_tensor_handle_t permute_gpu = ocean_tensor_to(
+        permute_cpu, "gpu"
+    );
+    ocean_tensor_handle_t permuted_cpu = ocean_tensor_permute(
+        permute_cpu, permute_axes, 3
+    );
+    ocean_tensor_handle_t permuted_gpu = ocean_tensor_permute(
+        permute_gpu, permute_axes, 3
+    );
+    check_close(permuted_cpu, permuted_gpu, "permute");
+    ocean_tensor_handle_t transposed_cpu = ocean_tensor_transpose_dims(
+        permute_cpu, -2, -1
+    );
+    ocean_tensor_handle_t transposed_gpu = ocean_tensor_transpose_dims(
+        permute_gpu, -2, -1
+    );
+    check_close(transposed_cpu, transposed_gpu, "transpose_dims");
+
     size_t embedding_weight_shape[2] = {4, 3};
     ocean_tensor_handle_t embedding_weight_cpu = ocean_tensor_zeros_nd(
         embedding_weight_shape, 2, "float32", "cpu"
@@ -498,6 +524,12 @@ int main(void) {
     ocean_tensor_release(batched_left_gpu);
     ocean_tensor_release(batched_right_broadcast_cpu);
     ocean_tensor_release(batched_left_cpu);
+    ocean_tensor_release(transposed_gpu);
+    ocean_tensor_release(transposed_cpu);
+    ocean_tensor_release(permuted_gpu);
+    ocean_tensor_release(permuted_cpu);
+    ocean_tensor_release(permute_gpu);
+    ocean_tensor_release(permute_cpu);
     ocean_tensor_release(autograd_gradient_gpu);
     ocean_tensor_release(autograd_gradient_cpu);
     ocean_tensor_release(autograd_loss_gpu);

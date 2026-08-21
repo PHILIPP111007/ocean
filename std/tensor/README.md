@@ -223,6 +223,11 @@ GPU float32 `matmul` also supports arbitrary-rank batched operands with leading-
 broadcasting. The same kernel supports logical transposes for autograd `dA`/`dB` computation,
 while unsupported dtypes retain the existing CPU fallback.
 
+`permute()` and `transpose()` return independent contiguous tensors. On GPU they use an OpenCL
+gather kernel driven by the input strides and output shape, so arbitrary-rank layout transforms
+for any Tensor dtype stay on the device. CPU tensors use the same stride-aware mapping without
+the former recursive transpose path.
+
 `ternary_quantize()` is currently defined for float32 tensors. It computes the mean absolute
 weight scale, the `0.5 * scale` threshold, and the ternary values `{-scale, 0, +scale}` inside
 the selected backend. The OpenCL implementation uses one work-group reduction and quantization

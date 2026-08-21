@@ -35,6 +35,10 @@ generated C includes `std/tensor/tensor_runtime.h`.
   batch broadcasting, and transposed operands used by autograd backward;
   tensor data stays on the device while small batch metadata buffers are
   uploaded for indexing.
+- `permute` and `transpose_dims` use a generic byte-wise gather kernel for
+  GPU tensors. Shape, stride, and axis metadata are uploaded separately, so
+  the transform supports arbitrary rank, non-contiguous input strides, and
+  all Tensor dtypes without a GPU-to-CPU round-trip.
 
 ## Runtime objects
 
@@ -99,10 +103,12 @@ error instead of silently falling back to CPU.
 
 The additional hot paths are runtime primitives rather than public OpenCL ABI:
 `softmax`, `layer_norm`, `sum_dim`, `mean_dim`, SGD, AdamW, Embedding,
-CrossEntropy, and batched matmul receive opaque Tensor handles. The current native kernels target
-contiguous float32 tensors (and contiguous int64 indices/targets where
-applicable) and the last axis where applicable. Other axes, dtypes, and unsupported layouts retain the
-correctness-first CPU round-trip behavior. Autograd backward for softmax,
+CrossEntropy, batched matmul, and `permute` receive opaque Tensor handles. The
+arithmetic and ML kernels currently target contiguous float32 tensors (and
+contiguous int64 indices/targets where applicable) and the last axis where
+applicable. `permute` is the exception: its byte-wise gather supports any
+Tensor dtype and arbitrary rank. Other axes, dtypes, and unsupported layouts
+retain the correctness-first CPU round-trip behavior. Autograd backward for softmax,
 LayerNorm, and Embedding also has native float32 kernels for supported layouts.
 
 ## Safety boundary
