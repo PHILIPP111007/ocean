@@ -40,9 +40,11 @@ cimport <math.h>
 #   forward(W_ste)  == quantized
 #   dW_ste/dmaster  == 1
 #
-# This first experiment intentionally runs on CPU because ternarization uses
-# Tensor.get()/set() loops. Once quality is demonstrated, ternary packing and
-# vectorized CPU/GPU kernels should move into the runtime.
+# Ternarization still uses CPU Tensor.get()/set() loops, but the quantized
+# result is uploaded once per forward and the model executes on the selected device. The
+# master weights use the matmul-ready [in_features, out_features] layout so
+# every forward avoids a device transpose (the generic transpose path is a
+# CPU round-trip today).
 
 
 class TernaryLinear(Module):
@@ -51,7 +53,9 @@ class TernaryLinear(Module):
         self.in_features: int = in_features
         self.out_features: int = out_features
 
-        var weight_tensor: Tensor[float32] = Tensor(ocean_autograd_parameter_uniform(out_features, in_features, 0.1, "cpu"))
+        # Store weights in the layout consumed by input.matmul(weight).
+        # This removes a transpose and its CPU round-trip from every forward.
+        var weight_tensor: Tensor[float32] = Tensor(ocean_autograd_parameter_uniform(in_features, out_features, 0.1, "cpu"))
         var weight_parameter: Parameter = Parameter(weight_tensor)
         self.weight: Parameter = weight_parameter
 
@@ -67,8 +71,8 @@ class TernaryLinear(Module):
         var detached: Tensor[float32] = master.copy()
         var detached_cpu: Tensor[float32] = detached.to("cpu")
 
-        var rows: int = self.out_features
-        var cols: int = self.in_features
+        var rows: int = self.in_features
+        var cols: int = self.out_features
 
         var sum_abs: float64 = 0.0
         var row: int = 0
@@ -135,8 +139,7 @@ class TernaryLinear(Module):
 
     def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
         var weight: Tensor[float32] = self.ternary_weight()
-        var weight_t: Tensor[float32] = weight.transpose()
-        var projected: Tensor[float32] = input.matmul(weight_t)
+        var projected: Tensor[float32] = input.matmul(weight)
 
         var bias: Tensor[float32] = self.bias.tensor()
         var result: Tensor[float32] = projected.add(bias)
@@ -152,8 +155,8 @@ class TernaryLinear(Module):
         var detached: Tensor[float32] = master.copy()
         var detached_cpu: Tensor[float32] = detached.to("cpu")
 
-        var rows: int = self.out_features
-        var cols: int = self.in_features
+        var rows: int = self.in_features
+        var cols: int = self.out_features
 
         var sum_abs: float64 = 0.0
         var row: int = 0
@@ -213,7 +216,7 @@ class TernaryMultiHeadAttention(Module):
         self.v_proj: TernaryLinear = TernaryLinear(d_model, d_model)
         self.out_proj: TernaryLinear = TernaryLinear(d_model, d_model)
 
-    def forward(self, input: &Tensor[float32], causal_mask: &Tensor[float32]) -> Tensor[float32]:
+    def forward(self, input: &Tensor[float32], causal_bias: &Tensor[float32]) -> Tensor[float32]:
         var batch_size: int = input.shape(0)
         var sequence_length: int = input.shape(1)
 
@@ -234,7 +237,10 @@ class TernaryMultiHeadAttention(Module):
 
         var attention_scale: float64 = sqrt(self.head_dim)
         var scaled: Tensor[float32] = scores.div_scalar(attention_scale)
-        var masked: Tensor[float32] = scaled.masked_fill(causal_mask, -1000000000.0)
+        # causal_bias is zero for visible tokens and -1e9 for future tokens.
+        # Adding it replaces masked_fill's four elementwise operations with
+        # one GPU operation on this hot path.
+        var masked: Tensor[float32] = scaled.add(causal_bias)
         var weights: Tensor[float32] = masked.softmax(-1)
         var context: Tensor[float32] = weights.matmul(v)
 
@@ -262,9 +268,9 @@ class TernaryTransformerBlock(Module):
         self.ff1: TernaryLinear = TernaryLinear(d_model, d_ff)
         self.ff2: TernaryLinear = TernaryLinear(d_ff, d_model)
 
-    def forward(self, input: &Tensor[float32], causal_mask: &Tensor[float32]) -> Tensor[float32]:
+    def forward(self, input: &Tensor[float32], causal_bias: &Tensor[float32]) -> Tensor[float32]:
         var normalized1: Tensor[float32] = self.norm1.forward(input)
-        var attention_output: Tensor[float32] = self.attention.forward(normalized1, causal_mask)
+        var attention_output: Tensor[float32] = self.attention.forward(normalized1, causal_bias)
         var residual1: Tensor[float32] = input.add(attention_output)
 
         var normalized2: Tensor[float32] = self.norm2.forward(residual1)
@@ -335,14 +341,14 @@ class MediumTernaryGPT(Module):
         # this can be tested as ternary separately.
         self.lm_head: Linear = Linear(d_model, vocab_size)
 
-    def forward(self, tokens: &Tensor[int64], positions: &Tensor[int64], causal_mask: &Tensor[float32]) -> Tensor[float32]:
+    def forward(self, tokens: &Tensor[int64], positions: &Tensor[int64], causal_bias: &Tensor[float32]) -> Tensor[float32]:
         var token_hidden: Tensor[float32] = self.token_embedding.forward(tokens)
         var position_hidden: Tensor[float32] = self.position_embedding.forward(positions)
 
         var hidden0: Tensor[float32] = token_hidden.add(position_hidden)
-        var hidden1: Tensor[float32] = self.block1.forward(hidden0, causal_mask)
-        var hidden2: Tensor[float32] = self.block2.forward(hidden1, causal_mask)
-        var hidden3: Tensor[float32] = self.block3.forward(hidden2, causal_mask)
+        var hidden1: Tensor[float32] = self.block1.forward(hidden0, causal_bias)
+        var hidden2: Tensor[float32] = self.block2.forward(hidden1, causal_bias)
+        var hidden3: Tensor[float32] = self.block3.forward(hidden2, causal_bias)
 
         var normalized: Tensor[float32] = self.final_norm.forward(hidden3)
         return self.lm_head.forward(normalized)
@@ -425,8 +431,8 @@ def evaluate_fp(model: &MediumGPT, tokens: &Tensor[int64], targets: &Tensor[int6
     return loss.item()
 
 
-def evaluate_ternary(model: &MediumTernaryGPT, tokens: &Tensor[int64], targets: &Tensor[int64], positions: &Tensor[int64], mask: &Tensor[float32], criterion: &CrossEntropyLoss) -> float64:
-    var logits: Tensor[float32] = model.forward(tokens, positions, mask)
+def evaluate_ternary(model: &MediumTernaryGPT, tokens: &Tensor[int64], targets: &Tensor[int64], positions: &Tensor[int64], causal_bias: &Tensor[float32], criterion: &CrossEntropyLoss) -> float64:
+    var logits: Tensor[float32] = model.forward(tokens, positions, causal_bias)
 
     var loss: Tensor[float32] = criterion.forward(logits, targets)
 
@@ -460,7 +466,7 @@ def train_fp(model: &MediumGPT, tokens: &Tensor[int64], targets: &Tensor[int64],
     return None
 
 
-def train_ternary(model: &MediumTernaryGPT, tokens: &Tensor[int64], targets: &Tensor[int64], positions: &Tensor[int64], mask: &Tensor[float32], steps: int) -> None:
+def train_ternary(model: &MediumTernaryGPT, tokens: &Tensor[int64], targets: &Tensor[int64], positions: &Tensor[int64], causal_bias: &Tensor[float32], steps: int) -> None:
     var parameters: list[Parameter] = model.parameters()
 
     var optimizer: AdamW = AdamW(parameters, 0.001, 0.9, 0.999, 0.00000001, 0.01)
@@ -472,7 +478,7 @@ def train_ternary(model: &MediumTernaryGPT, tokens: &Tensor[int64], targets: &Te
     while step < steps:
         optimizer.zero_grad()
 
-        var logits: Tensor[float32] = model.forward(tokens, positions, mask)
+        var logits: Tensor[float32] = model.forward(tokens, positions, causal_bias)
 
         var loss: Tensor[float32] = criterion.forward(logits, targets)
 
@@ -511,6 +517,7 @@ def main() -> int:
     fill_positions(positions, context_length)
 
     fill_causal_mask(mask, context_length)
+    var causal_bias: Tensor[float32] = mask.mul_scalar(-1000000000.0)
 
     fill_language_batch(train_tokens, train_targets, train_batch_size, context_length, vocab_size, 0)
 
@@ -541,6 +548,7 @@ def main() -> int:
     var eval_targets_gpu: Tensor[int64] = eval_targets.to("gpu")
     var positions_gpu: Tensor[int64] = positions.to("gpu")
     var mask_gpu: Tensor[float32] = mask.to("gpu")
+    var causal_bias_gpu: Tensor[float32] = causal_bias.to("gpu")
 
     var criterion: CrossEntropyLoss = CrossEntropyLoss()
 
@@ -548,9 +556,9 @@ def main() -> int:
 
     var fp_initial_eval: float64 = evaluate_fp(fp_model, eval_tokens_gpu, eval_targets_gpu, positions_gpu, mask_gpu, criterion)
 
-    var ternary_initial_train: float64 = evaluate_ternary(ternary_model, train_tokens_gpu, train_targets_gpu, positions_gpu, mask_gpu, criterion)
+    var ternary_initial_train: float64 = evaluate_ternary(ternary_model, train_tokens_gpu, train_targets_gpu, positions_gpu, causal_bias_gpu, criterion)
 
-    var ternary_initial_eval: float64 = evaluate_ternary(ternary_model, eval_tokens_gpu, eval_targets_gpu, positions_gpu, mask_gpu, criterion)
+    var ternary_initial_eval: float64 = evaluate_ternary(ternary_model, eval_tokens_gpu, eval_targets_gpu, positions_gpu, causal_bias_gpu, criterion)
 
     print("")
     print("INITIAL")
@@ -565,15 +573,15 @@ def main() -> int:
 
     print("")
     print("TRAIN TERNARY")
-    train_ternary(ternary_model, train_tokens_gpu, train_targets_gpu, positions_gpu, mask_gpu, training_steps)
+    train_ternary(ternary_model, train_tokens_gpu, train_targets_gpu, positions_gpu, causal_bias_gpu, training_steps)
 
     var fp_final_train: float64 = evaluate_fp(fp_model, train_tokens_gpu, train_targets_gpu, positions_gpu, mask_gpu, criterion)
 
     var fp_final_eval: float64 = evaluate_fp(fp_model, eval_tokens_gpu, eval_targets_gpu, positions_gpu, mask_gpu, criterion)
 
-    var ternary_final_train: float64 = evaluate_ternary(ternary_model, train_tokens_gpu, train_targets_gpu, positions_gpu, mask_gpu, criterion)
+    var ternary_final_train: float64 = evaluate_ternary(ternary_model, train_tokens_gpu, train_targets_gpu, positions_gpu, causal_bias_gpu, criterion)
 
-    var ternary_final_eval: float64 = evaluate_ternary(ternary_model, eval_tokens_gpu, eval_targets_gpu, positions_gpu, mask_gpu, criterion)
+    var ternary_final_eval: float64 = evaluate_ternary(ternary_model, eval_tokens_gpu, eval_targets_gpu, positions_gpu, causal_bias_gpu, criterion)
 
     var zero_fraction: float64 = ternary_model.representative_zero_fraction()
 
