@@ -40,6 +40,11 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+    def gelu(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_autograd_gelu(self.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
     @staticmethod
     def zeros(rows: int, cols: int, device: str) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_zeros(rows, cols, device)

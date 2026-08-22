@@ -48,6 +48,7 @@ class Tensor:
     def sub_scalar(self, value: float64) -> Tensor[T]
     def mul_scalar(self, value: float64) -> Tensor[T]
     def div_scalar(self, value: float64) -> Tensor[T]
+    def gelu(self) -> Tensor[float32]
     def get(self, row: int, col: int) -> float64
     def set(self, row: int, col: int, value: float64) -> None
     def reshape(self, rows: int, cols: int) -> Tensor[T]
@@ -218,6 +219,10 @@ public `Embedding.forward()` API remains unchanged.
 stable softmax probabilities and the mean negative log-likelihood on the device; backward computes
 the normalized `(softmax - one_hot)` gradient on the device. Invalid targets are reported through
 a device-side error flag.
+
+`gelu()` uses the GPT-2 tanh approximation and has an autograd backward path.
+For GPU tensors it currently uses a correctness-first CPU round trip; a native
+OpenCL GELU kernel is tracked separately.
 
 GPU float32 `matmul` also supports arbitrary-rank batched operands with leading-dimension
 broadcasting. The same kernel supports logical transposes for autograd `dA`/`dB` computation,

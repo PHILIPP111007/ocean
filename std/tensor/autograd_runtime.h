@@ -44,6 +44,9 @@ ocean_tensor_handle_t ocean_autograd_transpose(
 ocean_tensor_handle_t ocean_autograd_relu(
     ocean_tensor_handle_t tensor
 );
+ocean_tensor_handle_t ocean_autograd_gelu(
+    ocean_tensor_handle_t tensor
+);
 ocean_tensor_handle_t ocean_autograd_mse_loss(
     ocean_tensor_handle_t prediction,
     ocean_tensor_handle_t target

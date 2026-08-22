@@ -1,12 +1,12 @@
 # Handoff — Phils Language / Ocean
 
-> Обновлено: **2026-08-19**
+> Обновлено: **2026-08-22**
 >
 > Этот документ — актуальный технический handoff по текущему состоянию Ocean.
 > Он намеренно отделяет **что уже доказано тестами** от **что реализовано, но ещё
 > не подтверждено в целевом окружении**, и от **что остаётся roadmap**.
 >
-> Основная ветка разработки: `dev`.
+> Основная ветка разработки: `main`.
 
 ---
 
@@ -95,16 +95,23 @@ native executable
 - AdamW;
 - Embedding;
 - CrossEntropyLoss;
+- GPT-2-style ternary decoder model;
+- GPT-2 tanh-approximation GELU with autograd;
 - MultiHeadAttention;
 - TransformerBlock;
 - TinyGPT;
 - next-token training end-to-end.
 
-Последняя общая проверка после добавления GPU device semantics:
+Последняя общая проверка после GPT-2/GELU изменений:
 
 ```text
-137 passed, 1 skipped
+141 passed, 2 skipped, 1 failed
 ```
+
+Единственный failure — `tests/test_net_std.py::test_std_net_http`: текущий
+sandbox запрещает серверному smoke-тесту `bind/listen` и возвращает
+`Operation not permitted`. Это ограничение окружения, а не регрессия Tensor,
+autograd или ML.
 
 Пропущен именно GPU integration test, потому что в текущем окружении
 OpenCL development/runtime environment пока не полностью доступен.
@@ -761,6 +768,13 @@ TransformerBlock
 Embedding
 CrossEntropyLoss
 
+GPT2Config
+TernaryLinear
+GPT2Attention
+GPT2MLP
+GPT2Block
+GPT2Ternary
+
 SGD
 AdamW
 
@@ -872,6 +886,11 @@ weight_t = weight.transpose()
 output = input.matmul(weight_t)
 result = output + bias
 ```
+
+Для горячей output-проекции пример
+`examples/ML/medium_gpt_native_ternary_train_gpu.oc` использует отдельный
+`MatmulLinear`: он хранит полноточный weight в форме
+`[in_features, out_features]` и не выполняет transpose на каждом forward.
 
 Работает с batched input благодаря ND matmul + broadcasting.
 
@@ -1016,6 +1035,20 @@ softmax(logits) - one_hot(target)
 
 ---
 
+## GELU
+
+`Tensor.gelu()` реализует GPT-2 tanh approximation:
+
+```text
+0.5 * x * (1 + tanh(0.79788456 * (x + 0.044715 * x^3)))
+```
+
+Forward и backward используются в GPT-2 smoke-модели. Сейчас на GPU GELU
+остаётся correctness-first CPU fallback с возвратом на исходное устройство;
+отдельное OpenCL-ядро GELU — следующий GPU bottleneck.
+
+---
+
 # 30. TinyGPT v0.1
 
 Рабочая архитектура:
@@ -1079,6 +1112,34 @@ Embedding
 → backward
 → optimizer
 ```
+
+## GPT-2-style ternary model
+
+`examples/ML/gpt2_native_ternary.oc` добавляет полноценное training core
+decoder-only архитектуры GPT-2:
+
+```text
+token embedding + learned position embedding
+    ↓
+pre-LN causal self-attention
+    ↓
+residual
+    ↓
+pre-LN MLP with GPT-2 GELU
+    ↓
+residual
+    ↓
+final LayerNorm + tied token-embedding LM head
+```
+
+Linear weights используют weight-only ternarization со straight-through
+estimator: forward видит `{-scale, 0, +scale}`, а AdamW обновляет
+полноточный master Parameter. Конфигурация smoke-теста компактная, но классы
+поддерживают до 12 decoder blocks — глубину GPT-2 small.
+
+Это архитектурно точная GPT-2-подобная модель, но пока не ABI-совместимый
+загрузчик pretrained GPT-2: нет tokenizer/checkpoint loader, dropout, KV-cache
+и fused `c_attn` layout. Эти возможности остаются отдельными milestones.
 
 ---
 
@@ -1742,10 +1803,10 @@ lifetime tests
 
 # 50. Текущая regression база
 
-Последний фактически сообщённый результат:
+Последний фактически полученный результат:
 
 ```text
-137 passed, 1 skipped
+141 passed, 2 skipped, 1 failed
 ```
 
 `skipped`:
@@ -1754,7 +1815,8 @@ lifetime tests
 GPU training/inference integration
 ```
 
-CPU TinyGPT, AdamW и остальные regression tests проходят.
+CPU TinyGPT, AdamW, GPT-2 smoke и остальные ML regression tests проходят.
+Один сетевой failure вызван ограничением sandbox на `bind/listen`.
 
 При изменениях Tensor/autograd всегда отдельно прогонять:
 
@@ -1978,7 +2040,6 @@ arena
 
 ```text
 Dropout
-GELU / SiLU
 RoPE
 RMSNorm
 KV cache
