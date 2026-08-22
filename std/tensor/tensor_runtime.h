@@ -39,6 +39,11 @@ void ocean_tensor_save_npy(
 );
 ocean_tensor_handle_t ocean_tensor_copy(ocean_tensor_handle_t tensor);
 ocean_tensor_handle_t ocean_tensor_ternary_quantize(ocean_tensor_handle_t tensor);
+ocean_tensor_handle_t ocean_tensor_gelu(ocean_tensor_handle_t tensor);
+ocean_tensor_handle_t ocean_tensor_gelu_backward(
+    ocean_tensor_handle_t upstream,
+    ocean_tensor_handle_t input
+);
 ocean_tensor_handle_t ocean_tensor_embedding_forward(
     ocean_tensor_handle_t weight,
     ocean_tensor_handle_t indices

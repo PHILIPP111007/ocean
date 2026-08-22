@@ -533,55 +533,7 @@ static ocean_tensor_handle_t ocean_autograd_gelu_backward_impl(
     ocean_tensor_handle_t upstream,
     ocean_tensor_handle_t saved_input
 ) {
-    const float coefficient = 0.7978845608028654f;
-    const float cubic = 0.044715f;
-    char *device = ocean_tensor_device(upstream);
-    ocean_tensor_handle_t upstream_cpu = strcmp(device, "cpu") == 0
-        ? upstream
-        : ocean_tensor_to(upstream, "cpu");
-    ocean_tensor_handle_t input_cpu = strcmp(device, "cpu") == 0
-        ? saved_input
-        : ocean_tensor_to(saved_input, "cpu");
-
-    size_t size = ocean_tensor_size(upstream_cpu);
-    float *data = size ? (float *)malloc(size * sizeof(float)) : NULL;
-    if (size && !data) {
-        if (upstream_cpu != upstream) ocean_tensor_release(upstream_cpu);
-        if (input_cpu != saved_input) ocean_tensor_release(input_cpu);
-        free(device);
-        ocean_tensor_fail("out of memory in GELU backward");
-    }
-
-    for (size_t index = 0; index < size; ++index) {
-        float value = ocean_tensor_get_flat_f32(input_cpu, index);
-        float argument = coefficient * (
-            value + cubic * value * value * value
-        );
-        float tanh_argument = tanhf(argument);
-        float derivative = 0.5f * (1.0f + tanh_argument);
-        derivative += 0.5f * value
-            * (1.0f - tanh_argument * tanh_argument)
-            * coefficient
-            * (1.0f + 3.0f * cubic * value * value);
-        data[index] = ocean_tensor_get_flat_f32(upstream_cpu, index)
-            * derivative;
-    }
-
-    ocean_tensor_handle_t result = ocean_autograd_from_float_data_like(
-        upstream_cpu,
-        data
-    );
-    if (strcmp(device, "cpu") != 0) {
-        ocean_tensor_handle_t moved = ocean_tensor_to(result, device);
-        ocean_tensor_release(result);
-        result = moved;
-    }
-
-    free(data);
-    free(device);
-    if (upstream_cpu != upstream) ocean_tensor_release(upstream_cpu);
-    if (input_cpu != saved_input) ocean_tensor_release(input_cpu);
-    return result;
+    return ocean_tensor_gelu_backward(upstream, saved_input);
 }
 
 static ocean_autograd_node *ocean_autograd_node_new(int operation) {
@@ -1434,11 +1386,7 @@ ocean_tensor_handle_t ocean_autograd_pow(
 }
 
 ocean_tensor_handle_t ocean_autograd_gelu(ocean_tensor_handle_t tensor) {
-    ocean_tensor_handle_t result = ocean_autograd_unary_cpu_v03(
-        tensor,
-        OCEAN_AUTOGRAD_GELU,
-        0.0
-    );
+    ocean_tensor_handle_t result = ocean_tensor_gelu(tensor);
 
     ocean_autograd_meta *parent = ocean_autograd_find(tensor);
     if (!parent || !parent->requires_grad) return result;

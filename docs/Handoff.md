@@ -105,7 +105,7 @@ native executable
 Последняя общая проверка после GPT-2/GELU изменений:
 
 ```text
-141 passed, 2 skipped, 1 failed
+141 passed, 3 skipped, 1 failed
 ```
 
 Единственный failure — `tests/test_net_std.py::test_std_net_http`: текущий
@@ -769,6 +769,7 @@ Embedding
 CrossEntropyLoss
 
 GPT2Config
+GPT2Embedding
 TernaryLinear
 GPT2Attention
 GPT2MLP
@@ -1043,9 +1044,9 @@ softmax(logits) - one_hot(target)
 0.5 * x * (1 + tanh(0.79788456 * (x + 0.044715 * x^3)))
 ```
 
-Forward и backward используются в GPT-2 smoke-модели. Сейчас на GPU GELU
-остаётся correctness-first CPU fallback с возвратом на исходное устройство;
-отдельное OpenCL-ядро GELU — следующий GPU bottleneck.
+Forward и backward используются в GPT-2 GPU-модели. Для contiguous float32
+Tensor обе операции выполняются native OpenCL kernels; неподдержанные dtype и
+формы сохраняют correctness-first fallback semantics.
 
 ---
 
@@ -1136,6 +1137,30 @@ Linear weights используют weight-only ternarization со straight-thro
 estimator: forward видит `{-scale, 0, +scale}`, а AdamW обновляет
 полноточный master Parameter. Конфигурация smoke-теста компактная, но классы
 поддерживают до 12 decoder blocks — глубину GPT-2 small.
+
+Это пока QAT/STE-режим, а не packed deployment: master weights и optimizer
+state остаются `float32`. Для настоящего уменьшения checkpoint до ternary
+storage нужны packing в 2 bits, scale metadata и отдельный inference loader.
+
+Канонический профиль доступен через Ocean-фабрику:
+
+```ocean
+var config: GPT2Config = gpt2_small_config()
+```
+
+Он задаёт:
+
+```text
+vocab_size = 50257
+max_seq_len = 1024
+d_model = 768
+n_heads = 12
+d_ff = 3072
+n_layers = 12
+```
+
+`GPT2Embedding` использует GPT-2 initialization range `0.02`; обычный
+`std.ml.Embedding` сохраняет старый default `0.1` для обратной совместимости.
 
 Это архитектурно точная GPT-2-подобная модель, но пока не ABI-совместимый
 загрузчик pretrained GPT-2: нет tokenizer/checkpoint loader, dropout, KV-cache
@@ -1312,6 +1337,7 @@ softmax по последней оси для float32
 LayerNorm по последней оси для float32
 softmax backward по последней оси для float32
 LayerNorm backward по последней оси для float32
+GELU forward/backward для float32
 sum_dim/mean_dim по последней оси для float32
 SGD update для GPU float32
 AdamW update и GPU m/v buffers для float32
@@ -1806,13 +1832,15 @@ lifetime tests
 Последний фактически полученный результат:
 
 ```text
-141 passed, 2 skipped, 1 failed
+141 passed, 3 skipped, 1 failed
 ```
 
 `skipped`:
 
 ```text
 GPU training/inference integration
+GPU Tensor hotpaths integration
+GPT-2 native ternary GPU integration
 ```
 
 CPU TinyGPT, AdamW, GPT-2 smoke и остальные ML regression tests проходят.
@@ -1921,6 +1949,7 @@ tests/test_gpu_training_v01_ocean.py → passed
 broadcast binary
 softmax
 LayerNorm
+GELU forward/backward
 reductions
 ```
 

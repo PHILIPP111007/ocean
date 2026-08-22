@@ -143,6 +143,8 @@ class Validator:
                             "ocean_tensor_len",
                             "ocean_tensor_copy",
                             "ocean_tensor_ternary_quantize",
+                            "ocean_tensor_gelu",
+                            "ocean_tensor_gelu_backward",
                             "ocean_tensor_copy_into",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",

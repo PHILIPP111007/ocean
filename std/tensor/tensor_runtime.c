@@ -100,6 +100,13 @@ static ocean_tensor_handle_t ocean_tensor_scalar_opencl(
 static ocean_tensor_handle_t ocean_tensor_ternary_quantize_cpu(
     const ocean_tensor_handle_t tensor
 );
+static ocean_tensor_handle_t ocean_tensor_gelu_cpu(
+    const ocean_tensor_handle_t tensor
+);
+static ocean_tensor_handle_t ocean_tensor_gelu_backward_cpu(
+    const ocean_tensor_handle_t upstream,
+    const ocean_tensor_handle_t input
+);
 static ocean_tensor_handle_t ocean_tensor_embedding_forward_cpu(
     const ocean_tensor_handle_t weight,
     const ocean_tensor_handle_t indices
@@ -165,6 +172,12 @@ static void ocean_tensor_opencl_permute(
     const ocean_tensor_handle_t input,
     ocean_tensor_handle_t output,
     const int *axes
+);
+static void ocean_tensor_opencl_gelu(
+    const ocean_tensor_handle_t first,
+    const ocean_tensor_handle_t second,
+    ocean_tensor_handle_t output,
+    int key
 );
 #endif
 static void ocean_tensor_write_scalar(
@@ -634,6 +647,35 @@ static const char *ocean_tensor_hotpath_kernel_source =
     "}"
     "}";
 
+static const char *ocean_tensor_gelu_kernel_source =
+    "__kernel void ocean_tensor_gelu("
+    "__global const float *input, __global float *output, "
+    "const int size) {"
+    "int index = (int)get_global_id(0);"
+    "if (index >= size) return;"
+    "const float coefficient = 0.7978845608028654f;"
+    "const float cubic = 0.044715f;"
+    "float value = input[index];"
+    "float value_squared = value * value;"
+    "float argument = coefficient * (value + cubic * value * value_squared);"
+    "output[index] = 0.5f * value * (1.0f + tanh(argument));"
+    "}"
+    "__kernel void ocean_tensor_gelu_backward("
+    "__global const float *upstream, __global const float *input, "
+    "__global float *output, const int size) {"
+    "int index = (int)get_global_id(0);"
+    "if (index >= size) return;"
+    "const float coefficient = 0.7978845608028654f;"
+    "const float cubic = 0.044715f;"
+    "float value = input[index];"
+    "float argument = coefficient * (value + cubic * value * value * value);"
+    "float tanh_argument = tanh(argument);"
+    "float derivative = 0.5f * (1.0f + tanh_argument);"
+    "derivative += 0.5f * value * (1.0f - tanh_argument * tanh_argument)"
+    " * coefficient * (1.0f + 3.0f * cubic * value * value);"
+    "output[index] = upstream[index] * derivative;"
+    "}";
+
 static const char *ocean_tensor_embedding_kernel_source =
     "inline void ocean_tensor_atomic_add_f32("
     "volatile __global float *address, const float value) {"
@@ -799,6 +841,8 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_kernel sgd_update_kernel;
     cl_kernel adamw_update_kernel;
     cl_kernel ternary_quantize_kernel;
+    cl_kernel gelu_kernel;
+    cl_kernel gelu_backward_kernel;
     cl_kernel embedding_forward_kernel;
     cl_kernel embedding_backward_kernel;
     cl_kernel cross_entropy_forward_kernel;
@@ -822,6 +866,8 @@ typedef enum ocean_tensor_opencl_kernel_key {
     OCEAN_TENSOR_OPENCL_KERNEL_SGD_UPDATE_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_ADAMW_UPDATE_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_QUANTIZE_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_GELU_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_GELU_BACKWARD_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_FORWARD_FLOAT32_INT64,
     OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_BACKWARD_FLOAT32_INT64,
     OCEAN_TENSOR_OPENCL_KERNEL_CROSS_ENTROPY_FORWARD_FLOAT32_INT64,
@@ -996,12 +1042,13 @@ static void ocean_tensor_opencl_init(void) {
         ocean_tensor_batched_matmul_kernel_source,
         ocean_tensor_permute_kernel_source,
         ocean_tensor_hotpath_kernel_source,
+        ocean_tensor_gelu_kernel_source,
         ocean_tensor_embedding_kernel_source,
         ocean_tensor_cross_entropy_kernel_source,
         ocean_tensor_backward_kernel_source,
     };
     ocean_tensor_opencl.program = clCreateProgramWithSource(
-        ocean_tensor_opencl.context, 7, sources, NULL, &status
+        ocean_tensor_opencl.context, 8, sources, NULL, &status
     );
     ocean_tensor_opencl_check(status, "clCreateProgramWithSource");
     status = clBuildProgram(
@@ -1088,6 +1135,14 @@ static cl_kernel ocean_tensor_opencl_get_kernel(
         case OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_QUANTIZE_FLOAT32:
             slot = &ocean_tensor_opencl.ternary_quantize_kernel;
             name = "ocean_tensor_ternary_quantize";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_GELU_FLOAT32:
+            slot = &ocean_tensor_opencl.gelu_kernel;
+            name = "ocean_tensor_gelu";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_GELU_BACKWARD_FLOAT32:
+            slot = &ocean_tensor_opencl.gelu_backward_kernel;
+            name = "ocean_tensor_gelu_backward";
             break;
         case OCEAN_TENSOR_OPENCL_KERNEL_EMBEDDING_FORWARD_FLOAT32_INT64:
             slot = &ocean_tensor_opencl.embedding_forward_kernel;
@@ -1555,6 +1610,90 @@ ocean_tensor_handle_t ocean_tensor_ternary_quantize(
         ocean_tensor_opencl_ternary_quantize(source, result);
     }
     if (contiguous) ocean_tensor_release(contiguous);
+    return result;
+#else
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+    return NULL;
+#endif
+}
+
+ocean_tensor_handle_t ocean_tensor_gelu(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor.gelu on null handle");
+    if (tensor->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Tensor.gelu currently requires float32");
+    }
+
+    if (tensor->device == OCEAN_TENSOR_CPU) {
+        return ocean_tensor_gelu_cpu(tensor);
+    }
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    ocean_tensor_handle_t source = ocean_tensor_is_contiguous(tensor)
+        ? tensor : ocean_tensor_contiguous(tensor);
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        source->shape, source->ndim, source->dtype, OCEAN_TENSOR_GPU
+    );
+    if (source->size != 0) {
+        ocean_tensor_opencl_gelu(
+            source,
+            NULL,
+            result,
+            OCEAN_TENSOR_OPENCL_KERNEL_GELU_FLOAT32
+        );
+    }
+    if (source != tensor) ocean_tensor_release(source);
+    return result;
+#else
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+    return NULL;
+#endif
+}
+
+ocean_tensor_handle_t ocean_tensor_gelu_backward(
+    ocean_tensor_handle_t upstream,
+    ocean_tensor_handle_t input
+) {
+    if (!upstream || !input) {
+        ocean_tensor_fail("Tensor.gelu backward requires non-null tensors");
+    }
+    if (upstream->dtype != OCEAN_TENSOR_FLOAT32 ||
+        input->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Tensor.gelu backward currently requires float32");
+    }
+    if (upstream->device != input->device ||
+        upstream->size != input->size ||
+        upstream->ndim != input->ndim) {
+        ocean_tensor_fail("Tensor.gelu backward shape/device mismatch");
+    }
+    for (size_t axis = 0; axis < input->ndim; ++axis) {
+        if (upstream->shape[axis] != input->shape[axis]) {
+            ocean_tensor_fail("Tensor.gelu backward shape mismatch");
+        }
+    }
+
+    if (input->device == OCEAN_TENSOR_CPU) {
+        return ocean_tensor_gelu_backward_cpu(upstream, input);
+    }
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    ocean_tensor_handle_t upstream_source = ocean_tensor_is_contiguous(upstream)
+        ? upstream : ocean_tensor_contiguous(upstream);
+    ocean_tensor_handle_t input_source = ocean_tensor_is_contiguous(input)
+        ? input : ocean_tensor_contiguous(input);
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        input_source->shape, input_source->ndim,
+        input_source->dtype, OCEAN_TENSOR_GPU
+    );
+    if (input_source->size != 0) {
+        ocean_tensor_opencl_gelu(
+            upstream_source,
+            input_source,
+            result,
+            OCEAN_TENSOR_OPENCL_KERNEL_GELU_BACKWARD_FLOAT32
+        );
+    }
+    if (upstream_source != upstream) ocean_tensor_release(upstream_source);
+    if (input_source != input) ocean_tensor_release(input_source);
     return result;
 #else
     ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
@@ -2553,6 +2692,55 @@ static ocean_tensor_handle_t ocean_tensor_ternary_quantize_cpu(
     return result;
 }
 
+static ocean_tensor_handle_t ocean_tensor_gelu_cpu(
+    const ocean_tensor_handle_t tensor
+) {
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_CPU
+    );
+    const float *input = (const float *)tensor->cpu_data;
+    float *output = (float *)result->cpu_data;
+    const float coefficient = 0.7978845608028654f;
+    const float cubic = 0.044715f;
+    for (size_t index = 0; index < tensor->size; ++index) {
+        float value = input[index];
+        float value_squared = value * value;
+        float argument = coefficient * (
+            value + cubic * value * value_squared
+        );
+        output[index] = 0.5f * value * (1.0f + tanhf(argument));
+    }
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_tensor_gelu_backward_cpu(
+    const ocean_tensor_handle_t upstream,
+    const ocean_tensor_handle_t input
+) {
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        input->shape, input->ndim, input->dtype, OCEAN_TENSOR_CPU
+    );
+    const float *upstream_data = (const float *)upstream->cpu_data;
+    const float *input_data = (const float *)input->cpu_data;
+    float *output = (float *)result->cpu_data;
+    const float coefficient = 0.7978845608028654f;
+    const float cubic = 0.044715f;
+    for (size_t index = 0; index < input->size; ++index) {
+        float value = input_data[index];
+        float argument = coefficient * (
+            value + cubic * value * value * value
+        );
+        float tanh_argument = tanhf(argument);
+        float derivative = 0.5f * (1.0f + tanh_argument);
+        derivative += 0.5f * value
+            * (1.0f - tanh_argument * tanh_argument)
+            * coefficient
+            * (1.0f + 3.0f * cubic * value * value);
+        output[index] = upstream_data[index] * derivative;
+    }
+    return result;
+}
+
 static ocean_tensor_handle_t ocean_tensor_embedding_forward_cpu(
     const ocean_tensor_handle_t weight,
     const ocean_tensor_handle_t indices
@@ -2854,6 +3042,60 @@ static void ocean_tensor_opencl_scalar(
         "clSetKernelArg"
     );
     size_t global_size = tensor->size ? tensor->size : 1;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_gelu(
+    const ocean_tensor_handle_t first,
+    const ocean_tensor_handle_t second,
+    ocean_tensor_handle_t output,
+    int key
+) {
+    if (first->size > (size_t)INT32_MAX) {
+        ocean_tensor_fail("GPU Tensor is too large for OpenCL kernel indexing");
+    }
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(key);
+    int size = (int)first->size;
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &first->gpu_data),
+        "clSetKernelArg"
+    );
+    if (key == OCEAN_TENSOR_OPENCL_KERNEL_GELU_BACKWARD_FLOAT32) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(kernel, 1, sizeof(cl_mem), &second->gpu_data),
+            "clSetKernelArg"
+        );
+        ocean_tensor_opencl_check(
+            clSetKernelArg(kernel, 2, sizeof(cl_mem), &output->gpu_data),
+            "clSetKernelArg"
+        );
+    } else {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(kernel, 1, sizeof(cl_mem), &output->gpu_data),
+            "clSetKernelArg"
+        );
+    }
+    ocean_tensor_opencl_check(
+        clSetKernelArg(
+            kernel,
+            key == OCEAN_TENSOR_OPENCL_KERNEL_GELU_BACKWARD_FLOAT32 ? 3 : 2,
+            sizeof(int),
+            &size
+        ),
+        "clSetKernelArg"
+    );
+    size_t global_size = first->size ? first->size : 1;
     cl_event event = NULL;
     ocean_tensor_opencl_check(
         clEnqueueNDRangeKernel(

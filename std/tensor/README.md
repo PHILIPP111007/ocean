@@ -221,8 +221,8 @@ the normalized `(softmax - one_hot)` gradient on the device. Invalid targets are
 a device-side error flag.
 
 `gelu()` uses the GPT-2 tanh approximation and has an autograd backward path.
-For GPU tensors it currently uses a correctness-first CPU round trip; a native
-OpenCL GELU kernel is tracked separately.
+For contiguous float32 GPU tensors both forward and backward use native OpenCL
+kernels.
 
 GPU float32 `matmul` also supports arbitrary-rank batched operands with leading-dimension
 broadcasting. The same kernel supports logical transposes for autograd `dA`/`dB` computation,
