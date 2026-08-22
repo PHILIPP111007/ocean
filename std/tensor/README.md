@@ -75,6 +75,11 @@ class Tensor:
 
 Valid device strings in v1 are exactly `"cpu"` and `"gpu"`.
 
+When OpenCL is enabled, `"gpu"` requires an actual device reported as
+`CL_DEVICE_TYPE_GPU`. The runtime searches all OpenCL platforms and refuses to
+fall back to `CL_DEVICE_TYPE_DEFAULT`, because that default may be a CPU OpenCL
+implementation and would make a GPU benchmark misleading.
+
 Example:
 
 ```text

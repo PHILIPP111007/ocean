@@ -1010,18 +1010,38 @@ static void ocean_tensor_opencl_init(void) {
     );
     if (platform_count == 0) ocean_tensor_fail("no OpenCL platform is available");
 
-    cl_platform_id platform = NULL;
-    ocean_tensor_opencl_check(
-        clGetPlatformIDs(1, &platform, NULL), "clGetPlatformIDs"
+    cl_platform_id *platforms = (cl_platform_id *)calloc(
+        platform_count, sizeof(*platforms)
     );
+    if (!platforms) ocean_tensor_fail("out of memory enumerating OpenCL platforms");
+    ocean_tensor_opencl_check(
+        clGetPlatformIDs(platform_count, platforms, NULL), "clGetPlatformIDs"
+    );
+
+    /* A Tensor selected as "gpu" must never silently bind to a CPU OpenCL
+       device through CL_DEVICE_TYPE_DEFAULT. Search every platform and fail
+       explicitly when no real GPU device is exposed by the ICD. */
+    cl_platform_id platform = NULL;
     cl_device_id device = NULL;
-    cl_int status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, NULL);
-    if (status != CL_SUCCESS) {
-        ocean_tensor_opencl_check(
-            clGetDeviceIDs(platform, CL_DEVICE_TYPE_DEFAULT, 1, &device, NULL),
-            "clGetDeviceIDs"
+    for (cl_uint index = 0; index < platform_count; ++index) {
+        cl_device_id candidate = NULL;
+        cl_int device_status = clGetDeviceIDs(
+            platforms[index], CL_DEVICE_TYPE_GPU, 1, &candidate, NULL
+        );
+        if (device_status == CL_SUCCESS) {
+            platform = platforms[index];
+            device = candidate;
+            break;
+        }
+    }
+    free(platforms);
+    if (!device || !platform) {
+        ocean_tensor_fail(
+            "no OpenCL GPU device is available; refusing CPU fallback for device= gpu"
         );
     }
+
+    cl_int status = CL_SUCCESS;
 
     ocean_tensor_opencl.context =
         clCreateContext(NULL, 1, &device, NULL, NULL, &status);

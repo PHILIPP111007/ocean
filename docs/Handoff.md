@@ -1179,6 +1179,11 @@ baseline текущего API, но не финальной production-скор�
 inference нужно вызывать оба API, если модель содержит train/eval-зависимые
 операции.
 
+OpenCL runtime больше не подменяет `CL_DEVICE_TYPE_GPU` на
+`CL_DEVICE_TYPE_DEFAULT`: если ICD не предоставляет настоящий GPU, выбор
+`device="gpu"` завершается явной ошибкой. Это не позволяет CPU OpenCL
+реализации выдавать себя за GPU в benchmark.
+
 ---
 
 # 31. TinyGPT parameters
