@@ -105,7 +105,7 @@ native executable
 Последняя общая проверка после GPT-2/GELU изменений:
 
 ```text
-141 passed, 3 skipped, 1 failed
+142 passed, 2 skipped, 1 failed
 ```
 
 Единственный failure — `tests/test_net_std.py::test_std_net_http`: текущий
@@ -1166,6 +1166,19 @@ n_layers = 12
 загрузчик pretrained GPT-2: нет tokenizer/checkpoint loader, dropout, KV-cache
 и fused `c_attn` layout. Эти возможности остаются отдельными milestones.
 
+Для inference-only замера добавлен отдельный пример
+`examples/ML/gpt2_native_ternary_inference.oc`. Он использует канонический
+GPT-2 small профиль, делает один warmup token, отключает autograd через
+`Tensor.set_grad_enabled(False)` и печатает elapsed time, milliseconds/token и
+tokens/second. Генерация сейчас full-prefix: каждый новый token заново считает
+весь prefix и не использует KV-cache, поэтому результат является честным
+baseline текущего API, но не финальной production-скоростью.
+
+`Tensor.grad_enabled()` / `Tensor.set_grad_enabled(...)` — глобальный runtime
+переключатель построения autograd graph. Он не заменяет `Module.eval()`: для
+inference нужно вызывать оба API, если модель содержит train/eval-зависимые
+операции.
+
 ---
 
 # 31. TinyGPT parameters
@@ -1832,7 +1845,7 @@ lifetime tests
 Последний фактически полученный результат:
 
 ```text
-141 passed, 3 skipped, 1 failed
+142 passed, 2 skipped, 1 failed
 ```
 
 `skipped`:
@@ -1840,11 +1853,12 @@ lifetime tests
 ```text
 GPU training/inference integration
 GPU Tensor hotpaths integration
-GPT-2 native ternary GPU integration
 ```
 
-CPU TinyGPT, AdamW, GPT-2 smoke и остальные ML regression tests проходят.
-Один сетевой failure вызван ограничением sandbox на `bind/listen`.
+CPU TinyGPT, AdamW, GPT-2 smoke, inference benchmark compilation и остальные
+ML regression tests проходят. Реальное выполнение GPT-2 inference benchmark на
+GPU ещё не подтверждено, поскольку OpenCL platform отсутствует в текущем
+окружении. Один сетевой failure вызван ограничением sandbox на `bind/listen`.
 
 При изменениях Tensor/autograd всегда отдельно прогонять:
 

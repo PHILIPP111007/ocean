@@ -219,6 +219,24 @@ Embedding
 → optimizer
 ```
 
+## GPT-2 inference benchmark
+
+`examples/ML/gpt2_native_ternary_inference.oc` measures generation of new
+tokens for the canonical GPT-2 small profile `(50257, 1024, 768, 12, 3072,
+12)`. The benchmark runs only `eval()`/inference, disables autograd graph
+construction, performs one warmup token, and prints elapsed seconds,
+milliseconds per token, and tokens per second:
+
+```bash
+ocean run examples/ML/gpt2_native_ternary_inference.oc \
+    --cflags "-I${CONDA_PREFIX}/include -L/usr/local/cuda/targets/x86_64-linux/lib -lOpenCL -DOCEAN_TENSOR_ENABLE_OPENCL"
+```
+
+The current implementation is a full-prefix baseline without KV-cache: every
+generated token recomputes the entire prefix. Therefore its result measures the
+current Ocean API end to end, while the next performance milestone is KV-cache
+generation.
+
 ---
 
 ## Build a Transformer block

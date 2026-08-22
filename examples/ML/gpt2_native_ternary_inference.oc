@@ -1,0 +1,66 @@
+import "./gpt2_native_ternary_model.oc"
+import <std/time/time.oc>
+
+
+def fill_prompt(prompt: &mut Tensor[int64], vocab_size: int) -> None:
+    var index: int = 0
+    var length: int = prompt.shape(1)
+    while index < length:
+        prompt[0, index] = (index * 17 + 3) % vocab_size
+        index = index + 1
+    return None
+
+
+def main() -> int:
+    # This is the canonical GPT-2 small profile:
+    # (vocab=50257, context=1024, hidden=768, heads=12, ff=3072, layers=12).
+    # It measures the real model configuration, not the compact training
+    # smoke profile.
+    var config: GPT2Config = gpt2_small_config()
+    var prompt_length: int = 16
+    var new_tokens: int = 8
+    var total_length: int = prompt_length + new_tokens
+
+    var prompt: Tensor[int64] = Tensor.zeros(1, prompt_length, "cpu")
+    var positions: Tensor[int64] = Tensor.zeros(1, total_length, "cpu")
+    var causal_bias: Tensor[float32] = Tensor.zeros(total_length, total_length, "cpu")
+    fill_prompt(prompt, config.vocab_size)
+    fill_positions(positions, total_length)
+    fill_causal_bias(causal_bias, total_length)
+
+    var model: GPT2Ternary = GPT2Ternary(config)
+    model.to("gpu")
+    model.eval()
+
+    var prompt_gpu: Tensor[int64] = prompt.to("gpu")
+    var positions_gpu: Tensor[int64] = positions.to("gpu")
+    var causal_bias_gpu: Tensor[float32] = causal_bias.to("gpu")
+
+    # One unmeasured token removes one-time OpenCL program compilation from
+    # the reported steady-state generation latency.
+    var warmup: Tensor[int64] = model.generate_greedy(prompt_gpu, 1, positions_gpu, causal_bias_gpu)
+
+    var start: float64 = Time.monotonic()
+    var generated: Tensor[int64] = model.generate_greedy(prompt_gpu, new_tokens, positions_gpu, causal_bias_gpu)
+    var elapsed: float64 = Time.monotonic() - start
+
+    var tokens_per_second: float64 = 0.0
+    var milliseconds_per_token: float64 = 0.0
+    if elapsed > 0.0:
+        tokens_per_second = new_tokens / elapsed
+        milliseconds_per_token = elapsed * 1000.0 / new_tokens
+
+    var first_generated_token: float64 = generated.get(0, prompt_length)
+    var token_embedding_weight: Tensor[float32] = model.token_embedding.weight.tensor()
+    var model_device: str = token_embedding_weight.device()
+    print("mode = inference")
+    print("model device =", model_device)
+    print("GPT2 config = vocab 50257, context 1024, hidden 768, heads 12, ff 3072, layers 12")
+    print("prompt tokens =", prompt_length)
+    print("generated tokens =", new_tokens)
+    print("elapsed seconds =", elapsed)
+    print("milliseconds per token =", milliseconds_per_token)
+    print("tokens per second =", tokens_per_second)
+    print("first generated token =", first_generated_token)
+    print("[ok] Ocean GPT2 inference benchmark")
+    return 0

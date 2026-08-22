@@ -65,6 +65,15 @@ struct ocean_autograd_meta {
 
 static ocean_autograd_meta *ocean_autograd_metas = NULL;
 static bool ocean_autograd_shutdown_registered = false;
+static bool ocean_autograd_grad_enabled_state = true;
+
+void ocean_autograd_set_grad_enabled(bool enabled) {
+    ocean_autograd_grad_enabled_state = enabled;
+}
+
+bool ocean_autograd_grad_enabled(void) {
+    return ocean_autograd_grad_enabled_state;
+}
 
 static void ocean_autograd_remove_meta(ocean_autograd_meta *target);
 
@@ -114,6 +123,7 @@ static bool ocean_autograd_same_shape_meta(
 static ocean_autograd_meta *ocean_autograd_find(
     ocean_tensor_handle_t tensor
 ) {
+    if (!ocean_autograd_grad_enabled_state) return NULL;
     if (!tensor) return NULL;
 
     uint64_t identity = ocean_tensor_identity(tensor);

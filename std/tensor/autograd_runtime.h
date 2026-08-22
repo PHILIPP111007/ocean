@@ -23,6 +23,8 @@ void ocean_autograd_zero_grad(
 void ocean_autograd_backward(
     ocean_tensor_handle_t tensor
 );
+void ocean_autograd_set_grad_enabled(bool enabled);
+bool ocean_autograd_grad_enabled(void);
 
 ocean_tensor_handle_t ocean_autograd_binary(
     ocean_tensor_handle_t left,

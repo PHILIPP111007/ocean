@@ -218,6 +218,8 @@ class Validator:
                             "ocean_autograd_grad_copy",
                             "ocean_autograd_zero_grad",
                             "ocean_autograd_backward",
+                            "ocean_autograd_set_grad_enabled",
+                            "ocean_autograd_grad_enabled",
                             "ocean_autograd_binary",
                             "ocean_autograd_scalar",
                             "ocean_autograd_matmul",

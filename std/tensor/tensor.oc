@@ -35,6 +35,15 @@ class Tensor:
         ocean_autograd_backward(self.handle)
         return None
 
+    @staticmethod
+    def set_grad_enabled(enabled: bool) -> None:
+        ocean_autograd_set_grad_enabled(enabled)
+        return None
+
+    @staticmethod
+    def grad_enabled() -> bool:
+        return ocean_autograd_grad_enabled()
+
     def relu(self) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_autograd_relu(self.handle)
         var value: Tensor = Tensor(handle)

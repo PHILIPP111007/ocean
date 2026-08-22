@@ -224,6 +224,22 @@ a device-side error flag.
 For contiguous float32 GPU tensors both forward and backward use native OpenCL
 kernels.
 
+Inference code can disable graph construction around a forward/generation loop:
+
+```ocean
+var previous: bool = Tensor.grad_enabled()
+Tensor.set_grad_enabled(False)
+model.eval()
+var logits: Tensor[float32] = model.forward(tokens, positions, bias)
+Tensor.set_grad_enabled(previous)
+```
+
+The GPT-2 generation benchmark is
+`examples/ML/gpt2_native_ternary_inference.oc`. It reports steady-state
+tokens/second after one warmup token. Its current decoder is full-prefix and
+has no KV-cache yet, so the result should be compared only with other
+full-prefix baselines.
+
 GPU float32 `matmul` also supports arbitrary-rank batched operands with leading-dimension
 broadcasting. The same kernel supports logical transposes for autograd `dA`/`dB` computation,
 while unsupported dtypes retain the existing CPU fallback.
