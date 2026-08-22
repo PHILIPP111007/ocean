@@ -13,9 +13,9 @@ C_SOURCE = r'''
 
 int main(void) {
     const size_t cache_shape[4] = {1, 2, 4, 3};
-    const size_t value_shape[4] = {1, 2, 1, 3};
-    const size_t value_strides[4] = {6, 3, 3, 1};
-    const float values[6] = {1, 2, 3, 4, 5, 6};
+    const size_t value_shape[4] = {1, 2, 2, 3};
+    const size_t value_strides[4] = {12, 6, 3, 1};
+    const float values[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
 
     ocean_tensor_handle_t cache = ocean_tensor_zeros_nd(
         cache_shape, 4, "float32", "cpu"
@@ -24,9 +24,11 @@ int main(void) {
         values, value_shape, value_strides, 4, "float32", "cpu"
     );
 
-    ocean_tensor_cache_write(cache, value, 2);
-    const size_t expected_indices[6] = {6, 7, 8, 18, 19, 20};
-    for (size_t index = 0; index < 6; ++index) {
+    ocean_tensor_cache_write(cache, value, 1);
+    const size_t expected_indices[12] = {
+        3, 4, 5, 6, 7, 8, 15, 16, 17, 18, 19, 20
+    };
+    for (size_t index = 0; index < 12; ++index) {
         if (ocean_tensor_get_flat_f32(cache, expected_indices[index]) != values[index]) {
             return 1;
         }

@@ -679,16 +679,20 @@ static const char *ocean_tensor_gelu_kernel_source =
 static const char *ocean_tensor_cache_kernel_source =
     "__kernel void ocean_tensor_cache_write("
     "__global float *cache, __global const float *value, "
-    "const int heads, const int sequence, const int width, const int position) {"
+    "const int heads, const int sequence, const int value_sequence, "
+    "const int width, const int position) {"
     "size_t linear = get_global_id(0);"
-    "size_t head_width = (size_t)heads * (size_t)width;"
-    "size_t batch = linear / head_width;"
-    "size_t remainder = linear % head_width;"
-    "size_t head = remainder / (size_t)width;"
+    "size_t row_width = (size_t)value_sequence * (size_t)width;"
+    "size_t head_span = (size_t)heads * row_width;"
+    "size_t batch = linear / head_span;"
+    "size_t remainder = linear % head_span;"
+    "size_t head = remainder / row_width;"
+    "remainder = remainder % row_width;"
+    "size_t value_position = remainder / (size_t)width;"
     "size_t column = remainder % (size_t)width;"
     "size_t destination = (batch * (size_t)heads + head) * "
-    "(size_t)sequence * (size_t)width + (size_t)position * (size_t)width + "
-    "column;"
+    "(size_t)sequence * (size_t)width + "
+    "((size_t)position + value_position) * (size_t)width + column;"
     "cache[destination] = value[linear];"
     "}"
     "__kernel void ocean_tensor_cache_slice("
@@ -3300,6 +3304,7 @@ static void ocean_tensor_opencl_cache_write(
     );
     int heads = (int)cache->shape[1];
     int sequence = (int)cache->shape[2];
+    int value_sequence = (int)value->shape[2];
     int width = (int)cache->shape[3];
     ocean_tensor_opencl_check(
         clSetKernelArg(kernel, 0, sizeof(cl_mem), &cache->gpu_data),
@@ -3316,10 +3321,14 @@ static void ocean_tensor_opencl_cache_write(
         clSetKernelArg(kernel, 3, sizeof(int), &sequence), "clSetKernelArg"
     );
     ocean_tensor_opencl_check(
-        clSetKernelArg(kernel, 4, sizeof(int), &width), "clSetKernelArg"
+        clSetKernelArg(kernel, 4, sizeof(int), &value_sequence),
+        "clSetKernelArg"
     );
     ocean_tensor_opencl_check(
-        clSetKernelArg(kernel, 5, sizeof(int), &position), "clSetKernelArg"
+        clSetKernelArg(kernel, 5, sizeof(int), &width), "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 6, sizeof(int), &position), "clSetKernelArg"
     );
     size_t global_size = value->size ? value->size : 1;
     cl_event event = NULL;
@@ -3838,41 +3847,49 @@ void ocean_tensor_cache_write(
         cache->ndim != 4 || value->ndim != 4 ||
         value->shape[0] != cache->shape[0] ||
         value->shape[1] != cache->shape[1] ||
-        value->shape[2] != 1 ||
+        value->shape[2] == 0 ||
         value->shape[3] != cache->shape[3] ||
         cache->device != value->device ||
         !ocean_tensor_is_contiguous(cache) ||
         !ocean_tensor_is_contiguous(value)) {
         ocean_tensor_fail("Tensor.cache_write metadata mismatch");
     }
-    if (position < 0 || (size_t)position >= cache->shape[2]) {
+    if (position < 0 || (size_t)position > cache->shape[2] ||
+        value->shape[2] > cache->shape[2] - (size_t)position) {
         ocean_tensor_fail("Tensor.cache_write position is out of bounds");
     }
 
     size_t batches = cache->shape[0];
     size_t heads = cache->shape[1];
     size_t sequence = cache->shape[2];
+    size_t value_sequence = value->shape[2];
     size_t width = cache->shape[3];
     if (cache->device == OCEAN_TENSOR_CPU) {
         float *destination = (float *)cache->cpu_data;
         const float *source = (const float *)value->cpu_data;
         for (size_t batch = 0; batch < batches; ++batch) {
             for (size_t head = 0; head < heads; ++head) {
-                size_t destination_offset =
-                    ((batch * heads + head) * sequence + (size_t)position) * width;
-                size_t source_offset = (batch * heads + head) * width;
-                memcpy(
-                    destination + destination_offset,
-                    source + source_offset,
-                    width * sizeof(float)
-                );
+                for (size_t value_position = 0;
+                     value_position < value_sequence; ++value_position) {
+                    size_t destination_offset =
+                        ((batch * heads + head) * sequence +
+                         (size_t)position + value_position) * width;
+                    size_t source_offset =
+                        ((batch * heads + head) * value_sequence + value_position) * width;
+                    memcpy(
+                        destination + destination_offset,
+                        source + source_offset,
+                        width * sizeof(float)
+                    );
+                }
             }
         }
         return;
     }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (heads > (size_t)INT32_MAX || sequence > (size_t)INT32_MAX ||
-        width > (size_t)INT32_MAX || value->size > (size_t)INT32_MAX) {
+        value_sequence > (size_t)INT32_MAX || width > (size_t)INT32_MAX ||
+        value->size > (size_t)INT32_MAX) {
         ocean_tensor_fail("Tensor.cache_write dimensions are too large for OpenCL");
     }
     ocean_tensor_opencl_cache_write(cache, value, position);

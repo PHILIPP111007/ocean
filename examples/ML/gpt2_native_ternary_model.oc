@@ -173,6 +173,33 @@ class GPT2Attention(Module):
         var merged: Tensor[float32] = context_bthd.reshape([batch_size, sequence_length, self.d_model])
         return self.out_proj.forward(merged)
 
+    def forward_prefill(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], causal_bias: &Tensor[float32]) -> Tensor[float32]:
+        var batch_size: int = input.shape(0)
+        var sequence_length: int = input.shape(1)
+
+        var q_linear: Tensor[float32] = self.q_proj.forward(input)
+        var k_linear: Tensor[float32] = self.k_proj.forward(input)
+        var v_linear: Tensor[float32] = self.v_proj.forward(input)
+
+        var q_reshaped: Tensor[float32] = q_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+        var k_reshaped: Tensor[float32] = k_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+        var v_reshaped: Tensor[float32] = v_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+        var q: Tensor[float32] = q_reshaped.permute([0, 2, 1, 3])
+        var k: Tensor[float32] = k_reshaped.permute([0, 2, 1, 3])
+        var v: Tensor[float32] = v_reshaped.permute([0, 2, 1, 3])
+
+        cache_k.cache_write(k, 0)
+        cache_v.cache_write(v, 0)
+        var key_transposed: Tensor[float32] = k.transpose_dims(-2, -1)
+        var scores: Tensor[float32] = q.matmul(key_transposed)
+        var scaled: Tensor[float32] = scores.div_scalar(sqrt(self.head_dim))
+        var masked: Tensor[float32] = scaled.add(causal_bias)
+        var weights: Tensor[float32] = masked.softmax(-1)
+        var context: Tensor[float32] = weights.matmul(v)
+        var context_bthd: Tensor[float32] = context.permute([0, 2, 1, 3])
+        var merged: Tensor[float32] = context_bthd.reshape([batch_size, sequence_length, self.d_model])
+        return self.out_proj.forward(merged)
+
     def forward_cached(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], position: int) -> Tensor[float32]:
         var batch_size: int = input.shape(0)
         var q_linear: Tensor[float32] = self.q_proj.forward(input)
@@ -233,6 +260,14 @@ class GPT2Block(Module):
         var attention_output: Tensor[float32] = self.attn.forward(normalized, causal_bias)
         var residual: Tensor[float32] = input.add(attention_output)
 
+        var normalized2: Tensor[float32] = self.ln_2.forward(residual)
+        var feed_forward: Tensor[float32] = self.mlp.forward(normalized2)
+        return residual.add(feed_forward)
+
+    def forward_prefill(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], causal_bias: &Tensor[float32]) -> Tensor[float32]:
+        var normalized: Tensor[float32] = self.ln_1.forward(input)
+        var attention_output: Tensor[float32] = self.attn.forward_prefill(normalized, cache_k, cache_v, causal_bias)
+        var residual: Tensor[float32] = input.add(attention_output)
         var normalized2: Tensor[float32] = self.ln_2.forward(residual)
         var feed_forward: Tensor[float32] = self.mlp.forward(normalized2)
         return residual.add(feed_forward)
@@ -335,10 +370,42 @@ class GPT2Ternary(Module):
         var lm_weight: Tensor[float32] = self.tied_lm_weight()
         return normalized.matmul(lm_weight)
 
+    def forward_prefill_hidden(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &GPT2KVCache, causal_bias: &Tensor[float32]) -> Tensor[float32]:
+        var token_hidden: Tensor[float32] = self.token_embedding.forward(tokens)
+        var position_hidden: Tensor[float32] = self.position_embedding.forward(positions)
+        var hidden: Tensor[float32] = token_hidden.add(position_hidden)
+
+        if self.n_layers > 0:
+            hidden = self.block1.forward_prefill(hidden, cache.k1, cache.v1, causal_bias)
+        if self.n_layers > 1:
+            hidden = self.block2.forward_prefill(hidden, cache.k2, cache.v2, causal_bias)
+        if self.n_layers > 2:
+            hidden = self.block3.forward_prefill(hidden, cache.k3, cache.v3, causal_bias)
+        if self.n_layers > 3:
+            hidden = self.block4.forward_prefill(hidden, cache.k4, cache.v4, causal_bias)
+        if self.n_layers > 4:
+            hidden = self.block5.forward_prefill(hidden, cache.k5, cache.v5, causal_bias)
+        if self.n_layers > 5:
+            hidden = self.block6.forward_prefill(hidden, cache.k6, cache.v6, causal_bias)
+        if self.n_layers > 6:
+            hidden = self.block7.forward_prefill(hidden, cache.k7, cache.v7, causal_bias)
+        if self.n_layers > 7:
+            hidden = self.block8.forward_prefill(hidden, cache.k8, cache.v8, causal_bias)
+        if self.n_layers > 8:
+            hidden = self.block9.forward_prefill(hidden, cache.k9, cache.v9, causal_bias)
+        if self.n_layers > 9:
+            hidden = self.block10.forward_prefill(hidden, cache.k10, cache.v10, causal_bias)
+        if self.n_layers > 10:
+            hidden = self.block11.forward_prefill(hidden, cache.k11, cache.v11, causal_bias)
+        if self.n_layers > 11:
+            hidden = self.block12.forward_prefill(hidden, cache.k12, cache.v12, causal_bias)
+
+        return self.ln_f.forward(hidden)
+
     def new_kv_cache(self, device: str) -> GPT2KVCache:
         return GPT2KVCache(self.n_heads, self.max_seq_len, self.d_model // self.n_heads, device)
 
-    def forward_cached(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &GPT2KVCache, position: int) -> Tensor[float32]:
+    def forward_cached_hidden(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &GPT2KVCache, position: int) -> Tensor[float32]:
         var token_hidden: Tensor[float32] = self.token_embedding.forward(tokens)
         var position_hidden: Tensor[float32] = self.position_embedding.forward(positions)
         var hidden: Tensor[float32] = token_hidden.add(position_hidden)
@@ -369,8 +436,15 @@ class GPT2Ternary(Module):
             hidden = self.block12.forward_cached(hidden, cache.k12, cache.v12, position)
 
         var normalized: Tensor[float32] = self.ln_f.forward(hidden)
+        return normalized
+
+    def forward_cached(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &GPT2KVCache, position: int) -> Tensor[float32]:
+        var normalized: Tensor[float32] = self.forward_cached_hidden(tokens, positions, cache, position)
         var lm_weight: Tensor[float32] = self.tied_lm_weight()
         return normalized.matmul(lm_weight)
+
+    def logits_from_hidden(self, hidden: &Tensor[float32], lm_weight: &Tensor[float32]) -> Tensor[float32]:
+        return hidden.matmul(lm_weight)
 
     def parameters(self) -> list[Parameter]:
         # The tied LM head is not a second Parameter.
@@ -535,16 +609,16 @@ class GPT2Ternary(Module):
         var previous_grad_enabled: bool = Tensor.grad_enabled()
         Tensor.set_grad_enabled(False)
         self.eval()
+        var lm_weight: Tensor[float32] = self.tied_lm_weight()
 
-        var next_token: int = 0
-        var prefill: int = 0
-        while prefill < prompt_length:
-            var prompt_token: Tensor[int64] = prompt.slice(1, prefill, prefill + 1, 1)
-            var prompt_position: Tensor[int64] = positions.slice(1, prefill, prefill + 1, 1)
-            var prompt_logits: Tensor[float32] = self.forward_cached(prompt_token, prompt_position, cache, prefill)
-            if prefill == prompt_length - 1:
-                next_token = self.greedy_from_logits(prompt_logits)
-            prefill = prefill + 1
+        var prompt_bias_cpu: Tensor[float32] = Tensor.zeros(prompt_length, prompt_length, "cpu")
+        fill_causal_bias(prompt_bias_cpu, prompt_length)
+        var causal_bias: Tensor[float32] = prompt_bias_cpu.to(prompt.device())
+        var prompt_positions: Tensor[int64] = positions.slice(1, 0, prompt_length, 1)
+        var prompt_hidden: Tensor[float32] = self.forward_prefill_hidden(prompt, prompt_positions, cache, causal_bias)
+        var prompt_last: Tensor[float32] = prompt_hidden.slice(1, prompt_length - 1, prompt_length, 1)
+        var prompt_logits: Tensor[float32] = self.logits_from_hidden(prompt_last, lm_weight)
+        var next_token: int = self.greedy_from_logits(prompt_logits)
 
         var generated: int = total_length - prompt_length
         var step: int = 0
@@ -555,7 +629,8 @@ class GPT2Ternary(Module):
                 var next_input: Tensor[int64] = Tensor.zeros(1, 1, prompt.device())
                 next_input[0, 0] = next_token
                 var next_position: Tensor[int64] = positions.slice(1, output_position, output_position + 1, 1)
-                var next_logits: Tensor[float32] = self.forward_cached(next_input, next_position, cache, output_position)
+                var next_hidden: Tensor[float32] = self.forward_cached_hidden(next_input, next_position, cache, output_position)
+                var next_logits: Tensor[float32] = self.logits_from_hidden(next_hidden, lm_weight)
                 next_token = self.greedy_from_logits(next_logits)
             step = step + 1
 

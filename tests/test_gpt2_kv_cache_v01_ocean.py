@@ -38,6 +38,11 @@ def main() -> int:
     var previous_grad_enabled: bool = Tensor.grad_enabled()
     Tensor.set_grad_enabled(False)
     var full_logits: Tensor[float32] = model.forward(tokens, positions, causal_bias)
+    var prefill_cache: GPT2KVCache = model.new_kv_cache("cpu")
+    var prefill_hidden: Tensor[float32] = model.forward_prefill_hidden(tokens, positions, prefill_cache, causal_bias)
+    var prefill_last: Tensor[float32] = prefill_hidden.slice(1, 2, 3, 1)
+    var prefill_lm_weight: Tensor[float32] = model.tied_lm_weight()
+    var prefill_logits: Tensor[float32] = prefill_last.matmul(prefill_lm_weight)
     var cache: GPT2KVCache = model.new_kv_cache("cpu")
     var index: int = 0
     var cached_logits: Tensor[float32] = Tensor.zeros(1, 1, config.vocab_size, "cpu")
@@ -50,10 +55,17 @@ def main() -> int:
 
     var full_last: Tensor[float32] = full_logits.slice(1, 2, 3, 1)
     var full_last_2d: Tensor[float32] = full_last.reshape([1, config.vocab_size])
+    var prefill_logits_2d: Tensor[float32] = prefill_logits.reshape([1, config.vocab_size])
     var cached_logits_2d: Tensor[float32] = cached_logits.reshape([1, config.vocab_size])
+    var max_prefill_difference: float64 = 0.0
     var max_difference: float64 = 0.0
     var token_index: int = 0
     while token_index < config.vocab_size:
+        var prefill_difference: float64 = full_last_2d.get(0, token_index) - prefill_logits_2d.get(0, token_index)
+        if prefill_difference < 0.0:
+            prefill_difference = -prefill_difference
+        if prefill_difference > max_prefill_difference:
+            max_prefill_difference = prefill_difference
         var difference: float64 = full_last_2d.get(0, token_index) - cached_logits_2d.get(0, token_index)
         if difference < 0.0:
             difference = -difference
@@ -61,6 +73,7 @@ def main() -> int:
             max_difference = difference
         token_index = token_index + 1
 
+    print("max prefill logits difference =", max_prefill_difference)
     print("max kv logits difference =", max_difference)
     print("[ok] Ocean GPT2 KV cache equivalence")
     return 0
@@ -88,4 +101,9 @@ def test_gpt2_kv_cache_matches_full_forward_cpu(tmp_path):
     )
     assert match is not None, result.stdout
     assert float(match.group(1)) < 1.0e-3, result.stdout
+    prefill_match = re.search(
+        r"max prefill logits difference\s*=\s*([0-9eE+.\-]+)", result.stdout
+    )
+    assert prefill_match is not None, result.stdout
+    assert float(prefill_match.group(1)) < 1.0e-3, result.stdout
     assert "[ok] ocean gpt2 kv cache equivalence" in result.stdout.lower()
