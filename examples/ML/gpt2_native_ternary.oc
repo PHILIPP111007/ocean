@@ -1,0 +1,463 @@
+import <std/tensor/tensor.oc>
+import <std/ml/nn.oc>
+import <std/ml/optim.oc>
+cimport <math.h>
+
+
+# GPT-2-style decoder-only language model with ternary forward weights.
+#
+# The architecture follows GPT-2's important invariants:
+#
+#   token embedding + learned position embedding
+#   pre-layernorm decoder blocks
+#   causal multi-head self-attention
+#   4x feed-forward expansion
+#   GELU activation
+#   final LayerNorm
+#   tied token-embedding / language-model head
+#
+# TernaryLinear keeps a full-precision master Parameter and constructs a
+# straight-through ternary weight for every forward:
+#
+#   W_ste = W_master + (ternary(W_master) - W_master.copy())
+#
+# Therefore the forward uses {-scale, 0, +scale}, while the optimizer updates
+# the full-precision master weight. This is weight-only ternarization; token
+# and position embedding lookups remain full precision, as in the first
+# practical training milestone.
+
+
+class GPT2Config:
+    def __init__(self, vocab_size: int, max_seq_len: int, d_model: int, n_heads: int, d_ff: int, n_layers: int) -> None:
+        self.vocab_size: int = vocab_size
+        self.max_seq_len: int = max_seq_len
+        self.d_model: int = d_model
+        self.n_heads: int = n_heads
+        self.d_ff: int = d_ff
+        self.n_layers: int = n_layers
+
+
+class GPT2Embedding(Module):
+    def __init__(self, vocab_size: int, d_model: int) -> None:
+        self.training: bool = True
+        self.vocab_size: int = vocab_size
+        self.d_model: int = d_model
+
+        # GPT-2 initializes token and position embeddings from N(0, 0.02).
+        # std.ml.Embedding intentionally keeps its older 0.1 default for
+        # compatibility with existing examples, so GPT-2 owns this exact
+        # initialization locally.
+        var weight_tensor: Tensor[float32] = Tensor(ocean_autograd_parameter_uniform(vocab_size, d_model, 0.02, "cpu"))
+        self.weight: Parameter = Parameter(weight_tensor)
+
+    def forward(self, input: &Tensor[int64]) -> Tensor[float32]:
+        var weight: Tensor[float32] = self.weight.tensor()
+        var weight_handle: ocean_tensor_handle_t = weight.raw_handle()
+        var input_handle: ocean_tensor_handle_t = input.raw_handle()
+        var handle: ocean_tensor_handle_t = ocean_autograd_embedding(weight_handle, input_handle)
+        return Tensor(handle)
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.weight]
+        return result
+
+
+def gpt2_small_config() -> GPT2Config:
+    # Canonical GPT-2 small: n_vocab=50257, n_ctx=1024, n_embd=768,
+    # n_head=12, n_inner=3072, n_layer=12.
+    var config: GPT2Config = GPT2Config(50257, 1024, 768, 12, 3072, 12)
+    return config
+
+
+class TernaryLinear(Module):
+    def __init__(self, in_features: int, out_features: int) -> None:
+        self.training: bool = True
+        self.in_features: int = in_features
+        self.out_features: int = out_features
+
+        # Matmul-ready [in_features, out_features] layout avoids a transpose
+        # in every forward. The master uses GPT-2's small initialization scale.
+        var weight_tensor: Tensor[float32] = Tensor(ocean_autograd_parameter_uniform(in_features, out_features, 0.02, "cpu"))
+        self.weight: Parameter = Parameter(weight_tensor)
+        var bias_tensor: Tensor[float32] = Tensor.zeros(1, out_features, "cpu")
+        self.bias: Parameter = Parameter(bias_tensor)
+
+    def ternary_weight(self) -> Tensor[float32]:
+        var master: Tensor[float32] = self.weight.tensor()
+        var detached: Tensor[float32] = master.copy()
+        var quantized: Tensor[float32] = master.ternary_quantize()
+        var delta: Tensor[float32] = quantized.sub(detached)
+        var ste_weight: Tensor[float32] = master.add(delta)
+        return ste_weight
+
+    def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
+        var weight: Tensor[float32] = self.ternary_weight()
+        var projected: Tensor[float32] = input.matmul(weight)
+        var bias: Tensor[float32] = self.bias.tensor()
+        return projected.add(bias)
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.weight, self.bias]
+        return result
+
+
+class GPT2Attention(Module):
+    def __init__(self, d_model: int, n_heads: int) -> None:
+        self.training: bool = True
+        self.d_model: int = d_model
+        self.n_heads: int = n_heads
+        self.head_dim: int = d_model // n_heads
+
+        # Separate projections preserve the current ND Tensor API while
+        # remaining mathematically equivalent to GPT-2's c_attn projection.
+        self.q_proj: TernaryLinear = TernaryLinear(d_model, d_model)
+        self.k_proj: TernaryLinear = TernaryLinear(d_model, d_model)
+        self.v_proj: TernaryLinear = TernaryLinear(d_model, d_model)
+        self.out_proj: TernaryLinear = TernaryLinear(d_model, d_model)
+
+    def forward(self, input: &Tensor[float32], causal_bias: &Tensor[float32]) -> Tensor[float32]:
+        var batch_size: int = input.shape(0)
+        var sequence_length: int = input.shape(1)
+
+        var q_linear: Tensor[float32] = self.q_proj.forward(input)
+        var k_linear: Tensor[float32] = self.k_proj.forward(input)
+        var v_linear: Tensor[float32] = self.v_proj.forward(input)
+
+        var q_reshaped: Tensor[float32] = q_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+        var k_reshaped: Tensor[float32] = k_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+        var v_reshaped: Tensor[float32] = v_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+
+        var q: Tensor[float32] = q_reshaped.permute([0, 2, 1, 3])
+        var k: Tensor[float32] = k_reshaped.permute([0, 2, 1, 3])
+        var v: Tensor[float32] = v_reshaped.permute([0, 2, 1, 3])
+
+        var k_t: Tensor[float32] = k.transpose(-2, -1)
+        var scores: Tensor[float32] = q.matmul(k_t)
+        var scale: float64 = sqrt(self.head_dim)
+        var scaled: Tensor[float32] = scores.div_scalar(scale)
+
+        # The bias is zero on visible positions and -1e9 in the future.
+        # Addition is cheaper than the generic masked_fill composition.
+        var masked: Tensor[float32] = scaled.add(causal_bias)
+        var weights: Tensor[float32] = masked.softmax(-1)
+        var context: Tensor[float32] = weights.matmul(v)
+
+        var context_bthd: Tensor[float32] = context.permute([0, 2, 1, 3])
+        var merged: Tensor[float32] = context_bthd.reshape([batch_size, sequence_length, self.d_model])
+        return self.out_proj.forward(merged)
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.q_proj.weight, self.q_proj.bias, self.k_proj.weight, self.k_proj.bias, self.v_proj.weight, self.v_proj.bias, self.out_proj.weight, self.out_proj.bias]
+        return result
+
+
+class GPT2MLP(Module):
+    def __init__(self, d_model: int, d_ff: int) -> None:
+        self.training: bool = True
+        self.fc: TernaryLinear = TernaryLinear(d_model, d_ff)
+        self.proj: TernaryLinear = TernaryLinear(d_ff, d_model)
+
+    def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
+        var hidden: Tensor[float32] = self.fc.forward(input)
+        var activated: Tensor[float32] = hidden.gelu()
+        return self.proj.forward(activated)
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.fc.weight, self.fc.bias, self.proj.weight, self.proj.bias]
+        return result
+
+
+class GPT2Block(Module):
+    def __init__(self, d_model: int, n_heads: int, d_ff: int) -> None:
+        self.training: bool = True
+        self.ln_1: LayerNorm = LayerNorm(d_model, 0.00001)
+        self.attn: GPT2Attention = GPT2Attention(d_model, n_heads)
+        self.ln_2: LayerNorm = LayerNorm(d_model, 0.00001)
+        self.mlp: GPT2MLP = GPT2MLP(d_model, d_ff)
+
+    def forward(self, input: &Tensor[float32], causal_bias: &Tensor[float32]) -> Tensor[float32]:
+        var normalized: Tensor[float32] = self.ln_1.forward(input)
+        var attention_output: Tensor[float32] = self.attn.forward(normalized, causal_bias)
+        var residual: Tensor[float32] = input.add(attention_output)
+
+        var normalized2: Tensor[float32] = self.ln_2.forward(residual)
+        var feed_forward: Tensor[float32] = self.mlp.forward(normalized2)
+        return residual.add(feed_forward)
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.ln_1.gamma, self.ln_1.beta]
+        var attention_parameters: list[Parameter] = self.attn.parameters()
+        var index: int = 0
+        while index < len(attention_parameters):
+            result.append(attention_parameters[index])
+            index = index + 1
+
+        result.append(self.ln_2.gamma)
+        result.append(self.ln_2.beta)
+        var mlp_parameters: list[Parameter] = self.mlp.parameters()
+        var mlp_index: int = 0
+        while mlp_index < len(mlp_parameters):
+            result.append(mlp_parameters[mlp_index])
+            mlp_index = mlp_index + 1
+        return result
+
+
+class GPT2Ternary(Module):
+    def __init__(self, config: GPT2Config) -> None:
+        self.training: bool = True
+        self.vocab_size: int = config.vocab_size
+        self.max_seq_len: int = config.max_seq_len
+        self.d_model: int = config.d_model
+        self.n_heads: int = config.n_heads
+        self.n_layers: int = config.n_layers
+
+        self.token_embedding: GPT2Embedding = GPT2Embedding(config.vocab_size, config.d_model)
+        self.position_embedding: GPT2Embedding = GPT2Embedding(config.max_seq_len, config.d_model)
+        # The current compiler does not yet initialize ARC list fields in
+        # constructors reliably. Keep the model fully configurable up to the
+        # canonical GPT-2 small depth with explicit block fields meanwhile.
+        self.block1: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block2: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block3: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block4: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block5: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block6: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block7: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block8: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block9: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block10: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block11: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.block12: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
+        self.ln_f: LayerNorm = LayerNorm(config.d_model, 0.00001)
+
+    def tied_lm_weight(self) -> Tensor[float32]:
+        # GPT-2 ties the output projection to the token embedding matrix.
+        # Quantize the tied weight with STE, then transpose to [C, V].
+        var master: Tensor[float32] = self.token_embedding.weight.tensor()
+        var detached: Tensor[float32] = master.copy()
+        var quantized: Tensor[float32] = master.ternary_quantize()
+        var delta: Tensor[float32] = quantized.sub(detached)
+        var ste_embedding: Tensor[float32] = master.add(delta)
+        return ste_embedding.transpose()
+
+    def forward(self, tokens: &Tensor[int64], positions: &Tensor[int64], causal_bias: &Tensor[float32]) -> Tensor[float32]:
+        var token_hidden: Tensor[float32] = self.token_embedding.forward(tokens)
+        var position_hidden: Tensor[float32] = self.position_embedding.forward(positions)
+        var hidden: Tensor[float32] = token_hidden.add(position_hidden)
+
+        if self.n_layers > 0:
+            hidden = self.block1.forward(hidden, causal_bias)
+        if self.n_layers > 1:
+            hidden = self.block2.forward(hidden, causal_bias)
+        if self.n_layers > 2:
+            hidden = self.block3.forward(hidden, causal_bias)
+        if self.n_layers > 3:
+            hidden = self.block4.forward(hidden, causal_bias)
+        if self.n_layers > 4:
+            hidden = self.block5.forward(hidden, causal_bias)
+        if self.n_layers > 5:
+            hidden = self.block6.forward(hidden, causal_bias)
+        if self.n_layers > 6:
+            hidden = self.block7.forward(hidden, causal_bias)
+        if self.n_layers > 7:
+            hidden = self.block8.forward(hidden, causal_bias)
+        if self.n_layers > 8:
+            hidden = self.block9.forward(hidden, causal_bias)
+        if self.n_layers > 9:
+            hidden = self.block10.forward(hidden, causal_bias)
+        if self.n_layers > 10:
+            hidden = self.block11.forward(hidden, causal_bias)
+        if self.n_layers > 11:
+            hidden = self.block12.forward(hidden, causal_bias)
+
+        var normalized: Tensor[float32] = self.ln_f.forward(hidden)
+        var lm_weight: Tensor[float32] = self.tied_lm_weight()
+        return normalized.matmul(lm_weight)
+
+    def parameters(self) -> list[Parameter]:
+        # The tied LM head is not a second Parameter.
+        var result: list[Parameter] = [self.token_embedding.weight, self.position_embedding.weight]
+        if self.n_layers > 0:
+            var block1_parameters: list[Parameter] = self.block1.parameters()
+            var block1_index: int = 0
+            while block1_index < len(block1_parameters):
+                result.append(block1_parameters[block1_index])
+                block1_index = block1_index + 1
+        if self.n_layers > 1:
+            var block2_parameters: list[Parameter] = self.block2.parameters()
+            var block2_index: int = 0
+            while block2_index < len(block2_parameters):
+                result.append(block2_parameters[block2_index])
+                block2_index = block2_index + 1
+        if self.n_layers > 2:
+            var block3_parameters: list[Parameter] = self.block3.parameters()
+            var block3_index: int = 0
+            while block3_index < len(block3_parameters):
+                result.append(block3_parameters[block3_index])
+                block3_index = block3_index + 1
+        if self.n_layers > 3:
+            var block4_parameters: list[Parameter] = self.block4.parameters()
+            var block4_index: int = 0
+            while block4_index < len(block4_parameters):
+                result.append(block4_parameters[block4_index])
+                block4_index = block4_index + 1
+        if self.n_layers > 4:
+            var block5_parameters: list[Parameter] = self.block5.parameters()
+            var block5_index: int = 0
+            while block5_index < len(block5_parameters):
+                result.append(block5_parameters[block5_index])
+                block5_index = block5_index + 1
+        if self.n_layers > 5:
+            var block6_parameters: list[Parameter] = self.block6.parameters()
+            var block6_index: int = 0
+            while block6_index < len(block6_parameters):
+                result.append(block6_parameters[block6_index])
+                block6_index = block6_index + 1
+        if self.n_layers > 6:
+            var block7_parameters: list[Parameter] = self.block7.parameters()
+            var block7_index: int = 0
+            while block7_index < len(block7_parameters):
+                result.append(block7_parameters[block7_index])
+                block7_index = block7_index + 1
+        if self.n_layers > 7:
+            var block8_parameters: list[Parameter] = self.block8.parameters()
+            var block8_index: int = 0
+            while block8_index < len(block8_parameters):
+                result.append(block8_parameters[block8_index])
+                block8_index = block8_index + 1
+        if self.n_layers > 8:
+            var block9_parameters: list[Parameter] = self.block9.parameters()
+            var block9_index: int = 0
+            while block9_index < len(block9_parameters):
+                result.append(block9_parameters[block9_index])
+                block9_index = block9_index + 1
+        if self.n_layers > 9:
+            var block10_parameters: list[Parameter] = self.block10.parameters()
+            var block10_index: int = 0
+            while block10_index < len(block10_parameters):
+                result.append(block10_parameters[block10_index])
+                block10_index = block10_index + 1
+        if self.n_layers > 10:
+            var block11_parameters: list[Parameter] = self.block11.parameters()
+            var block11_index: int = 0
+            while block11_index < len(block11_parameters):
+                result.append(block11_parameters[block11_index])
+                block11_index = block11_index + 1
+        if self.n_layers > 11:
+            var block12_parameters: list[Parameter] = self.block12.parameters()
+            var block12_index: int = 0
+            while block12_index < len(block12_parameters):
+                result.append(block12_parameters[block12_index])
+                block12_index = block12_index + 1
+        result.append(self.ln_f.gamma)
+        result.append(self.ln_f.beta)
+        return result
+
+    def greedy_next(self, tokens: &Tensor[int64], positions: &Tensor[int64], causal_bias: &Tensor[float32]) -> int:
+        var logits: Tensor[float32] = self.forward(tokens, positions, causal_bias)
+        var sequence_length: int = tokens.shape(1)
+        var last_slice: Tensor[float32] = logits.slice(1, sequence_length - 1, sequence_length, 1)
+        var last_logits: Tensor[float32] = last_slice.reshape([1, self.vocab_size])
+
+        var best_token: int = 0
+        var best_score: float64 = last_logits.get(0, 0)
+        var token: int = 1
+        while token < self.vocab_size:
+            var score: float64 = last_logits.get(0, token)
+            if score > best_score:
+                best_score = score
+                best_token = token
+            token = token + 1
+        return best_token
+
+
+def fill_positions(positions: &mut Tensor[int64], sequence_length: int) -> None:
+    var index: int = 0
+    while index < sequence_length:
+        positions[0, index] = index
+        index = index + 1
+    return None
+
+
+def fill_causal_bias(bias: &mut Tensor[float32], sequence_length: int) -> None:
+    var row: int = 0
+    while row < sequence_length:
+        var col: int = 0
+        while col < sequence_length:
+            if col > row:
+                bias[row, col] = -1000000000.0
+            col = col + 1
+        row = row + 1
+    return None
+
+
+def fill_recurrence_batch(tokens: &mut Tensor[int64], targets: &mut Tensor[int64], batch_size: int, sequence_length: int, vocab_size: int) -> None:
+    var row: int = 0
+    while row < batch_size:
+        var previous: int = (row * 3 + 1) % vocab_size
+        var current: int = (row * 5 + 2) % vocab_size
+        var col: int = 0
+        while col < sequence_length:
+            tokens[row, col] = previous
+            targets[row, col] = current
+            var next_token: int = (previous + current + 3) % vocab_size
+            previous = current
+            current = next_token
+            col = col + 1
+        row = row + 1
+    return None
+
+
+def train(model: &GPT2Ternary, tokens: &Tensor[int64], targets: &Tensor[int64], positions: &Tensor[int64], causal_bias: &Tensor[float32], steps: int) -> None:
+    var parameters: list[Parameter] = model.parameters()
+    var optimizer: AdamW = AdamW(parameters, 0.001, 0.9, 0.999, 0.00000001, 0.01)
+    var criterion: CrossEntropyLoss = CrossEntropyLoss()
+    var step: int = 0
+
+    while step < steps:
+        optimizer.zero_grad()
+        var logits: Tensor[float32] = model.forward(tokens, positions, causal_bias)
+        var loss: Tensor[float32] = criterion.forward(logits, targets)
+        loss.backward()
+        optimizer.step()
+
+        if step % 10 == 0:
+            print("step =", step, "loss =", loss.item())
+        step = step + 1
+    return None
+
+
+def main() -> int:
+    # The production profile is gpt2_small_config(). Keep this executable on
+    # the compact profile so compiler/gradient regressions remain practical;
+    # the model itself accepts the canonical GPT-2 small dimensions unchanged.
+    var config: GPT2Config = gpt2_small_config()
+    var batch_size: int = 2
+    var sequence_length: int = 16
+    var steps: int = 3
+
+    var tokens: Tensor[int64] = Tensor.zeros(batch_size, sequence_length, "cpu")
+    var targets: Tensor[int64] = Tensor.zeros(batch_size, sequence_length, "cpu")
+    var positions: Tensor[int64] = Tensor.zeros(1, sequence_length, "cpu")
+    var causal_bias: Tensor[float32] = Tensor.zeros(sequence_length, sequence_length, "cpu")
+
+    fill_recurrence_batch(tokens, targets, batch_size, sequence_length, config.vocab_size)
+    fill_positions(positions, sequence_length)
+    fill_causal_bias(causal_bias, sequence_length)
+
+    var model: GPT2Ternary = GPT2Ternary(config)
+    var criterion: CrossEntropyLoss = CrossEntropyLoss()
+    var initial_logits: Tensor[float32] = model.forward(tokens, positions, causal_bias)
+    var initial_loss: Tensor[float32] = criterion.forward(initial_logits, targets)
+
+    train(model, tokens, targets, positions, causal_bias, steps)
+
+    var final_logits: Tensor[float32] = model.forward(tokens, positions, causal_bias)
+    var final_loss: Tensor[float32] = criterion.forward(final_logits, targets)
+
+    var model_parameters: list[Parameter] = model.parameters()
+    print("GPT2 ternary parameters =", len(model_parameters))
+    print("initial loss =", initial_loss.item())
+    print("final loss =", final_loss.item())
+    print("[ok] Ocean GPT2 native ternary")
+    return 0
