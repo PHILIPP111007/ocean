@@ -117,6 +117,32 @@ class TernaryLinear(Module):
         return 1.0 - nonzero_energy / denominator
 
 
+class MatmulLinear(Module):
+    def __init__(self, in_features: int, out_features: int) -> None:
+        self.training: bool = True
+        self.in_features: int = in_features
+        self.out_features: int = out_features
+
+        # Linear stores [out_features, in_features] for the legacy generic
+        # path and transposes it on every forward. The medium model's output
+        # projection is hot, so keep its full-precision weight in the layout
+        # consumed directly by input.matmul(): [in_features, out_features].
+        var weight_tensor: Tensor[float32] = Tensor(ocean_autograd_parameter_uniform(in_features, out_features, 0.1, "cpu"))
+        self.weight: Parameter = Parameter(weight_tensor)
+        var bias_tensor: Tensor[float32] = Tensor.zeros(1, out_features, "cpu")
+        self.bias: Parameter = Parameter(bias_tensor)
+
+    def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
+        var weight: Tensor[float32] = self.weight.tensor()
+        var projected: Tensor[float32] = input.matmul(weight)
+        var bias: Tensor[float32] = self.bias.tensor()
+        return projected.add(bias)
+
+    def parameters(self) -> list[Parameter]:
+        var result: list[Parameter] = [self.weight, self.bias]
+        return result
+
+
 class TernaryMultiHeadAttention(Module):
     def __init__(self, d_model: int, n_heads: int) -> None:
         self.training: bool = True
@@ -188,6 +214,8 @@ class TernaryTransformerBlock(Module):
 
         var normalized2: Tensor[float32] = self.norm2.forward(residual1)
         var hidden: Tensor[float32] = self.ff1.forward(normalized2)
+        # Keep the medium regression on the existing native ReLU path. The
+        # GPT-2-style example uses the exact tanh GELU primitive separately.
         var activated: Tensor[float32] = hidden.relu()
         var feed_forward: Tensor[float32] = self.ff2.forward(activated)
 
@@ -213,7 +241,9 @@ class MediumGPT(Module):
         self.block3: TransformerBlock = TransformerBlock(d_model, n_heads, d_ff)
 
         self.final_norm: LayerNorm = LayerNorm(d_model, 0.00001)
-        self.lm_head: Linear = Linear(d_model, vocab_size)
+        # Preserve a full-precision LM head while avoiding Linear's per-step
+        # weight transpose on the GPU hot path.
+        self.lm_head: MatmulLinear = MatmulLinear(d_model, vocab_size)
 
     def forward(self, tokens: &Tensor[int64], positions: &Tensor[int64], causal_mask: &Tensor[float32]) -> Tensor[float32]:
         var token_hidden: Tensor[float32] = self.token_embedding.forward(tokens)
@@ -251,8 +281,9 @@ class MediumTernaryGPT(Module):
         self.final_norm: LayerNorm = LayerNorm(d_model, 0.00001)
 
         # Keep lm_head full precision initially. Once convergence is proven,
-        # this can be tested as ternary separately.
-        self.lm_head: Linear = Linear(d_model, vocab_size)
+        # this can be tested as ternary separately. MatmulLinear preserves
+        # that precision without transposing the weight on every forward.
+        self.lm_head: MatmulLinear = MatmulLinear(d_model, vocab_size)
 
     def forward(self, tokens: &Tensor[int64], positions: &Tensor[int64], causal_bias: &Tensor[float32]) -> Tensor[float32]:
         var token_hidden: Tensor[float32] = self.token_embedding.forward(tokens)
