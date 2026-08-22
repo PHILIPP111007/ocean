@@ -273,6 +273,9 @@ class Tensor:
     def device(self) -> str:
         return ocean_tensor_device(self.handle)
 
+    def device_info(self) -> str:
+        return ocean_tensor_device_info(self.handle)
+
     def release(self) -> None:
         ocean_tensor_release(self.handle)
         self.handle = None

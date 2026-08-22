@@ -824,6 +824,7 @@ static const char *ocean_tensor_backward_kernel_source =
     "}";
 
 typedef struct ocean_tensor_opencl_runtime {
+    cl_device_id device;
     cl_context context;
     cl_command_queue queue;
     cl_program program;
@@ -973,6 +974,7 @@ static void ocean_tensor_opencl_shutdown(void) {
         clReleaseContext(ocean_tensor_opencl.context);
         ocean_tensor_opencl.context = NULL;
     }
+    ocean_tensor_opencl.device = NULL;
     ocean_tensor_opencl_initialized = 0;
 }
 
@@ -1042,6 +1044,7 @@ static void ocean_tensor_opencl_init(void) {
     }
 
     cl_int status = CL_SUCCESS;
+    ocean_tensor_opencl.device = device;
 
     ocean_tensor_opencl.context =
         clCreateContext(NULL, 1, &device, NULL, NULL, &status);
@@ -6141,6 +6144,45 @@ char *ocean_tensor_device(ocean_tensor_handle_t tensor) {
     const char *name = tensor->device == OCEAN_TENSOR_GPU ? "gpu" : "cpu";
     char *result = (char *)malloc(strlen(name) + 1);
     if (!result) ocean_tensor_fail("out of memory copying device name");
+    strcpy(result, name);
+    return result;
+}
+
+char *ocean_tensor_device_info(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("device_info() does not accept a null Tensor");
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (tensor->device == OCEAN_TENSOR_GPU && ocean_tensor_opencl_initialized) {
+        size_t size = 0;
+        ocean_tensor_opencl_check(
+            clGetDeviceInfo(
+                ocean_tensor_opencl.device,
+                CL_DEVICE_NAME,
+                0,
+                NULL,
+                &size
+            ),
+            "clGetDeviceInfo"
+        );
+        char *result = (char *)calloc(size + 1, 1);
+        if (!result) ocean_tensor_fail("out of memory copying OpenCL device name");
+        ocean_tensor_opencl_check(
+            clGetDeviceInfo(
+                ocean_tensor_opencl.device,
+                CL_DEVICE_NAME,
+                size,
+                result,
+                NULL
+            ),
+            "clGetDeviceInfo"
+        );
+        return result;
+    }
+#endif
+    const char *name = tensor->device == OCEAN_TENSOR_GPU
+        ? "OpenCL GPU (not initialized)"
+        : "CPU";
+    char *result = (char *)malloc(strlen(name) + 1);
+    if (!result) ocean_tensor_fail("out of memory copying device info");
     strcpy(result, name);
     return result;
 }
