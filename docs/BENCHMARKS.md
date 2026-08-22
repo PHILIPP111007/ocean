@@ -66,3 +66,20 @@ Benchmark 1: ./matmul
   Time (mean ± σ):      77.4 ms ±   4.1 ms    [User: 76.4 ms, System: 0.9 ms]
   Range (min … max):    71.9 ms …  86.1 ms    39 runs
 ```
+
+## LLM GPT2
+
+```bash
+(.venv) phil@phil-TUF-Gaming-F16-FX608JMI:~/GitHub/ocean$ ./examples/ML/gpt2_native_ternary_inference 
+mode = inference
+model device = gpu
+backend device = NVIDIA GeForce RTX 5060 Laptop GPU
+GPT2 config = vocab 50257, context 1024, hidden 768, heads 12, ff 3072, layers 12
+prompt tokens = 16
+generated tokens = 8
+elapsed seconds = 2.395761
+milliseconds per token = 299.470167
+tokens per second = 3.339231
+first generated token = 0.000000
+[ok] Ocean GPT2 inference benchmark
+```
