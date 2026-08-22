@@ -446,16 +446,25 @@ def main() -> int:
     fill_causal_bias(causal_bias, sequence_length)
 
     var model: GPT2Ternary = GPT2Ternary(config)
+    model.to("gpu")
+
+    var tokens_gpu: Tensor[int64] = tokens.to("gpu")
+    var targets_gpu: Tensor[int64] = targets.to("gpu")
+    var positions_gpu: Tensor[int64] = positions.to("gpu")
+    var causal_bias_gpu: Tensor[float32] = causal_bias.to("gpu")
+
     var criterion: CrossEntropyLoss = CrossEntropyLoss()
-    var initial_logits: Tensor[float32] = model.forward(tokens, positions, causal_bias)
-    var initial_loss: Tensor[float32] = criterion.forward(initial_logits, targets)
+    var initial_logits: Tensor[float32] = model.forward(tokens_gpu, positions_gpu, causal_bias_gpu)
+    var initial_loss: Tensor[float32] = criterion.forward(initial_logits, targets_gpu)
 
-    train(model, tokens, targets, positions, causal_bias, steps)
+    train(model, tokens_gpu, targets_gpu, positions_gpu, causal_bias_gpu, steps)
 
-    var final_logits: Tensor[float32] = model.forward(tokens, positions, causal_bias)
-    var final_loss: Tensor[float32] = criterion.forward(final_logits, targets)
+    var final_logits: Tensor[float32] = model.forward(tokens_gpu, positions_gpu, causal_bias_gpu)
+    var final_loss: Tensor[float32] = criterion.forward(final_logits, targets_gpu)
 
     var model_parameters: list[Parameter] = model.parameters()
+    var token_embedding_weight: Tensor[float32] = model.token_embedding.weight.tensor()
+    print("model device =", token_embedding_weight.device())
     print("GPT2 ternary parameters =", len(model_parameters))
     print("initial loss =", initial_loss.item())
     print("final loss =", final_loss.item())
