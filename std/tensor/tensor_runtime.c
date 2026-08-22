@@ -676,6 +676,40 @@ static const char *ocean_tensor_gelu_kernel_source =
     "output[index] = upstream[index] * derivative;"
     "}";
 
+static const char *ocean_tensor_cache_kernel_source =
+    "__kernel void ocean_tensor_cache_write("
+    "__global float *cache, __global const float *value, "
+    "const int heads, const int sequence, const int width, const int position) {"
+    "size_t linear = get_global_id(0);"
+    "size_t head_width = (size_t)heads * (size_t)width;"
+    "size_t batch = linear / head_width;"
+    "size_t remainder = linear % head_width;"
+    "size_t head = remainder / (size_t)width;"
+    "size_t column = remainder % (size_t)width;"
+    "size_t destination = (batch * (size_t)heads + head) * "
+    "(size_t)sequence * (size_t)width + (size_t)position * (size_t)width + "
+    "column;"
+    "cache[destination] = value[linear];"
+    "}"
+    "__kernel void ocean_tensor_cache_slice("
+    "__global const float *cache, __global float *output, "
+    "const int heads, const int source_sequence, const int output_sequence, "
+    "const int width, const int start) {"
+    "size_t linear = get_global_id(0);"
+    "size_t row_width = (size_t)output_sequence * (size_t)width;"
+    "size_t head_span = (size_t)heads * row_width;"
+    "size_t batch = linear / head_span;"
+    "size_t remainder = linear % head_span;"
+    "size_t head = remainder / row_width;"
+    "remainder = remainder % row_width;"
+    "size_t position = remainder / (size_t)width;"
+    "size_t column = remainder % (size_t)width;"
+    "size_t source = (batch * (size_t)heads + head) * "
+    "(size_t)source_sequence * (size_t)width + "
+    "((size_t)start + position) * (size_t)width + column;"
+    "output[linear] = cache[source];"
+    "}";
+
 static const char *ocean_tensor_embedding_kernel_source =
     "inline void ocean_tensor_atomic_add_f32("
     "volatile __global float *address, const float value) {"
@@ -850,6 +884,8 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_kernel cross_entropy_backward_kernel;
     cl_kernel softmax_backward_kernel;
     cl_kernel layer_norm_backward_kernel;
+    cl_kernel cache_write_kernel;
+    cl_kernel cache_slice_kernel;
 } ocean_tensor_opencl_runtime;
 
 typedef enum ocean_tensor_opencl_kernel_key {
@@ -875,6 +911,8 @@ typedef enum ocean_tensor_opencl_kernel_key {
     OCEAN_TENSOR_OPENCL_KERNEL_CROSS_ENTROPY_BACKWARD_FLOAT32_INT64,
     OCEAN_TENSOR_OPENCL_KERNEL_SOFTMAX_BACKWARD_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_LAYER_NORM_BACKWARD_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_CACHE_WRITE_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_CACHE_SLICE_FLOAT32,
 } ocean_tensor_opencl_kernel_key;
 
 static ocean_tensor_opencl_runtime ocean_tensor_opencl;
@@ -961,6 +999,14 @@ static void ocean_tensor_opencl_shutdown(void) {
     if (ocean_tensor_opencl.layer_norm_backward_kernel) {
         clReleaseKernel(ocean_tensor_opencl.layer_norm_backward_kernel);
         ocean_tensor_opencl.layer_norm_backward_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.cache_write_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.cache_write_kernel);
+        ocean_tensor_opencl.cache_write_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.cache_slice_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.cache_slice_kernel);
+        ocean_tensor_opencl.cache_slice_kernel = NULL;
     }
     if (ocean_tensor_opencl.program) {
         clReleaseProgram(ocean_tensor_opencl.program);
@@ -1069,9 +1115,10 @@ static void ocean_tensor_opencl_init(void) {
         ocean_tensor_embedding_kernel_source,
         ocean_tensor_cross_entropy_kernel_source,
         ocean_tensor_backward_kernel_source,
+        ocean_tensor_cache_kernel_source,
     };
     ocean_tensor_opencl.program = clCreateProgramWithSource(
-        ocean_tensor_opencl.context, 8, sources, NULL, &status
+        ocean_tensor_opencl.context, 9, sources, NULL, &status
     );
     ocean_tensor_opencl_check(status, "clCreateProgramWithSource");
     status = clBuildProgram(
@@ -1190,6 +1237,14 @@ static cl_kernel ocean_tensor_opencl_get_kernel(
         case OCEAN_TENSOR_OPENCL_KERNEL_LAYER_NORM_BACKWARD_FLOAT32:
             slot = &ocean_tensor_opencl.layer_norm_backward_kernel;
             name = "ocean_tensor_layer_norm_backward_last_dim";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_CACHE_WRITE_FLOAT32:
+            slot = &ocean_tensor_opencl.cache_write_kernel;
+            name = "ocean_tensor_cache_write";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_CACHE_SLICE_FLOAT32:
+            slot = &ocean_tensor_opencl.cache_slice_kernel;
+            name = "ocean_tensor_cache_slice";
             break;
     }
     if (!slot || !name) ocean_tensor_fail("invalid OpenCL Tensor kernel key");
@@ -3234,6 +3289,106 @@ static void ocean_tensor_opencl_ternary_quantize(
     ocean_tensor_opencl_release_event(event);
 }
 
+static void ocean_tensor_opencl_cache_write(
+    const ocean_tensor_handle_t cache,
+    const ocean_tensor_handle_t value,
+    int position
+) {
+    if (value->size == 0) return;
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_CACHE_WRITE_FLOAT32
+    );
+    int heads = (int)cache->shape[1];
+    int sequence = (int)cache->shape[2];
+    int width = (int)cache->shape[3];
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &cache->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &value->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(int), &heads), "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(int), &sequence), "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(int), &width), "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 5, sizeof(int), &position), "clSetKernelArg"
+    );
+    size_t global_size = value->size ? value->size : 1;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_cache_slice(
+    const ocean_tensor_handle_t cache,
+    const ocean_tensor_handle_t output,
+    int start
+) {
+    if (output->size == 0) return;
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_CACHE_SLICE_FLOAT32
+    );
+    int heads = (int)cache->shape[1];
+    int source_sequence = (int)cache->shape[2];
+    int output_sequence = (int)output->shape[2];
+    int width = (int)cache->shape[3];
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &cache->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &output->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(int), &heads), "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(int), &source_sequence),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(int), &output_sequence),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 5, sizeof(int), &width), "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 6, sizeof(int), &start), "clSetKernelArg"
+    );
+    size_t global_size = output->size ? output->size : 1;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
 static void ocean_tensor_opencl_embedding_forward(
     const ocean_tensor_handle_t weight,
     const ocean_tensor_handle_t indices,
@@ -3670,6 +3825,62 @@ static void ocean_tensor_opencl_adamw_update(
 }
 #endif
 
+void ocean_tensor_cache_write(
+    ocean_tensor_handle_t cache,
+    ocean_tensor_handle_t value,
+    int position
+) {
+    if (!cache || !value) {
+        ocean_tensor_fail("Tensor.cache_write requires non-null tensors");
+    }
+    if (cache->dtype != OCEAN_TENSOR_FLOAT32 ||
+        value->dtype != OCEAN_TENSOR_FLOAT32 ||
+        cache->ndim != 4 || value->ndim != 4 ||
+        value->shape[0] != cache->shape[0] ||
+        value->shape[1] != cache->shape[1] ||
+        value->shape[2] != 1 ||
+        value->shape[3] != cache->shape[3] ||
+        cache->device != value->device ||
+        !ocean_tensor_is_contiguous(cache) ||
+        !ocean_tensor_is_contiguous(value)) {
+        ocean_tensor_fail("Tensor.cache_write metadata mismatch");
+    }
+    if (position < 0 || (size_t)position >= cache->shape[2]) {
+        ocean_tensor_fail("Tensor.cache_write position is out of bounds");
+    }
+
+    size_t batches = cache->shape[0];
+    size_t heads = cache->shape[1];
+    size_t sequence = cache->shape[2];
+    size_t width = cache->shape[3];
+    if (cache->device == OCEAN_TENSOR_CPU) {
+        float *destination = (float *)cache->cpu_data;
+        const float *source = (const float *)value->cpu_data;
+        for (size_t batch = 0; batch < batches; ++batch) {
+            for (size_t head = 0; head < heads; ++head) {
+                size_t destination_offset =
+                    ((batch * heads + head) * sequence + (size_t)position) * width;
+                size_t source_offset = (batch * heads + head) * width;
+                memcpy(
+                    destination + destination_offset,
+                    source + source_offset,
+                    width * sizeof(float)
+                );
+            }
+        }
+        return;
+    }
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (heads > (size_t)INT32_MAX || sequence > (size_t)INT32_MAX ||
+        width > (size_t)INT32_MAX || value->size > (size_t)INT32_MAX) {
+        ocean_tensor_fail("Tensor.cache_write dimensions are too large for OpenCL");
+    }
+    ocean_tensor_opencl_cache_write(cache, value, position);
+#else
+    ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
+#endif
+}
+
 static ocean_tensor_handle_t ocean_tensor_binary_opencl(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right,
@@ -3901,6 +4112,27 @@ ocean_tensor_handle_t ocean_tensor_slice(
     memcpy(shape, tensor->shape, tensor->ndim * sizeof(size_t));
     shape[axis] = start == stop
         ? 0 : ((size_t)(stop - start) + (size_t)step - 1) / (size_t)step;
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (tensor->device == OCEAN_TENSOR_GPU &&
+        tensor->dtype == OCEAN_TENSOR_FLOAT32 &&
+        tensor->ndim == 4 && axis == 2 && step == 1) {
+        if (tensor->shape[0] > (size_t)INT32_MAX ||
+            tensor->shape[1] > (size_t)INT32_MAX ||
+            tensor->shape[2] > (size_t)INT32_MAX ||
+            tensor->shape[3] > (size_t)INT32_MAX ||
+            shape[2] > (size_t)INT32_MAX) {
+            free(shape);
+            ocean_tensor_fail("Tensor cache slice dimensions are too large for OpenCL");
+        }
+        ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+            shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_GPU
+        );
+        ocean_tensor_opencl_cache_slice(tensor, result, start);
+        free(shape);
+        return result;
+    }
+#endif
 
     ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
         ? tensor : ocean_tensor_to(tensor, "cpu");

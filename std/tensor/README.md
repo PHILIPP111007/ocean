@@ -241,9 +241,10 @@ Tensor.set_grad_enabled(previous)
 
 The GPT-2 generation benchmark is
 `examples/ML/gpt2_native_ternary_inference.oc`. It reports steady-state
-tokens/second after one warmup token. Its current decoder is full-prefix and
-has no KV-cache yet, so the result should be compared only with other
-full-prefix baselines.
+tokens/second after one warmup token. The decoder pre-fills a per-layer
+GPU-resident KV-cache and reuses it during autoregressive generation. Cache row
+writes and prefix reads use dedicated OpenCL kernels when the backend is
+enabled.
 
 GPU float32 `matmul` also supports arbitrary-rank batched operands with leading-dimension
 broadcasting. The same kernel supports logical transposes for autograd `dA`/`dB` computation,

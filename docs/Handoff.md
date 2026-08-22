@@ -1163,16 +1163,16 @@ n_layers = 12
 `std.ml.Embedding` сохраняет старый default `0.1` для обратной совместимости.
 
 Это архитектурно точная GPT-2-подобная модель, но пока не ABI-совместимый
-загрузчик pretrained GPT-2: нет tokenizer/checkpoint loader, dropout, KV-cache
-и fused `c_attn` layout. Эти возможности остаются отдельными milestones.
+загрузчик pretrained GPT-2: нет tokenizer/checkpoint loader, dropout и fused
+`c_attn` layout. Inference path уже поддерживает per-layer KV-cache.
 
 Для inference-only замера добавлен отдельный пример
 `examples/ML/gpt2_native_ternary_inference.oc`. Он использует канонический
 GPT-2 small профиль, делает один warmup token, отключает autograd через
 `Tensor.set_grad_enabled(False)` и печатает elapsed time, milliseconds/token и
-tokens/second. Генерация сейчас full-prefix: каждый новый token заново считает
-весь prefix и не использует KV-cache, поэтому результат является честным
-baseline текущего API, но не финальной production-скоростью.
+tokens/second. Prompt prefill заполняет GPU-resident `K/V` cache каждого
+decoder block, после чего новый token обрабатывается только одним шагом
+attention.
 
 `Tensor.grad_enabled()` / `Tensor.set_grad_enabled(...)` — глобальный runtime
 переключатель построения autograd graph. Он не заменяет `Module.eval()`: для
@@ -2002,19 +2002,22 @@ last-token logits
 max_new_tokens
 ```
 
-Сначала без cache.
+Эта базовая схема сохранена для регрессионного сравнения; production-like
+GPT-2 inference path использует KV-cache ниже.
 
 ## P3 — KV cache
 
-После базового `generate()`:
+Реализовано в `GPT2Ternary.generate_greedy_kv()`:
 
 ```text
-generation without KV cache
-vs
-generation with KV cache
+GPU-resident K/V cache per decoder block
+prompt prefill
+single-token decode
+native cache-row write kernel
+native cache-prefix read kernel
 ```
 
-Проверять:
+Осталось проверить на реальном GPU:
 
 ```text
 identical tokens
@@ -2303,7 +2306,7 @@ OpenCL development/runtime environment.
 Следующий крупный рубеж:
 
 > **полностью подтверждённый TinyGPT training/inference на GPU, а затем
-> GPU-native Transformer kernels и KV cache.**
+> GPU-native Transformer kernels и оптимизация KV-cache generation.**
 
 ---
 

@@ -146,6 +146,7 @@ class Validator:
                             "ocean_tensor_gelu",
                             "ocean_tensor_gelu_backward",
                             "ocean_tensor_copy_into",
+                            "ocean_tensor_cache_write",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",
                             "ocean_tensor_binary",

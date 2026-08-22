@@ -65,6 +65,11 @@ ocean_tensor_handle_t ocean_tensor_cross_entropy_backward(
     ocean_tensor_handle_t targets
 );
 void ocean_tensor_copy_into(ocean_tensor_handle_t destination, ocean_tensor_handle_t source);
+void ocean_tensor_cache_write(
+    ocean_tensor_handle_t cache,
+    ocean_tensor_handle_t value,
+    int position
+);
 ocean_tensor_handle_t ocean_tensor_to(ocean_tensor_handle_t tensor, const char *device);
 ocean_tensor_handle_t ocean_tensor_matmul(
     ocean_tensor_handle_t left,

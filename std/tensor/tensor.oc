@@ -88,6 +88,10 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+    def cache_write(self, value: &Tensor, position: int) -> None:
+        ocean_tensor_cache_write(self.handle, value.handle, position)
+        return None
+
     def ternary_quantize(self) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_ternary_quantize(self.handle)
         var value: Tensor = Tensor(handle)

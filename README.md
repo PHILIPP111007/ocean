@@ -232,10 +232,10 @@ ocean run examples/ML/gpt2_native_ternary_inference.oc \
     --cflags "-I${CONDA_PREFIX}/include -L/usr/local/cuda/targets/x86_64-linux/lib -lOpenCL -DOCEAN_TENSOR_ENABLE_OPENCL"
 ```
 
-The current implementation is a full-prefix baseline without KV-cache: every
-generated token recomputes the entire prefix. Therefore its result measures the
-current Ocean API end to end, while the next performance milestone is KV-cache
-generation.
+The benchmark now uses a per-layer KV-cache: the prompt is prefetched once and
+each generated token computes only the new query/key/value row. The cache uses
+GPU-resident `[B, H, max_seq, head_dim]` tensors and native OpenCL kernels for
+cache-row writes and prefix reads.
 
 ---
 

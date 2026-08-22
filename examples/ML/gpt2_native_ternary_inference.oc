@@ -23,10 +23,8 @@ def main() -> int:
 
     var prompt: Tensor[int64] = Tensor.zeros(1, prompt_length, "cpu")
     var positions: Tensor[int64] = Tensor.zeros(1, total_length, "cpu")
-    var causal_bias: Tensor[float32] = Tensor.zeros(total_length, total_length, "cpu")
     fill_prompt(prompt, config.vocab_size)
     fill_positions(positions, total_length)
-    fill_causal_bias(causal_bias, total_length)
 
     var model: GPT2Ternary = GPT2Ternary(config)
     model.to("gpu")
@@ -34,14 +32,14 @@ def main() -> int:
 
     var prompt_gpu: Tensor[int64] = prompt.to("gpu")
     var positions_gpu: Tensor[int64] = positions.to("gpu")
-    var causal_bias_gpu: Tensor[float32] = causal_bias.to("gpu")
 
     # One unmeasured token removes one-time OpenCL program compilation from
-    # the reported steady-state generation latency.
-    var warmup: Tensor[int64] = model.generate_greedy(prompt_gpu, 1, positions_gpu, causal_bias_gpu)
+    # the reported steady-state generation latency. KV cache is populated by
+    # the prompt prefill and reused for every generated token.
+    var warmup: Tensor[int64] = model.generate_greedy_kv(prompt_gpu, 1, positions_gpu)
 
     var start: float64 = Time.monotonic()
-    var generated: Tensor[int64] = model.generate_greedy(prompt_gpu, new_tokens, positions_gpu, causal_bias_gpu)
+    var generated: Tensor[int64] = model.generate_greedy_kv(prompt_gpu, new_tokens, positions_gpu)
     var elapsed: float64 = Time.monotonic() - start
 
     var tokens_per_second: float64 = 0.0
