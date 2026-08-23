@@ -34,6 +34,15 @@ int main(void) {
         }
     }
 
+    const size_t logits_shape[2] = {1, 5};
+    const size_t logits_strides[2] = {5, 1};
+    const float logits_values[5] = {0.5f, 2.0f, -1.0f, 4.0f, 4.0f};
+    ocean_tensor_handle_t logits = ocean_tensor_from_cpu_strided(
+        logits_values, logits_shape, logits_strides, 2, "float32", "cpu"
+    );
+    if (ocean_tensor_argmax(logits) != 3) return 1;
+
+    ocean_tensor_release(logits);
     ocean_tensor_release(value);
     ocean_tensor_release(cache);
     puts("KV cache write v0.1 CPU: OK");

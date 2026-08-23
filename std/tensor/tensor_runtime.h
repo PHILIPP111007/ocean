@@ -70,6 +70,7 @@ void ocean_tensor_cache_write(
     ocean_tensor_handle_t value,
     int position
 );
+int ocean_tensor_argmax(ocean_tensor_handle_t tensor);
 ocean_tensor_handle_t ocean_tensor_to(ocean_tensor_handle_t tensor, const char *device);
 ocean_tensor_handle_t ocean_tensor_matmul(
     ocean_tensor_handle_t left,
@@ -254,6 +255,9 @@ ocean_tensor_handle_t ocean_tensor_transpose_dims(ocean_tensor_handle_t tensor, 
 ocean_tensor_handle_t ocean_tensor_sum_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim);
 ocean_tensor_handle_t ocean_tensor_mean_dim(ocean_tensor_handle_t tensor, int dim, bool keepdim);
 ocean_tensor_handle_t ocean_tensor_softmax(ocean_tensor_handle_t tensor, int dim);
+ocean_tensor_handle_t ocean_tensor_causal_softmax(
+    ocean_tensor_handle_t tensor
+);
 ocean_tensor_handle_t ocean_tensor_layer_norm(
     ocean_tensor_handle_t tensor, int dim, double epsilon
 );

@@ -92,6 +92,9 @@ class Tensor:
         ocean_tensor_cache_write(self.handle, value.handle, position)
         return None
 
+    def argmax(self) -> int:
+        return ocean_tensor_argmax(self.handle)
+
     def ternary_quantize(self) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_ternary_quantize(self.handle)
         var value: Tensor = Tensor(handle)
@@ -197,6 +200,11 @@ class Tensor:
 
     def softmax(self, dim: int) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_autograd_softmax(self.handle, dim)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def causal_softmax(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_causal_softmax(self.handle)
         var value: Tensor = Tensor(handle)
         return value
 

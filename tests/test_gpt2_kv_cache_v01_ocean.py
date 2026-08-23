@@ -37,9 +37,10 @@ def main() -> int:
 
     var previous_grad_enabled: bool = Tensor.grad_enabled()
     Tensor.set_grad_enabled(False)
+    model.prepare_inference()
     var full_logits: Tensor[float32] = model.forward(tokens, positions, causal_bias)
     var prefill_cache: GPT2KVCache = model.new_kv_cache("cpu")
-    var prefill_hidden: Tensor[float32] = model.forward_prefill_hidden(tokens, positions, prefill_cache, causal_bias)
+    var prefill_hidden: Tensor[float32] = model.forward_prefill_hidden(tokens, positions, prefill_cache)
     var prefill_last: Tensor[float32] = prefill_hidden.slice(1, 2, 3, 1)
     var prefill_lm_weight: Tensor[float32] = model.tied_lm_weight()
     var prefill_logits: Tensor[float32] = prefill_last.matmul(prefill_lm_weight)
