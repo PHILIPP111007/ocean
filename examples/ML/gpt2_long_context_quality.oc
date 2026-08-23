@@ -66,6 +66,16 @@ def main() -> int:
     model.to("gpu")
     model.eval()
     model.freeze_for_inference()
+    var reference_weight: Tensor[float32] = model.token_embedding.weight.tensor()
+    var model_device: str = reference_weight.device()
+    var backend_device: str = reference_weight.device_info()
+    var cuda_sparse_available: bool = reference_weight.sparse_attention_cuda_available()
+    print("model device =", model_device)
+    print("backend device =", backend_device)
+    if cuda_sparse_available == False:
+        print("[error] quality comparison requires native CUDA sparse attention")
+        return 1
+
     var prompt_gpu: Tensor[int64] = prompt.to("gpu")
     var positions_gpu: Tensor[int64] = positions.to("gpu")
 
@@ -89,6 +99,7 @@ def main() -> int:
     print("sparse prefill next token =", sparse_next)
     print("prefill argmax match =", dense_next == sparse_next)
     print("max prefill logit abs diff =", max_logit_difference)
+    print("scaled prefill logit diff =", max_logit_difference * 1000000.0)
     print("generated token agreement =", matching_tokens, "/", new_tokens)
     print("[ok] Ocean long-context quality comparison")
     return 0
