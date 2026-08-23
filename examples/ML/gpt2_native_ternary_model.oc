@@ -214,6 +214,7 @@ class GPT2Attention(Module):
         self.sparse_top_k: int = 128
         self.sparse_top_blocks: int = 8
         self.sparse_block_size: int = 64
+        self.sparse_prefill_threshold: int = 256
 
     def forward(self, input: &Tensor[float32], causal_bias: &Tensor[float32]) -> Tensor[float32]:
         if Tensor.grad_enabled() == False and self.q_proj.inference_ready and self.k_proj.inference_ready and self.v_proj.inference_ready:
@@ -330,6 +331,8 @@ class GPT2Attention(Module):
     def forward_prefill_fused(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32]) -> Tensor[float32]:
         var batch_size: int = input.shape(0)
         var sequence_length: int = input.shape(1)
+        if input.device() == "gpu" and input.sparse_attention_cuda_available() and sequence_length >= self.sparse_prefill_threshold:
+            return self.forward_prefill_sparse(input, cache_k, cache_v)
         var q_linear: Tensor[float32] = Tensor.empty(batch_size, sequence_length, self.d_model, input.device())
         var k_linear: Tensor[float32] = Tensor.empty(batch_size, sequence_length, self.d_model, input.device())
         var v_linear: Tensor[float32] = Tensor.empty(batch_size, sequence_length, self.d_model, input.device())
@@ -347,6 +350,27 @@ class GPT2Attention(Module):
         var scaled: Tensor[float32] = scores.div_scalar(sqrt(self.head_dim))
         var weights: Tensor[float32] = scaled.causal_softmax()
         var context: Tensor[float32] = weights.matmul(v)
+        var context_bthd: Tensor[float32] = context.permute([0, 2, 1, 3])
+        var merged: Tensor[float32] = context_bthd.reshape([batch_size, sequence_length, self.d_model])
+        return self.out_proj.forward(merged)
+
+    def forward_prefill_sparse(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32]) -> Tensor[float32]:
+        var batch_size: int = input.shape(0)
+        var sequence_length: int = input.shape(1)
+        var q_linear: Tensor[float32] = Tensor.empty(batch_size, sequence_length, self.d_model, input.device())
+        var k_linear: Tensor[float32] = Tensor.empty(batch_size, sequence_length, self.d_model, input.device())
+        var v_linear: Tensor[float32] = Tensor.empty(batch_size, sequence_length, self.d_model, input.device())
+        input.packed_qkv_inference_into(self.q_proj.inference_packed_weight, self.q_proj.inference_scale, self.q_proj.bias.tensor(), self.k_proj.inference_packed_weight, self.k_proj.inference_scale, self.k_proj.bias.tensor(), self.v_proj.inference_packed_weight, self.v_proj.inference_scale, self.v_proj.bias.tensor(), q_linear, k_linear, v_linear, self.d_model)
+        var q_reshaped: Tensor[float32] = q_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+        var k_reshaped: Tensor[float32] = k_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+        var v_reshaped: Tensor[float32] = v_linear.reshape([batch_size, sequence_length, self.n_heads, self.head_dim])
+        var q: Tensor[float32] = q_reshaped.permute([0, 2, 1, 3])
+        var k: Tensor[float32] = k_reshaped.permute([0, 2, 1, 3])
+        var v: Tensor[float32] = v_reshaped.permute([0, 2, 1, 3])
+        cache_k.cache_write(k, 0)
+        cache_v.cache_write(v, 0)
+        var summary: Tensor[float32] = cache_k.sparse_attention_build_summaries_active(sequence_length, self.sparse_block_size)
+        var context: Tensor[float32] = q.sparse_attention_blocked_cached_active(cache_k, cache_v, summary, sequence_length, self.sparse_top_k, self.sparse_top_blocks, self.sparse_block_size, 1.0 / sqrt(self.head_dim), 0, True)
         var context_bthd: Tensor[float32] = context.permute([0, 2, 1, 3])
         var merged: Tensor[float32] = context_bthd.reshape([batch_size, sequence_length, self.d_model])
         return self.out_proj.forward(merged)

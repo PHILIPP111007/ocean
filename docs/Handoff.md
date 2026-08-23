@@ -3511,6 +3511,15 @@ Benchmark `generate_greedy_kv()` измеряет не только decode, но
 генерации нового токена; для отдельной оценки нужны prefill и steady-state
 decode timings.
 
+Для prompt length от 256 токенов GPT-2 CUDA prefill теперь использует тот же
+block-routed SparseAttention path: Q/K/V записываются в cache, строятся block
+summaries, после чего выполняется causal active sparse attention по всему
+prefill. Это заменяет dense `QK^T -> softmax -> AV` на экспериментальный
+фиксированный budget (`top_blocks=8`, `top_k=128`). Путь намеренно включён
+только для CUDA и длинных prompt’ов; CPU и короткие prompt’ы сохраняют dense
+reference. Результат является sparse approximation и требует отдельного
+quality comparison с dense GPT-2.
+
 Текущая GPT-2 интеграция correctness-first: GPU decode использует packed QKV
 split, cache write и CUDA SparseAttention вместо прежнего dense attention
 decode. Это ещё не означает прирост tokens/sec: на коротком контексте overhead
