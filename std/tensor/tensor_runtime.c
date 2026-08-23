@@ -6697,6 +6697,33 @@ ocean_tensor_handle_t ocean_tensor_permute(
 #endif
 
     if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (tensor->dtype == OCEAN_TENSOR_FLOAT32 && ndim == 4 &&
+            normalized[0] == 0 && normalized[1] == 2 &&
+            normalized[2] == 1 && normalized[3] == 3 &&
+            ocean_tensor_is_contiguous(tensor) &&
+            tensor->shape[0] <= (size_t)INT_MAX &&
+            tensor->shape[1] <= (size_t)INT_MAX &&
+            tensor->shape[2] <= (size_t)INT_MAX &&
+            tensor->shape[3] <= (size_t)INT_MAX) {
+            size_t shape[4] = {
+                tensor->shape[0], tensor->shape[2],
+                tensor->shape[1], tensor->shape[3]
+            };
+            ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+                shape, 4, OCEAN_TENSOR_FLOAT32,
+                OCEAN_TENSOR_BACKEND_CUDA
+            );
+            ocean_cuda_permute_swap12_f32(
+                tensor->cuda_data, result->cuda_data,
+                (int)tensor->shape[0], (int)tensor->shape[1],
+                (int)tensor->shape[2], (int)tensor->shape[3]
+            );
+            free(normalized);
+            free(seen);
+            return result;
+        }
+#endif
         ocean_tensor_handle_t cpu_tensor = ocean_tensor_to(tensor, "cpu");
         ocean_tensor_handle_t cpu_result = ocean_tensor_permute_cpu(
             cpu_tensor, normalized, ndim

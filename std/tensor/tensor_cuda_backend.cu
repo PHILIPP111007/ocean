@@ -739,6 +739,29 @@ __global__ void ocean_cuda_cache_write_kernel(
     cache[destination] = value[linear];
 }
 
+__global__ void ocean_cuda_permute_swap12_f32_kernel(
+    const float *input,
+    float *output,
+    int batches,
+    int first_dim,
+    int second_dim,
+    int head_dim
+) {
+    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)batches * (size_t)first_dim *
+        (size_t)second_dim * (size_t)head_dim;
+    if (linear >= total) return;
+    size_t feature = linear % (size_t)head_dim;
+    size_t output_position = linear / (size_t)head_dim;
+    size_t output_first = output_position % (size_t)second_dim;
+    size_t output_batch_position = output_position / (size_t)second_dim;
+    size_t output_second = output_batch_position % (size_t)first_dim;
+    size_t batch = output_batch_position / (size_t)first_dim;
+    size_t input_index = (((batch * (size_t)first_dim + output_second) *
+        (size_t)second_dim + output_first) * (size_t)head_dim) + feature;
+    output[linear] = input[input_index];
+}
+
 __global__ void ocean_cuda_cache_slice_kernel(
     const float *cache, float *output, int batches, int heads,
     int source_sequence, int output_sequence, int width, int start
@@ -1314,6 +1337,24 @@ void ocean_cuda_cache_write(void *cache, const void *value, int batches, int hea
         value_sequence, width, position
     );
     ocean_cuda_check_launch("cache write kernel");
+}
+
+void ocean_cuda_permute_swap12_f32(
+    const void *input,
+    void *output,
+    int batches,
+    int first_dim,
+    int second_dim,
+    int head_dim
+) {
+    size_t total = (size_t)batches * (size_t)first_dim *
+        (size_t)second_dim * (size_t)head_dim;
+    if (total == 0) return;
+    ocean_cuda_permute_swap12_f32_kernel<<<ocean_cuda_blocks(total), 256>>>(
+        (const float *)input, (float *)output,
+        batches, first_dim, second_dim, head_dim
+    );
+    ocean_cuda_check_launch("permute swap12 kernel");
 }
 
 void ocean_cuda_cache_slice(const void *cache, void *output, int batches, int heads, int source_sequence, int output_sequence, int width, int start) {

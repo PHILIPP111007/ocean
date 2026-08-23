@@ -194,6 +194,14 @@ void ocean_cuda_cache_write(
     int width,
     int position
 );
+void ocean_cuda_permute_swap12_f32(
+    const void *input,
+    void *output,
+    int batches,
+    int first_dim,
+    int second_dim,
+    int head_dim
+);
 void ocean_cuda_cache_slice(
     const void *cache,
     void *output,

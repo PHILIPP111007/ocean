@@ -3498,6 +3498,19 @@ block routing, token selection и causal prefix параметром `active_len
 каждом слое и токене. На CPU active API сохраняет correctness через временные
 срезы; это не является GPU performance path.
 
+Дополнительно устранён более дорогой скрытый fallback: до 2026-08-24
+`Tensor.permute()` на CUDA делал `GPU -> CPU -> permute -> GPU`. Это происходило
+для `q`, `k`, `v` и `context` в каждом Transformer-слое. Для часто используемой
+перестановки `[B,A,H,D] -> [B,H,A,D]` добавлен native CUDA kernel
+`ocean_cuda_permute_swap12_f32`; остальные CUDA permutations пока сохраняют
+correctness fallback.
+
+Benchmark `generate_greedy_kv()` измеряет не только decode, но и prefill:
+каждый новый вызов заново обрабатывает весь prompt. Поэтому показатель
+`new_tokens / elapsed` при prompt length 1000 не является чистой скоростью
+генерации нового токена; для отдельной оценки нужны prefill и steady-state
+decode timings.
+
 Текущая GPT-2 интеграция correctness-first: GPU decode использует packed QKV
 split, cache write и CUDA SparseAttention вместо прежнего dense attention
 decode. Это ещё не означает прирост tokens/sec: на коротком контексте overhead
