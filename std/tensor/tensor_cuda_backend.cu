@@ -99,6 +99,39 @@ __global__ void ocean_cuda_binary_kernel(
     }
 }
 
+__global__ void ocean_cuda_binary_broadcast_f32_kernel(
+    const float *left,
+    const float *right,
+    float *output,
+    size_t size,
+    int operation,
+    ocean_cuda_broadcast_desc descriptor
+) {
+    size_t index = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= size) return;
+    size_t remaining = index;
+    size_t left_offset = 0;
+    size_t right_offset = 0;
+    for (int axis = descriptor.ndim - 1; axis >= 0; --axis) {
+        size_t coordinate = descriptor.output_shape[axis] == 0
+            ? 0 : remaining % descriptor.output_shape[axis];
+        remaining = descriptor.output_shape[axis] == 0
+            ? 0 : remaining / descriptor.output_shape[axis];
+        if (descriptor.left_shape[axis] != 1) {
+            left_offset += coordinate * descriptor.left_strides[axis];
+        }
+        if (descriptor.right_shape[axis] != 1) {
+            right_offset += coordinate * descriptor.right_strides[axis];
+        }
+    }
+    float a = left[left_offset];
+    float b = right[right_offset];
+    if (operation == 0) output[index] = a + b;
+    else if (operation == 1) output[index] = a - b;
+    else if (operation == 2) output[index] = a * b;
+    else output[index] = a / b;
+}
+
 template <typename T>
 __global__ void ocean_cuda_scalar_kernel(
     const T *input,
@@ -117,6 +150,13 @@ template <typename T>
 __global__ void ocean_cuda_fill_kernel(T *output, size_t size, T value) {
     size_t index = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
     if (index < size) output[index] = value;
+}
+
+template <typename T>
+__global__ void ocean_cuda_set_scalar_kernel(
+    T *output, size_t index, T value
+) {
+    if (blockIdx.x == 0 && threadIdx.x == 0) output[index] = value;
 }
 
 template <typename T, typename Accumulator>
@@ -168,6 +208,16 @@ static int ocean_cuda_blocks(size_t size) {
     return (int)blocks;
 }
 
+static int ocean_cuda_packed_blocks(int rows, int columns) {
+    if (rows <= 0 || columns <= 0) return 0;
+    size_t groups_per_row = ((size_t)columns + 127u) / 128u;
+    size_t blocks = (size_t)rows * groups_per_row;
+    if (blocks > (size_t)2147483647) {
+        ocean_tensor_fail("CUDA packed kernel grid is too large");
+    }
+    return (int)blocks;
+}
+
 void ocean_cuda_fill_f32(void *device_data, float value, size_t size) {
     if (size == 0) return;
     ocean_cuda_fill_kernel<<<ocean_cuda_blocks(size), 256>>>(
@@ -182,6 +232,27 @@ void ocean_cuda_fill_i32(void *device_data, int value, size_t size) {
         (int32_t *)device_data, size, value
     );
     ocean_cuda_check_launch("int32 fill kernel");
+}
+
+void ocean_cuda_set_f32(void *device_data, size_t index, float value) {
+    ocean_cuda_set_scalar_kernel<<<1, 1>>>(
+        (float *)device_data, index, value
+    );
+    ocean_cuda_check_launch("float32 scalar assignment kernel");
+}
+
+void ocean_cuda_set_i32(void *device_data, size_t index, int value) {
+    ocean_cuda_set_scalar_kernel<<<1, 1>>>(
+        (int32_t *)device_data, index, value
+    );
+    ocean_cuda_check_launch("int32 scalar assignment kernel");
+}
+
+void ocean_cuda_set_i64(void *device_data, size_t index, int64_t value) {
+    ocean_cuda_set_scalar_kernel<<<1, 1>>>(
+        (int64_t *)device_data, index, value
+    );
+    ocean_cuda_check_launch("int64 scalar assignment kernel");
 }
 
 void ocean_cuda_binary_f32(
@@ -212,6 +283,22 @@ void ocean_cuda_binary_i32(
         size, operation
     );
     ocean_cuda_check_launch("int32 binary kernel");
+}
+
+void ocean_cuda_binary_broadcast_f32(
+    const void *left,
+    const void *right,
+    void *output,
+    size_t size,
+    int operation,
+    const ocean_cuda_broadcast_desc *descriptor
+) {
+    if (size == 0) return;
+    ocean_cuda_binary_broadcast_f32_kernel<<<ocean_cuda_blocks(size), 256>>>(
+        (const float *)left, (const float *)right, (float *)output,
+        size, operation, *descriptor
+    );
+    ocean_cuda_check_launch("float32 broadcast binary kernel");
 }
 
 void ocean_cuda_scalar_f32(
@@ -476,18 +563,34 @@ __global__ void ocean_cuda_packed_linear_kernel(
     const float *input, const int32_t *packed, const float *bias, float *output,
     int rows, int cols_a, int cols_b, int packed_cols, float scale
 ) {
-    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
-    size_t total = (size_t)rows * (size_t)cols_b;
-    if (linear >= total) return;
-    int row = (int)(linear / (size_t)cols_b);
-    int column = (int)(linear % (size_t)cols_b);
+    __shared__ float input_tile[128];
+    int lane = (int)threadIdx.x;
+    int groups_per_row = (cols_b + 127) / 128;
+    int group = (int)blockIdx.x;
+    int row = group / groups_per_row;
+    int column = (group % groups_per_row) * 128 + lane;
+    if (row >= rows) return;
     float sum = 0.0f;
-    for (int k = 0; k < cols_a; ++k) {
-        sum += input[row * cols_a + k] * ocean_cuda_ternary_value(
-            packed, k, column, packed_cols
-        );
+    for (int tile = 0; tile < cols_a; tile += 128) {
+        int input_index = tile + lane;
+        input_tile[lane] = input_index < cols_a
+            ? input[row * cols_a + input_index] : 0.0f;
+        __syncthreads();
+        int tile_end = tile + 128;
+        if (tile_end > cols_a) tile_end = cols_a;
+        if (column < cols_b) {
+            for (int k = tile; k < tile_end; ++k) {
+                sum += input_tile[k - tile] * ocean_cuda_ternary_value(
+                    packed, k, column, packed_cols
+                );
+            }
+        }
+        __syncthreads();
     }
-    output[linear] = sum * scale + (bias ? bias[column] : 0.0f);
+    if (column < cols_b) {
+        output[(size_t)row * (size_t)cols_b + (size_t)column] =
+            sum * scale + (bias ? bias[column] : 0.0f);
+    }
 }
 
 __global__ void ocean_cuda_packed_qkv_kernel(
@@ -498,22 +601,37 @@ __global__ void ocean_cuda_packed_qkv_kernel(
     float *output, int rows, int cols_a, int cols_b, int packed_cols,
     float q_scale, float k_scale, float v_scale
 ) {
-    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
-    size_t total = (size_t)rows * (size_t)cols_b;
-    if (linear >= total) return;
-    int row = (int)(linear / (size_t)cols_b);
-    int column = (int)(linear % (size_t)cols_b);
+    __shared__ float input_tile[128];
+    int lane = (int)threadIdx.x;
+    int groups_per_row = (cols_b + 127) / 128;
+    int group = (int)blockIdx.x;
+    int row = group / groups_per_row;
+    int column = (group % groups_per_row) * 128 + lane;
+    if (row >= rows) return;
     float q_sum = 0.0f, k_sum = 0.0f, v_sum = 0.0f;
-    for (int k = 0; k < cols_a; ++k) {
-        float value = input[row * cols_a + k];
-        q_sum += value * ocean_cuda_ternary_value(q_packed, k, column, packed_cols);
-        k_sum += value * ocean_cuda_ternary_value(k_packed, k, column, packed_cols);
-        v_sum += value * ocean_cuda_ternary_value(v_packed, k, column, packed_cols);
+    for (int tile = 0; tile < cols_a; tile += 128) {
+        int input_index = tile + lane;
+        input_tile[lane] = input_index < cols_a
+            ? input[row * cols_a + input_index] : 0.0f;
+        __syncthreads();
+        int tile_end = tile + 128;
+        if (tile_end > cols_a) tile_end = cols_a;
+        if (column < cols_b) {
+            for (int k = tile; k < tile_end; ++k) {
+                float value = input_tile[k - tile];
+                q_sum += value * ocean_cuda_ternary_value(q_packed, k, column, packed_cols);
+                k_sum += value * ocean_cuda_ternary_value(k_packed, k, column, packed_cols);
+                v_sum += value * ocean_cuda_ternary_value(v_packed, k, column, packed_cols);
+            }
+        }
+        __syncthreads();
     }
-    size_t offset = (size_t)row * (size_t)(3 * cols_b) + (size_t)column;
-    output[offset] = q_sum * q_scale + q_bias[column];
-    output[offset + cols_b] = k_sum * k_scale + k_bias[column];
-    output[offset + 2 * cols_b] = v_sum * v_scale + v_bias[column];
+    if (column < cols_b) {
+        size_t offset = (size_t)row * (size_t)(3 * cols_b) + (size_t)column;
+        output[offset] = q_sum * q_scale + q_bias[column];
+        output[offset + cols_b] = k_sum * k_scale + k_bias[column];
+        output[offset + 2 * cols_b] = v_sum * v_scale + v_bias[column];
+    }
 }
 
 __global__ void ocean_cuda_packed_qkv_split_kernel(
@@ -525,21 +643,37 @@ __global__ void ocean_cuda_packed_qkv_split_kernel(
     int rows, int cols_a, int cols_b, int packed_cols,
     float q_scale, float k_scale, float v_scale
 ) {
-    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
-    size_t total = (size_t)rows * (size_t)cols_b;
-    if (linear >= total) return;
-    int row = (int)(linear / (size_t)cols_b);
-    int column = (int)(linear % (size_t)cols_b);
+    __shared__ float input_tile[128];
+    int lane = (int)threadIdx.x;
+    int groups_per_row = (cols_b + 127) / 128;
+    int group = (int)blockIdx.x;
+    int row = group / groups_per_row;
+    int column = (group % groups_per_row) * 128 + lane;
+    if (row >= rows) return;
     float q_sum = 0.0f, k_sum = 0.0f, v_sum = 0.0f;
-    for (int k = 0; k < cols_a; ++k) {
-        float value = input[row * cols_a + k];
-        q_sum += value * ocean_cuda_ternary_value(q_packed, k, column, packed_cols);
-        k_sum += value * ocean_cuda_ternary_value(k_packed, k, column, packed_cols);
-        v_sum += value * ocean_cuda_ternary_value(v_packed, k, column, packed_cols);
+    for (int tile = 0; tile < cols_a; tile += 128) {
+        int input_index = tile + lane;
+        input_tile[lane] = input_index < cols_a
+            ? input[row * cols_a + input_index] : 0.0f;
+        __syncthreads();
+        int tile_end = tile + 128;
+        if (tile_end > cols_a) tile_end = cols_a;
+        if (column < cols_b) {
+            for (int k = tile; k < tile_end; ++k) {
+                float value = input_tile[k - tile];
+                q_sum += value * ocean_cuda_ternary_value(q_packed, k, column, packed_cols);
+                k_sum += value * ocean_cuda_ternary_value(k_packed, k, column, packed_cols);
+                v_sum += value * ocean_cuda_ternary_value(v_packed, k, column, packed_cols);
+            }
+        }
+        __syncthreads();
     }
-    q_output[linear] = q_sum * q_scale + q_bias[column];
-    k_output[linear] = k_sum * k_scale + k_bias[column];
-    v_output[linear] = v_sum * v_scale + v_bias[column];
+    if (column < cols_b) {
+        size_t linear = (size_t)row * (size_t)cols_b + (size_t)column;
+        q_output[linear] = q_sum * q_scale + q_bias[column];
+        k_output[linear] = k_sum * k_scale + k_bias[column];
+        v_output[linear] = v_sum * v_scale + v_bias[column];
+    }
 }
 
 __global__ void ocean_cuda_cache_write_kernel(
@@ -645,18 +779,35 @@ __global__ void ocean_cuda_packed_attention_kernel(
     float *k_vector = q_vector + head_dim;
     float *v_vector = k_vector + head_dim;
     float *scores = v_vector + head_dim;
+    float *input_tile = scores + max_seq;
     int lane = (int)threadIdx.x;
     int head = (int)blockIdx.x;
     int channel = head * head_dim + lane;
     if (head >= n_heads) return;
-    if (lane < head_dim) {
-        float q_sum = 0.0f, k_sum = 0.0f, v_sum = 0.0f;
-        for (int input_column = 0; input_column < cols_a; ++input_column) {
-            float value = input[input_column];
-            q_sum += value * ocean_cuda_ternary_value(q_packed, input_column, channel, packed_cols);
-            k_sum += value * ocean_cuda_ternary_value(k_packed, input_column, channel, packed_cols);
-            v_sum += value * ocean_cuda_ternary_value(v_packed, input_column, channel, packed_cols);
+    float q_sum = 0.0f, k_sum = 0.0f, v_sum = 0.0f;
+    for (int tile = 0; tile < cols_a; tile += 128) {
+        int input_index = tile + lane;
+        input_tile[lane] = input_index < cols_a ? input[input_index] : 0.0f;
+        __syncthreads();
+        int tile_end = tile + 128;
+        if (tile_end > cols_a) tile_end = cols_a;
+        if (lane < head_dim) {
+            for (int input_column = tile; input_column < tile_end; ++input_column) {
+                float value = input_tile[input_column - tile];
+                q_sum += value * ocean_cuda_ternary_value(
+                    q_packed, input_column, channel, packed_cols
+                );
+                k_sum += value * ocean_cuda_ternary_value(
+                    k_packed, input_column, channel, packed_cols
+                );
+                v_sum += value * ocean_cuda_ternary_value(
+                    v_packed, input_column, channel, packed_cols
+                );
+            }
         }
+        __syncthreads();
+    }
+    if (lane < head_dim) {
         q_vector[lane] = q_sum * q_scale + q_bias[channel];
         k_vector[lane] = k_sum * k_scale + k_bias[channel];
         v_vector[lane] = v_sum * v_scale + v_bias[channel];
@@ -751,7 +902,9 @@ void ocean_cuda_ternary_pack(const void *input, void *output, int source_rows, i
 void ocean_cuda_packed_linear(const void *input, const void *packed, const void *bias, void *output, int rows, int cols_a, int cols_b, int packed_cols, float scale) {
     size_t size = (size_t)rows * (size_t)cols_b;
     if (size == 0) return;
-    ocean_cuda_packed_linear_kernel<<<ocean_cuda_blocks(size), 256>>>(
+    ocean_cuda_packed_linear_kernel<<<
+        ocean_cuda_packed_blocks(rows, cols_b), 128
+    >>>(
         (const float *)input, (const int32_t *)packed, (const float *)bias,
         (float *)output, rows, cols_a, cols_b, packed_cols, scale
     );
@@ -761,7 +914,9 @@ void ocean_cuda_packed_linear(const void *input, const void *packed, const void 
 void ocean_cuda_packed_qkv(const void *input, const void *q_packed, const void *q_bias, const void *k_packed, const void *k_bias, const void *v_packed, const void *v_bias, void *output, int rows, int cols_a, int cols_b, int packed_cols, float q_scale, float k_scale, float v_scale) {
     size_t size = (size_t)rows * (size_t)cols_b;
     if (size == 0) return;
-    ocean_cuda_packed_qkv_kernel<<<ocean_cuda_blocks(size), 256>>>(
+    ocean_cuda_packed_qkv_kernel<<<
+        ocean_cuda_packed_blocks(rows, cols_b), 128
+    >>>(
         (const float *)input, (const int32_t *)q_packed, (const float *)q_bias,
         (const int32_t *)k_packed, (const float *)k_bias,
         (const int32_t *)v_packed, (const float *)v_bias, (float *)output,
@@ -773,7 +928,9 @@ void ocean_cuda_packed_qkv(const void *input, const void *q_packed, const void *
 void ocean_cuda_packed_qkv_split(const void *input, const void *q_packed, const void *q_bias, const void *k_packed, const void *k_bias, const void *v_packed, const void *v_bias, void *q_output, void *k_output, void *v_output, int rows, int cols_a, int cols_b, int packed_cols, float q_scale, float k_scale, float v_scale) {
     size_t size = (size_t)rows * (size_t)cols_b;
     if (size == 0) return;
-    ocean_cuda_packed_qkv_split_kernel<<<ocean_cuda_blocks(size), 256>>>(
+    ocean_cuda_packed_qkv_split_kernel<<<
+        ocean_cuda_packed_blocks(rows, cols_b), 128
+    >>>(
         (const float *)input, (const int32_t *)q_packed, (const float *)q_bias,
         (const int32_t *)k_packed, (const float *)k_bias,
         (const int32_t *)v_packed, (const float *)v_bias,
@@ -787,7 +944,7 @@ void ocean_cuda_packed_qkv_attention_decode(const void *input, const void *q_pac
     if (head_dim <= 0 || head_dim > 128 || max_seq <= 0 || position < 0 || position >= max_seq) {
         ocean_tensor_fail("invalid CUDA packed attention dimensions");
     }
-    size_t shared_bytes = (size_t)(3 * head_dim + max_seq) * sizeof(float);
+    size_t shared_bytes = (size_t)(3 * head_dim + max_seq + 128) * sizeof(float);
     ocean_cuda_packed_attention_kernel<<<n_heads, 128, shared_bytes>>>(
         (const float *)input, (const int32_t *)q_packed, (const float *)q_bias,
         (const int32_t *)k_packed, (const float *)k_bias,

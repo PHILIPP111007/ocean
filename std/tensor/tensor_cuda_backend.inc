@@ -156,10 +156,73 @@ static ocean_tensor_handle_t ocean_tensor_cuda_binary(
     int operation
 ) {
     if (!ocean_tensor_cuda_same_shape(left, right)) {
+        if (operation == OCEAN_TENSOR_DIV &&
+            ocean_tensor_cuda_contains_zero(right)) {
+            ocean_tensor_fail("Tensor division by zero");
+        }
+        if (left->dtype == OCEAN_TENSOR_FLOAT32 &&
+            right->dtype == OCEAN_TENSOR_FLOAT32) {
+            ocean_tensor_handle_t left_contiguous = ocean_tensor_is_contiguous(left)
+                ? left : ocean_tensor_contiguous(left);
+            ocean_tensor_handle_t right_contiguous = ocean_tensor_is_contiguous(right)
+                ? right : ocean_tensor_contiguous(right);
+            size_t *shape = NULL;
+            size_t ndim = 0;
+            ocean_tensor_broadcast_shape(
+                left_contiguous, right_contiguous, &shape, &ndim
+            );
+            if (ndim <= OCEAN_CUDA_MAX_BROADCAST_RANK) {
+                ocean_cuda_broadcast_desc descriptor;
+                memset(&descriptor, 0, sizeof(descriptor));
+                descriptor.ndim = (int)ndim;
+                for (size_t axis = 0; axis < ndim; ++axis) {
+                    descriptor.output_shape[axis] = shape[axis];
+                }
+                size_t left_padding = ndim - left_contiguous->ndim;
+                size_t right_padding = ndim - right_contiguous->ndim;
+                for (size_t axis = 0; axis < ndim; ++axis) {
+                    if (axis < left_padding) {
+                        descriptor.left_shape[axis] = 1;
+                        descriptor.left_strides[axis] = 0;
+                    } else {
+                        size_t source_axis = axis - left_padding;
+                        descriptor.left_shape[axis] = left_contiguous->shape[source_axis];
+                        descriptor.left_strides[axis] = left_contiguous->strides[source_axis];
+                    }
+                    if (axis < right_padding) {
+                        descriptor.right_shape[axis] = 1;
+                        descriptor.right_strides[axis] = 0;
+                    } else {
+                        size_t source_axis = axis - right_padding;
+                        descriptor.right_shape[axis] = right_contiguous->shape[source_axis];
+                        descriptor.right_strides[axis] = right_contiguous->strides[source_axis];
+                    }
+                }
+                ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+                    shape, ndim, OCEAN_TENSOR_FLOAT32,
+                    OCEAN_TENSOR_BACKEND_CUDA
+                );
+                ocean_cuda_binary_broadcast_f32(
+                    left_contiguous->cuda_data,
+                    right_contiguous->cuda_data,
+                    result->cuda_data,
+                    result->size,
+                    operation,
+                    &descriptor
+                );
+                free(shape);
+                if (left_contiguous != left) ocean_tensor_release(left_contiguous);
+                if (right_contiguous != right) ocean_tensor_release(right_contiguous);
+                return result;
+            }
+            free(shape);
+            if (left_contiguous != left) ocean_tensor_release(left_contiguous);
+            if (right_contiguous != right) ocean_tensor_release(right_contiguous);
+        }
         /* Preserve the public Tensor broadcasting contract. The native CUDA
            elementwise kernel currently handles contiguous equal-shape data;
-           use the correctness-first CPU broadcast implementation for the
-           uncommon metadata/broadcast case and restore the CUDA device. */
+           use the correctness-first CPU broadcast implementation only for
+           unsupported ranks/dtypes and restore the CUDA device. */
         ocean_tensor_handle_t left_cpu = ocean_tensor_to(left, "cpu");
         ocean_tensor_handle_t right_cpu = ocean_tensor_to(right, "cpu");
         ocean_tensor_handle_t cpu_result = ocean_tensor_binary_cpu(

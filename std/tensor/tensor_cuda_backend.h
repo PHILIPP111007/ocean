@@ -2,6 +2,18 @@
 #define OCEAN_STD_TENSOR_CUDA_BACKEND_H
 
 #include <stddef.h>
+#include <stdint.h>
+
+#define OCEAN_CUDA_MAX_BROADCAST_RANK 16
+
+typedef struct ocean_cuda_broadcast_desc {
+    int ndim;
+    size_t output_shape[OCEAN_CUDA_MAX_BROADCAST_RANK];
+    size_t left_shape[OCEAN_CUDA_MAX_BROADCAST_RANK];
+    size_t right_shape[OCEAN_CUDA_MAX_BROADCAST_RANK];
+    size_t left_strides[OCEAN_CUDA_MAX_BROADCAST_RANK];
+    size_t right_strides[OCEAN_CUDA_MAX_BROADCAST_RANK];
+} ocean_cuda_broadcast_desc;
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,6 +27,9 @@ void ocean_cuda_memcpy_d2d(void *destination, const void *source, size_t bytes);
 void ocean_cuda_zero(void *device_data, size_t bytes);
 void ocean_cuda_fill_f32(void *device_data, float value, size_t size);
 void ocean_cuda_fill_i32(void *device_data, int value, size_t size);
+void ocean_cuda_set_f32(void *device_data, size_t index, float value);
+void ocean_cuda_set_i32(void *device_data, size_t index, int value);
+void ocean_cuda_set_i64(void *device_data, size_t index, int64_t value);
 
 void ocean_cuda_binary_f32(
     const void *left,
@@ -29,6 +44,14 @@ void ocean_cuda_binary_i32(
     void *output,
     size_t size,
     int operation
+);
+void ocean_cuda_binary_broadcast_f32(
+    const void *left,
+    const void *right,
+    void *output,
+    size_t size,
+    int operation,
+    const ocean_cuda_broadcast_desc *descriptor
 );
 void ocean_cuda_scalar_f32(
     const void *input,

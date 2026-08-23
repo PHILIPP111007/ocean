@@ -95,6 +95,12 @@ static ocean_tensor_handle_t ocean_tensor_binary_opencl(
     ocean_tensor_handle_t right,
     int operation
 );
+static void ocean_tensor_broadcast_shape(
+    const ocean_tensor_handle_t left,
+    const ocean_tensor_handle_t right,
+    size_t **shape_out,
+    size_t *ndim_out
+);
 static ocean_tensor_handle_t ocean_tensor_scalar_cpu(
     const ocean_tensor_handle_t tensor,
     double scalar,
@@ -219,6 +225,28 @@ _Noreturn void ocean_tensor_fail(const char *message) {
     fprintf(stderr, "Ocean Tensor error: %s\n", message);
     exit(EXIT_FAILURE);
 }
+
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+static bool ocean_tensor_cuda_set_scalar_fast(
+    ocean_tensor_handle_t tensor,
+    size_t index,
+    long double value
+) {
+    switch (tensor->dtype) {
+        case OCEAN_TENSOR_INT32:
+            ocean_cuda_set_i32(tensor->cuda_data, index, (int)value);
+            return true;
+        case OCEAN_TENSOR_INT64:
+            ocean_cuda_set_i64(tensor->cuda_data, index, (int64_t)value);
+            return true;
+        case OCEAN_TENSOR_FLOAT32:
+            ocean_cuda_set_f32(tensor->cuda_data, index, (float)value);
+            return true;
+        default:
+            return false;
+    }
+}
+#endif
 
 void ocean_tensor_validate_list_length(size_t actual, size_t expected) {
     if (actual != expected) {
@@ -2888,6 +2916,9 @@ static void ocean_tensor_set_flat_long_double(
         return;
     }
     if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (ocean_tensor_cuda_set_scalar_fast(tensor, index, value)) return;
+#endif
         ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
         ocean_tensor_set_flat_long_double(cpu, index, value);
         ocean_tensor_copy_into(tensor, cpu);
@@ -2955,6 +2986,12 @@ void ocean_tensor_set_nd(
         return;
     }
     if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        size_t offset = ocean_tensor_index_offset(tensor, indices, ndim);
+        if (ocean_tensor_cuda_set_scalar_fast(tensor, offset, (long double)value)) {
+            return;
+        }
+#endif
         ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
         ocean_tensor_set_nd(cpu, indices, ndim, value);
         ocean_tensor_copy_into(tensor, cpu);
@@ -3061,6 +3098,10 @@ static void ocean_tensor_set_nd_long_double(
     }
 
     if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        size_t offset = ocean_tensor_index_offset(tensor, indices, ndim);
+        if (ocean_tensor_cuda_set_scalar_fast(tensor, offset, value)) return;
+#endif
         ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
         ocean_tensor_set_nd_long_double(cpu, indices, ndim, value);
         ocean_tensor_copy_into(tensor, cpu);

@@ -3170,9 +3170,9 @@ Tensor.to("cpu")
 Tensor.to("gpu")
 ```
 
-Выбор GPU backend выполняется dispatch layer. По умолчанию используется первый
-доступный рабочий backend — сейчас это OpenCL. Для диагностики можно явно
-запросить:
+Выбор GPU backend выполняется dispatch layer. В сборке только с OpenCL по
+умолчанию используется OpenCL; если собран native CUDA backend, режим `auto`
+предпочитает CUDA. Для диагностики можно явно запросить:
 
 ```bash
 OCEAN_TENSOR_GPU_BACKEND=auto
@@ -3188,7 +3188,8 @@ host-device и device-device copy
 zero/fill
 float32/int32 binary operations
 float32/int32 scalar operations
-тильную float32/int32 2D matmul
+float32/int32 2D matmul
+```
 
 Inference-critical CUDA path дополнительно включает:
 
@@ -3204,11 +3205,26 @@ packed QKV и split QKV
 fused packed QKV + KV-cache attention decode
 KV-cache write/slice
 float32 argmax
-typed ND scalar assignment on CUDA uses identity-preserving CPU staging
-CUDA equal-shape elementwise operations use native kernels; broadcasted
-elementwise operations currently use correctness-first CPU staging and restore
-the CUDA device
+typed ND scalar assignment on CUDA uses an identity-preserving single-element
+CUDA kernel for float32/int32/int64 tensors
+CUDA equal-shape elementwise operations use native kernels
+supported float32 broadcast elementwise operations use a descriptor-driven
+native CUDA kernel; unsupported ranks/dtypes retain correctness-first staging
 ```
+
+После CUDA inference optimization pass:
+
+```text
+CUDA scalar/index assignment         -> single-element CUDA kernel
+float32 broadcast binary operations  -> native descriptor-driven CUDA kernel
+packed Linear                         -> 128-thread shared input tiles
+packed QKV                            -> 128-thread shared input tiles
+fused KV-cache attention projection   -> shared input tiles
+```
+
+Это устраняет наиболее дорогие per-token host round-trips в decode path и
+оставляет CPU staging только для неподдержанных arbitrary-rank операций и
+части metadata validation.
 
 Это позволяет перенести основной autoregressive decode GPT-2 на CUDA: lookup
 embedding, packed projections, LayerNorm, GELU, residual elementwise operations,
@@ -3216,7 +3232,6 @@ fused attention с KV-cache, packed LM head и argmax выполняются б�
 передачи каждого generated token через CPU. Prefill и общие arbitrary-rank
 `permute`/batched matmul пока могут использовать correctness-first staging через
 CPU; это не следует считать полностью CUDA-native prefill.
-```
 
 Включение выполняется только явно:
 
