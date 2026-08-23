@@ -110,9 +110,24 @@ backend device = CUDA GPU (native kernels)
 GPT2 config = vocab 50257, context 1024, hidden 768, heads 12, ff 3072, layers 12
 prompt tokens = 16
 generated tokens = 100
-elapsed seconds = 0.605117
-milliseconds per token = 6.051169
-tokens per second = 165.257335
+elapsed seconds = 0.572892
+milliseconds per token = 5.728918
+tokens per second = 174.553034
+first generated token = 0.000000
+[ok] Ocean GPT2 inference benchmark
+```
+
+```bash
+(.venv) phil@phil-TUF-Gaming-F16-FX608JMI:~/GitHub/ocean$ ./examples/ML/gpt2_native_ternary_inference 
+mode = inference
+model device = gpu
+backend device = CUDA GPU (native kernels)
+GPT2 config = vocab 50257, context 1024, hidden 768, heads 12, ff 3072, layers 12
+prompt tokens = 1000
+generated tokens = 100
+elapsed seconds = 22.450660
+milliseconds per token = 224.506605
+tokens per second = 4.454212
 first generated token = 0.000000
 [ok] Ocean GPT2 inference benchmark
 ```
