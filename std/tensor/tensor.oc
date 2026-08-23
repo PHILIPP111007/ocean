@@ -105,6 +105,11 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+    def linear_inference(self, weight: &Tensor, bias: &Tensor) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_linear_inference(self.handle, weight.handle, bias.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
     def add(self, other: &Tensor) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 0)
         var value: Tensor = Tensor(handle)

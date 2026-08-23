@@ -151,6 +151,7 @@ class Validator:
                             "ocean_tensor_causal_softmax",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",
+                            "ocean_tensor_linear_inference",
                             "ocean_tensor_binary",
                             "ocean_tensor_scalar",
                             "ocean_tensor_reshape",

@@ -87,6 +87,11 @@ ocean_tensor_handle_t ocean_tensor_binary(
     ocean_tensor_handle_t right,
     int operation
 );
+ocean_tensor_handle_t ocean_tensor_linear_inference(
+    ocean_tensor_handle_t input,
+    ocean_tensor_handle_t weight,
+    ocean_tensor_handle_t bias
+);
 ocean_tensor_handle_t ocean_tensor_scalar(
     ocean_tensor_handle_t tensor,
     double scalar,

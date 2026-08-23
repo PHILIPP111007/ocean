@@ -484,6 +484,53 @@ static const char *ocean_tensor_matmul_kernel_source =
     "}"
     "}";
 
+static const char *ocean_tensor_matvec_kernel_source =
+    "__kernel void ocean_tensor_matvec("
+    "__global const float *a, __global const float *b, "
+    "__global float *c, const int cols_a, const int cols_b) {"
+    "int local_index = (int)get_local_id(0);"
+    "int col = (int)get_group_id(0) * 128 + local_index;"
+    "__local float input_tile[128];"
+    "float sum = 0.0f;"
+    "for (int tile = 0; tile < cols_a; tile += 128) {"
+    "int input_index = tile + local_index;"
+    "input_tile[local_index] = input_index < cols_a ? a[input_index] : 0.0f;"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "int tile_end = tile + 128;"
+    "if (tile_end > cols_a) tile_end = cols_a;"
+    "if (col < cols_b) {"
+    "for (int k = tile; k < tile_end; ++k) {"
+    "sum += input_tile[k - tile] * b[k * cols_b + col];"
+    "}"
+    "}"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "}"
+    "if (col < cols_b) c[col] = sum;"
+    "}"
+    "__kernel void ocean_tensor_matvec_bias("
+    "__global const float *a, __global const float *b, "
+    "__global const float *bias, __global float *c, "
+    "const int cols_a, const int cols_b) {"
+    "int local_index = (int)get_local_id(0);"
+    "int col = (int)get_group_id(0) * 128 + local_index;"
+    "__local float input_tile[128];"
+    "float sum = 0.0f;"
+    "for (int tile = 0; tile < cols_a; tile += 128) {"
+    "int input_index = tile + local_index;"
+    "input_tile[local_index] = input_index < cols_a ? a[input_index] : 0.0f;"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "int tile_end = tile + 128;"
+    "if (tile_end > cols_a) tile_end = cols_a;"
+    "if (col < cols_b) {"
+    "for (int k = tile; k < tile_end; ++k) {"
+    "sum += input_tile[k - tile] * b[k * cols_b + col];"
+    "}"
+    "}"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "}"
+    "if (col < cols_b) c[col] = sum + bias[col];"
+    "}";
+
 static const char *ocean_tensor_batched_matmul_kernel_source =
     "__kernel void ocean_tensor_batched_matmul("
     "__global const float *a, __global const float *b, "
@@ -927,6 +974,8 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_command_queue queue;
     cl_program program;
     cl_kernel matmul_kernel;
+    cl_kernel matvec_kernel;
+    cl_kernel matvec_bias_kernel;
     cl_kernel matmul_int32_kernel;
     cl_kernel batched_matmul_kernel;
     cl_kernel permute_kernel;
@@ -957,6 +1006,8 @@ typedef struct ocean_tensor_opencl_runtime {
 
 typedef enum ocean_tensor_opencl_kernel_key {
     OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_MATVEC_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_MATVEC_BIAS_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_INT32,
     OCEAN_TENSOR_OPENCL_KERNEL_BATCHED_MATMUL_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_PERMUTE,
@@ -1000,6 +1051,14 @@ static void ocean_tensor_opencl_shutdown(void) {
     if (ocean_tensor_opencl.matmul_kernel) {
         clReleaseKernel(ocean_tensor_opencl.matmul_kernel);
         ocean_tensor_opencl.matmul_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.matvec_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.matvec_kernel);
+        ocean_tensor_opencl.matvec_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.matvec_bias_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.matvec_bias_kernel);
+        ocean_tensor_opencl.matvec_bias_kernel = NULL;
     }
     if (ocean_tensor_opencl.matmul_int32_kernel) {
         clReleaseKernel(ocean_tensor_opencl.matmul_int32_kernel);
@@ -1189,6 +1248,7 @@ static void ocean_tensor_opencl_init(void) {
 
     const char *sources[] = {
         ocean_tensor_matmul_kernel_source,
+        ocean_tensor_matvec_kernel_source,
         ocean_tensor_batched_matmul_kernel_source,
         ocean_tensor_permute_kernel_source,
         ocean_tensor_hotpath_kernel_source,
@@ -1201,7 +1261,7 @@ static void ocean_tensor_opencl_init(void) {
         ocean_tensor_causal_softmax_kernel_source,
     };
     ocean_tensor_opencl.program = clCreateProgramWithSource(
-        ocean_tensor_opencl.context, 11, sources, NULL, &status
+        ocean_tensor_opencl.context, 12, sources, NULL, &status
     );
     ocean_tensor_opencl_check(status, "clCreateProgramWithSource");
     status = clBuildProgram(
@@ -1236,6 +1296,14 @@ static cl_kernel ocean_tensor_opencl_get_kernel(
         case OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_FLOAT32:
             slot = &ocean_tensor_opencl.matmul_kernel;
             name = "ocean_tensor_matmul";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_MATVEC_FLOAT32:
+            slot = &ocean_tensor_opencl.matvec_kernel;
+            name = "ocean_tensor_matvec";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_MATVEC_BIAS_FLOAT32:
+            slot = &ocean_tensor_opencl.matvec_bias_kernel;
+            name = "ocean_tensor_matvec_bias";
             break;
         case OCEAN_TENSOR_OPENCL_KERNEL_MATMUL_INT32:
             slot = &ocean_tensor_opencl.matmul_int32_kernel;
@@ -5040,6 +5108,115 @@ static ocean_tensor_handle_t ocean_tensor_matmul_cpu(
 
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
+static void ocean_tensor_opencl_matvec(
+    const ocean_tensor_handle_t left,
+    const ocean_tensor_handle_t right,
+    const ocean_tensor_handle_t result
+) {
+    if (result->size == 0) return;
+    if (left->shape[left->ndim - 1] > (size_t)INT32_MAX ||
+        right->shape[right->ndim - 1] > (size_t)INT32_MAX) {
+        ocean_tensor_fail(
+            "GPU matvec dimensions are too large for OpenCL kernel indexing"
+        );
+    }
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_MATVEC_FLOAT32
+    );
+    int cols_a = (int)left->shape[left->ndim - 1];
+    int cols_b = (int)right->shape[right->ndim - 1];
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &left->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &right->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(cl_mem), &result->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(int), &cols_a), "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(int), &cols_b), "clSetKernelArg"
+    );
+    const size_t local_size = 128u;
+    size_t global_size =
+        ((size_t)cols_b + local_size - 1u) / local_size * local_size;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, &local_size, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_matvec_bias(
+    const ocean_tensor_handle_t left,
+    const ocean_tensor_handle_t right,
+    const ocean_tensor_handle_t bias,
+    const ocean_tensor_handle_t result
+) {
+    if (result->size == 0) return;
+    if (left->shape[left->ndim - 1] > (size_t)INT32_MAX ||
+        right->shape[right->ndim - 1] > (size_t)INT32_MAX) {
+        ocean_tensor_fail(
+            "GPU matvec dimensions are too large for OpenCL kernel indexing"
+        );
+    }
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_MATVEC_BIAS_FLOAT32
+    );
+    int cols_a = (int)left->shape[left->ndim - 1];
+    int cols_b = (int)right->shape[right->ndim - 1];
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &left->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &right->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 2, sizeof(cl_mem), &bias->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 3, sizeof(cl_mem), &result->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 4, sizeof(int), &cols_a), "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 5, sizeof(int), &cols_b), "clSetKernelArg"
+    );
+    const size_t local_size = 128u;
+    size_t global_size =
+        ((size_t)cols_b + local_size - 1u) / local_size * local_size;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, &local_size, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
 static ocean_tensor_handle_t ocean_tensor_matmul_opencl_batched(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right,
@@ -5075,6 +5252,17 @@ static ocean_tensor_handle_t ocean_tensor_matmul_opencl_batched(
         : right->shape[right->ndim - 1];
     if (inner != right_inner) {
         ocean_tensor_fail("batched matmul shape mismatch");
+    }
+
+    if (!transpose_left && !transpose_right &&
+        left->ndim == 3 && right->ndim == 2 &&
+        left->shape[0] == 1 && left->shape[1] == 1) {
+        size_t output_shape[3] = {1, 1, cols};
+        ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+            output_shape, 3, OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_GPU
+        );
+        ocean_tensor_opencl_matvec(left, right, result);
+        return result;
     }
 
     size_t *output_shape = (size_t *)malloc(
@@ -5413,6 +5601,10 @@ static ocean_tensor_handle_t ocean_tensor_matmul_opencl(
         left->shape[1] > (size_t)INT32_MAX ||
         right->shape[1] > (size_t)INT32_MAX) {
         ocean_tensor_fail("GPU Tensor dimensions are too large for OpenCL kernel indexing");
+    }
+    if (left->dtype == OCEAN_TENSOR_FLOAT32 && left->shape[0] == 1) {
+        ocean_tensor_opencl_matvec(left, right, result);
+        return result;
     }
     cl_kernel kernel = ocean_tensor_opencl_get_kernel(
         left->dtype == OCEAN_TENSOR_INT32
@@ -6214,6 +6406,46 @@ ocean_tensor_handle_t ocean_tensor_matmul(ocean_tensor_handle_t left, ocean_tens
     }
     if (left->device==OCEAN_TENSOR_CPU) return cpu;
     ocean_tensor_handle_t out=ocean_tensor_to(cpu,"gpu"); ocean_tensor_release(cpu); return out;
+}
+
+ocean_tensor_handle_t ocean_tensor_linear_inference(
+    ocean_tensor_handle_t input,
+    ocean_tensor_handle_t weight,
+    ocean_tensor_handle_t bias
+) {
+    if (!input || !weight || !bias) {
+        ocean_tensor_fail("linear_inference does not accept null Tensors");
+    }
+    if (input->dtype != OCEAN_TENSOR_FLOAT32 ||
+        weight->dtype != OCEAN_TENSOR_FLOAT32 ||
+        bias->dtype != OCEAN_TENSOR_FLOAT32 ||
+        input->device != weight->device || input->device != bias->device) {
+        ocean_tensor_fail(
+            "linear_inference requires matching float32 Tensors on one device"
+        );
+    }
+    if (weight->ndim != 2 || bias->ndim != 2 || bias->shape[0] != 1 ||
+        weight->shape[1] != bias->shape[1] ||
+        input->shape[input->ndim - 1] != weight->shape[0]) {
+        ocean_tensor_fail("linear_inference shape mismatch");
+    }
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (input->device == OCEAN_TENSOR_GPU && input->ndim == 3 &&
+        input->shape[0] == 1 && input->shape[1] == 1) {
+        size_t output_shape[3] = {1, 1, weight->shape[1]};
+        ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+            output_shape, 3, OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_GPU
+        );
+        ocean_tensor_opencl_matvec_bias(input, weight, bias, result);
+        return result;
+    }
+#endif
+
+    ocean_tensor_handle_t product = ocean_tensor_matmul(input, weight);
+    ocean_tensor_handle_t result = ocean_tensor_binary(product, bias, 0);
+    ocean_tensor_release(product);
+    return result;
 }
 
 static bool ocean_tensor_host_is_little_endian(void) {

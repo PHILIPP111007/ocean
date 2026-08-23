@@ -1382,6 +1382,26 @@ local memory tiles
 bounds checks
 ```
 
+Для autoregressive decode добавлен специализированный OpenCL `matvec` path:
+
+```text
+[1, K] × [K, N]
+[1, 1, K] × [K, N]
+    ↓
+128-thread workgroup
+local tile входного вектора
+без фиктивных строк обычного 8 × 8 matmul
+```
+
+Это уменьшает лишнюю работу при `batch=1, sequence=1`, который является
+основным режимом GPT-2 token-by-token inference. Остальные формы продолжают
+использовать обычный tiled или batched matmul kernel.
+
+Inference-only `TernaryLinear` дополнительно использует fused
+`linear_inference`: для формы `[1, 1, K] × [K, N]` bias добавляется внутри того
+же matvec kernel. Training/autograd path сохраняет обычную последовательность
+`matmul` + `add`.
+
 ---
 
 # 38. GPU fallback semantics

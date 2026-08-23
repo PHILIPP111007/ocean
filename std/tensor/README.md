@@ -176,6 +176,12 @@ do not duplicate CPU/OpenCL storage transitions.
 - CPU dispatches through a dtype-generic implementation;
 - GPU uses OpenCL kernels for `float32` and `int32`, with a correct CPU
   fallback for other numeric dtypes until specialized kernels are added;
+
+For autoregressive GPU inference, the OpenCL backend selects a specialized
+128-thread matrix-vector kernel for `[1, K] × [K, N]` and `[1, 1, K] × [K, N]`.
+It tiles the input vector in local memory and avoids the wasted rows of the
+general 8×8 tiled kernel. Inference-only Linear can fuse the bias addition into
+the same kernel; training/autograd keeps the ordinary matmul plus add path.
 - the operation must not transpose `B` implicitly.
 
 `matmul` is dispatched through the selected backend's operation table. CPU and

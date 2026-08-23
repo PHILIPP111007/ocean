@@ -100,6 +100,10 @@ class TernaryLinear(Module):
 
     def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
         var weight: Tensor[float32] = self.weight_for_forward()
+        var gradients_enabled: bool = Tensor.grad_enabled()
+        if gradients_enabled == False:
+            var bias_for_inference: Tensor[float32] = self.bias.tensor()
+            return input.linear_inference(weight, bias_for_inference)
         var projected: Tensor[float32] = input.matmul(weight)
         var bias: Tensor[float32] = self.bias.tensor()
         return projected.add(bias)
