@@ -365,12 +365,9 @@ class GPT2Attention(Module):
         var v: Tensor[float32] = v_reshaped.permute([0, 2, 1, 3])
         cache_k.cache_write(k, position)
         cache_v.cache_write(v, position)
-        var keys: Tensor[float32] = cache_k.slice(2, 0, position + 1, 1)
-        var values: Tensor[float32] = cache_v.slice(2, 0, position + 1, 1)
-        var active_blocks: int = (position + 1 + self.sparse_block_size - 1) / self.sparse_block_size
-        var active_summary: Tensor[float32] = summary.slice(2, 0, active_blocks, 1)
-        active_summary.sparse_attention_update_summary(keys, position, self.sparse_block_size)
-        var context: Tensor[float32] = q.sparse_attention_blocked_cached(keys, values, active_summary, self.sparse_top_k, self.sparse_top_blocks, self.sparse_block_size, 1.0 / sqrt(self.head_dim), position, True)
+        var active_length: int = position + 1
+        summary.sparse_attention_update_summary_active(cache_k, active_length, position, self.sparse_block_size)
+        var context: Tensor[float32] = q.sparse_attention_blocked_cached_active(cache_k, cache_v, summary, active_length, self.sparse_top_k, self.sparse_top_blocks, self.sparse_block_size, 1.0 / sqrt(self.head_dim), position, True)
         var context_bthd: Tensor[float32] = context.permute([0, 2, 1, 3])
         var merged: Tensor[float32] = context_bthd.reshape([batch_size, 1, self.d_model])
         return self.out_proj.forward(merged)

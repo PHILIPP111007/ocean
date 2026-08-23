@@ -1,6 +1,6 @@
 # Handoff — Phils Language / Ocean
 
-> Обновлено: **2026-08-23**
+> Обновлено: **2026-08-24**
 >
 > Этот документ — актуальный технический handoff по текущему состоянию Ocean.
 > Он намеренно отделяет **что уже доказано тестами** от **что реализовано, но ещё
@@ -3476,7 +3476,27 @@ blocked attention    -> CUDA block на каждый [batch, head, query]
 CUDA selector использует тот же deterministic tie-break, что и CPU reference:
 сначала выбираются `top_blocks`, затем точный top-k по токенам внутри них.
 `GPT2KVCache` теперь хранит summaries для каждого слоя, строит их после prefill
-и передаёт active summary slice в autoregressive decode.
+и передаёт их в autoregressive decode.
+
+Для устранения O(context) CUDA-копирований на каждом decode-шаге добавлены
+active-length варианты:
+
+```c
+ocean_tensor_sparse_attention_update_summary_active(
+    summaries, full_key_cache, active_length, position, block_size
+);
+output = ocean_tensor_sparse_attention_blocked_cached_active(
+    query, full_key_cache, full_value_cache, summaries,
+    active_length, top_k, top_blocks, block_size,
+    scale, query_start, causal
+);
+```
+
+Kernel использует полные contiguous buffers как storage, но ограничивает
+block routing, token selection и causal prefix параметром `active_length`.
+Поэтому GPT-2 decode больше не делает три CUDA slice/alloc/copy операции на
+каждом слое и токене. На CPU active API сохраняет correctness через временные
+срезы; это не является GPU performance path.
 
 Текущая GPT-2 интеграция correctness-first: GPU decode использует packed QKV
 split, cache write и CUDA SparseAttention вместо прежнего dense attention
@@ -3560,8 +3580,9 @@ P2  переиспользовать inference workspace и промежуточ
 P3  CPU reference SparseAttention                  -> реализован, correctness-only
 P4  SparseKVCache/block summaries                   -> summaries + cached API + block update реализованы
 P5  интегрировать SparseAttention в GPT2 KV-cache и перенести routing/gather на CUDA -> реализовано, CUDA hardware validation pending
-P6  сравнить dense KV-cache и SparseAttention на long-context benchmark
-P7  после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
+P6  измерить active-length decode на prompt 1K/4K/16K и сравнить с dense KV-cache
+P7  переиспользовать CUDA inference workspace и распараллелить serial selector
+P8  после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
 ```
 
 Backend/server vertical остаётся равноправной частью проекта: long-context ML

@@ -454,7 +454,7 @@ class TypedIRBuilder:
                 "add", "sub", "mul", "div",
                 "add_scalar", "sub_scalar", "mul_scalar", "div_scalar",
                 "reshape", "sum", "sum_dim", "mean_dim",
-                "exp", "log", "sqrt", "pow", "softmax", "layer_norm", "layer_norm_affine", "sparse_attention", "sparse_attention_blocked", "sparse_attention_build_summaries", "sparse_attention_build_summaries_active", "sparse_attention_update_summary", "sparse_attention_blocked_cached", "masked_fill", "permute",
+                "exp", "log", "sqrt", "pow", "softmax", "layer_norm", "layer_norm_affine", "sparse_attention", "sparse_attention_blocked", "sparse_attention_build_summaries", "sparse_attention_build_summaries_active", "sparse_attention_update_summary", "sparse_attention_update_summary_active", "sparse_attention_blocked_cached", "sparse_attention_blocked_cached_active", "masked_fill", "permute",
                 "relu", "to", "contiguous", "grad",
                 "shape", "ndim", "size", "device", "device_info", "sparse_attention_cuda_available", "get", "set",
                 "mean", "max", "min", "dtype", "is_contiguous", "item",

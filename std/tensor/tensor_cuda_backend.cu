@@ -850,6 +850,7 @@ __global__ void ocean_cuda_sparse_attention_kernel(
     int heads,
     int query_length,
     int key_length,
+    int active_length,
     int head_dim,
     int summary_blocks,
     int top_k,
@@ -885,14 +886,14 @@ __global__ void ocean_cuda_sparse_attention_kernel(
     __syncthreads();
 
     if (lane == 0) {
-        int block_count = (key_length + block_size - 1) / block_size;
+        int block_count = (active_length + block_size - 1) / block_size;
         int block_limit = top_blocks < block_count ? top_blocks : block_count;
-        int token_limit = top_k < key_length ? top_k : key_length;
+        int token_limit = top_k < active_length ? top_k : active_length;
         int chosen_blocks = 0;
         for (int block = 0; block < block_count; ++block) {
             int start = block * block_size;
             int end = start + block_size;
-            if (end > key_length) end = key_length;
+            if (end > active_length) end = active_length;
             int visible_end = end;
             if (causal && visible_end > absolute_query + 1) {
                 visible_end = absolute_query + 1;
@@ -961,7 +962,7 @@ __global__ void ocean_cuda_sparse_attention_kernel(
             int block = selected_blocks[selected_block];
             int start = block * block_size;
             int end = start + block_size;
-            if (end > key_length) end = key_length;
+            if (end > active_length) end = active_length;
             if (causal && end > absolute_query + 1) end = absolute_query + 1;
             for (int token = start; token < end; ++token) {
                 size_t key_base = ((size_t)batch * (size_t)heads +
@@ -1378,6 +1379,7 @@ void ocean_cuda_sparse_attention(
     int heads,
     int query_length,
     int key_length,
+    int active_length,
     int head_dim,
     int summary_blocks,
     int top_k,
@@ -1395,7 +1397,8 @@ void ocean_cuda_sparse_attention(
     ocean_cuda_sparse_attention_kernel<<<ocean_cuda_blocks(total), 128, shared_bytes>>>(
         (const float *)query, (const float *)key, (const float *)value,
         (const float *)summaries, (float *)output,
-        batches, heads, query_length, key_length, head_dim, summary_blocks,
+        batches, heads, query_length, key_length, active_length,
+        head_dim, summary_blocks,
         top_k, top_blocks, block_size, scale, query_start, causal
     );
     ocean_cuda_check_launch("sparse attention kernel");

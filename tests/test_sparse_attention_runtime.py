@@ -98,6 +98,36 @@ int main(void) {
         );
     }
 
+    ocean_tensor_handle_t active_query = ocean_tensor_slice(
+        query, 2, 1, 2, 1
+    );
+    ocean_tensor_handle_t active_key = ocean_tensor_slice(
+        key, 2, 0, 3, 1
+    );
+    ocean_tensor_handle_t active_value = ocean_tensor_slice(
+        value, 2, 0, 3, 1
+    );
+    ocean_tensor_handle_t active_summaries =
+        ocean_tensor_sparse_attention_build_summaries_active(key, 3, 2);
+    ocean_tensor_sparse_attention_update_summary_active(
+        active_summaries, key, 3, 2, 2
+    );
+    ocean_tensor_handle_t active_reference = ocean_tensor_sparse_attention_blocked(
+        active_query, active_key, active_value, 2, 2, 2, 1.0, 2, true
+    );
+    ocean_tensor_handle_t active_cached =
+        ocean_tensor_sparse_attention_blocked_cached_active(
+            active_query, key, value, active_summaries,
+            3, 2, 2, 2, 1.0, 2, true
+        );
+    for (size_t i = 0; i < 2; ++i) {
+        check_close(
+            ocean_tensor_get_flat_f32(active_cached, i),
+            ocean_tensor_get_flat_f32(active_reference, i),
+            "active cached blocked attention"
+        );
+    }
+
     ocean_tensor_set_flat_f32(key, 4, 0.0f);
     ocean_tensor_set_flat_f32(key, 5, 2.0f);
     ocean_tensor_sparse_attention_update_summary(summaries, key, 2, 2);
@@ -132,6 +162,12 @@ int main(void) {
     );
 
     ocean_tensor_release(causal);
+    ocean_tensor_release(active_cached);
+    ocean_tensor_release(active_reference);
+    ocean_tensor_release(active_summaries);
+    ocean_tensor_release(active_value);
+    ocean_tensor_release(active_key);
+    ocean_tensor_release(active_query);
     ocean_tensor_release(updated_cached);
     ocean_tensor_release(updated_blocked);
     ocean_tensor_release(cached);

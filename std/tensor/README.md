@@ -57,7 +57,9 @@ class Tensor:
     def sparse_attention_build_summaries(self, block_size: int) -> Tensor[float32]
     def sparse_attention_build_summaries_active(self, active_length: int, block_size: int) -> Tensor[float32]
     def sparse_attention_update_summary(self, key: &Tensor, position: int, block_size: int) -> None
+    def sparse_attention_update_summary_active(self, key: &Tensor, active_length: int, position: int, block_size: int) -> None
     def sparse_attention_blocked_cached(self, key: &Tensor, value: &Tensor, summaries: &Tensor, top_k: int, top_blocks: int, block_size: int, scale: float64, query_start: int, causal: bool) -> Tensor[float32]
+    def sparse_attention_blocked_cached_active(self, key: &Tensor, value: &Tensor, summaries: &Tensor, active_length: int, top_k: int, top_blocks: int, block_size: int, scale: float64, query_start: int, causal: bool) -> Tensor[float32]
     def get(self, row: int, col: int) -> float64
     def set(self, row: int, col: int, value: float64) -> None
     def reshape(self, rows: int, cols: int) -> Tensor[T]
@@ -111,6 +113,13 @@ For user code, literals are converted directly into backend-owned storage:
 ```text
 var A: Tensor[float32] = Tensor.from_list([[1.0, 2.0], [3.0, 4.0]], "cpu")
 ```
+
+For autoregressive sparse decode, the `*_active` methods accept the full
+capacity-sized KV-cache and a logical `active_length`. CUDA uses the full
+buffers as storage but limits routing and attention to the active prefix, so
+each token does not allocate or copy temporary KV-cache and summary slices.
+The non-`active` methods remain available for ordinary tensors whose physical
+length is also the logical attention length.
 
 ## NumPy `.npy` files
 

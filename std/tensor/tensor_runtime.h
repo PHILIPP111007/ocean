@@ -377,11 +377,31 @@ void ocean_tensor_sparse_attention_update_summary(
     int position,
     int block_size
 );
+void ocean_tensor_sparse_attention_update_summary_active(
+    ocean_tensor_handle_t summaries,
+    ocean_tensor_handle_t key,
+    int active_length,
+    int position,
+    int block_size
+);
 ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked_cached(
     ocean_tensor_handle_t query,
     ocean_tensor_handle_t key,
     ocean_tensor_handle_t value,
     ocean_tensor_handle_t summaries,
+    int top_k,
+    int top_blocks,
+    int block_size,
+    double scale,
+    int query_start,
+    bool causal
+);
+ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked_cached_active(
+    ocean_tensor_handle_t query,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t value,
+    ocean_tensor_handle_t summaries,
+    int active_length,
     int top_k,
     int top_blocks,
     int block_size,

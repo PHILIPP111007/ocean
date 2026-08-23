@@ -4667,7 +4667,8 @@ ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked_cached(
             query->cuda_data, key->cuda_data, value->cuda_data,
             summaries->cuda_data, result->cuda_data,
             (int)query->shape[0], (int)query->shape[1],
-            (int)query->shape[2], (int)key->shape[2], (int)head_dim,
+            (int)query->shape[2], (int)key->shape[2], (int)key->shape[2],
+            (int)head_dim,
             (int)expected_blocks, top_k, top_blocks, block_size,
             score_scale, query_start, causal ? 1 : 0
         );
@@ -4780,6 +4781,215 @@ void ocean_tensor_sparse_attention_update_summary(
         }
     }
     if (contiguous_key != key) ocean_tensor_release(contiguous_key);
+}
+
+void ocean_tensor_sparse_attention_update_summary_active(
+    ocean_tensor_handle_t summaries,
+    ocean_tensor_handle_t key,
+    int active_length,
+    int position,
+    int block_size
+) {
+    if (!summaries || !key ||
+        summaries->dtype != OCEAN_TENSOR_FLOAT32 ||
+        key->dtype != OCEAN_TENSOR_FLOAT32 ||
+        summaries->ndim != 4 || key->ndim != 4 ||
+        active_length <= 0 || position < 0 || block_size <= 0) {
+        ocean_tensor_fail(
+            "Active SparseAttention summary update requires float32 [B,H,K,D] tensors"
+        );
+    }
+    size_t batch = key->shape[0];
+    size_t heads = key->shape[1];
+    size_t key_length = key->shape[2];
+    size_t head_dim = key->shape[3];
+    if (key_length == 0 || head_dim == 0 ||
+        (size_t)active_length > key_length ||
+        (size_t)position >= (size_t)active_length) {
+        ocean_tensor_fail(
+            "Active SparseAttention summary update position is out of bounds"
+        );
+    }
+    size_t width = (size_t)block_size;
+    size_t block_count = (key_length + width - 1) / width;
+    if (summaries->shape[0] != batch || summaries->shape[1] != heads ||
+        summaries->shape[2] != block_count || summaries->shape[3] != head_dim ||
+        summaries->device != key->device ||
+        !ocean_tensor_is_contiguous(summaries)) {
+        ocean_tensor_fail(
+            "Active SparseAttention summary update metadata mismatch"
+        );
+    }
+
+    if (key->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (!ocean_tensor_is_contiguous(key) ||
+            batch > (size_t)INT_MAX || heads > (size_t)INT_MAX ||
+            key_length > (size_t)INT_MAX || block_count > (size_t)INT_MAX ||
+            head_dim > 128) {
+            ocean_tensor_fail(
+                "CUDA active SparseAttention summary update metadata mismatch"
+            );
+        }
+        ocean_cuda_sparse_update_summary(
+            key->cuda_data, summaries->cuda_data,
+            (int)batch, (int)heads, (int)key_length, (int)block_count,
+            active_length, (int)head_dim, block_size, position
+        );
+        return;
+#else
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+    }
+    if (key->device != OCEAN_TENSOR_CPU) {
+        ocean_tensor_fail(
+            "Active SparseAttention summary update supports CPU or CUDA only"
+        );
+    }
+
+    ocean_tensor_handle_t contiguous_key = ocean_tensor_is_contiguous(key)
+        ? key : ocean_tensor_contiguous(key);
+    const float *key_data = (const float *)contiguous_key->cpu_data;
+    float *summary_data = (float *)summaries->cpu_data;
+    size_t block = (size_t)position / width;
+    size_t start = block * width;
+    size_t end = start + width;
+    if (end > (size_t)active_length) end = (size_t)active_length;
+    size_t count = end - start;
+    for (size_t batch_index = 0; batch_index < batch; ++batch_index) {
+        for (size_t head = 0; head < heads; ++head) {
+            size_t summary_base =
+                ((batch_index * heads + head) * block_count + block)
+                * head_dim;
+            memset(summary_data + summary_base, 0, head_dim * sizeof(float));
+            for (size_t key_index = start; key_index < end; ++key_index) {
+                size_t key_base =
+                    ((batch_index * heads + head) * key_length + key_index)
+                    * head_dim;
+                for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                    summary_data[summary_base + dimension] +=
+                        key_data[key_base + dimension] / (float)count;
+                }
+            }
+        }
+    }
+    if (contiguous_key != key) ocean_tensor_release(contiguous_key);
+}
+
+ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked_cached_active(
+    ocean_tensor_handle_t query,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t value,
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int top_k,
+    int top_blocks,
+    int block_size,
+    double scale,
+    int query_start,
+    bool causal
+) {
+    if (!query || !key || !value || !summaries) {
+        ocean_tensor_fail("Active cached SparseAttention received a null Tensor");
+    }
+    if (query->dtype != OCEAN_TENSOR_FLOAT32 ||
+        key->dtype != OCEAN_TENSOR_FLOAT32 ||
+        value->dtype != OCEAN_TENSOR_FLOAT32 ||
+        summaries->dtype != OCEAN_TENSOR_FLOAT32 ||
+        query->ndim != 4 || key->ndim != 4 || value->ndim != 4 ||
+        summaries->ndim != 4 || block_size <= 0 || top_k <= 0 ||
+        top_blocks <= 0 || active_length <= 0 || query_start < 0) {
+        ocean_tensor_fail(
+            "Active cached SparseAttention requires float32 rank-4 tensors"
+        );
+    }
+    size_t batch = key->shape[0];
+    size_t heads = key->shape[1];
+    size_t key_length = key->shape[2];
+    size_t head_dim = key->shape[3];
+    size_t expected_blocks =
+        (key_length + (size_t)block_size - 1) / (size_t)block_size;
+    if (key_length == 0 || head_dim == 0 ||
+        (size_t)active_length > key_length ||
+        query->device != key->device || value->device != key->device ||
+        summaries->device != key->device ||
+        query->shape[0] != batch || query->shape[1] != heads ||
+        value->shape[0] != batch || value->shape[1] != heads ||
+        value->shape[2] != key_length || query->shape[3] != head_dim ||
+        value->shape[3] != head_dim ||
+        summaries->shape[0] != batch || summaries->shape[1] != heads ||
+        summaries->shape[2] != expected_blocks ||
+        summaries->shape[3] != head_dim ||
+        (size_t)query_start > (size_t)active_length ||
+        query->shape[2] > (size_t)active_length - (size_t)query_start) {
+        ocean_tensor_fail("Active cached SparseAttention metadata mismatch");
+    }
+    float score_scale = scale == 0.0
+        ? 1.0f / sqrtf((float)head_dim) : (float)scale;
+    if (!(score_scale > 0.0f) || !isfinite(score_scale)) {
+        ocean_tensor_fail("Active cached SparseAttention scale must be positive");
+    }
+
+    if (query->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (head_dim > 128 || batch > (size_t)INT_MAX ||
+            heads > (size_t)INT_MAX || query->shape[2] > (size_t)INT_MAX ||
+            key_length > (size_t)INT_MAX ||
+            expected_blocks > (size_t)INT_MAX ||
+            !ocean_tensor_is_contiguous(query) ||
+            !ocean_tensor_is_contiguous(key) ||
+            !ocean_tensor_is_contiguous(value) ||
+            !ocean_tensor_is_contiguous(summaries)) {
+            ocean_tensor_fail("CUDA active cached SparseAttention metadata mismatch");
+        }
+        ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+            query->shape, query->ndim, OCEAN_TENSOR_FLOAT32,
+            OCEAN_TENSOR_BACKEND_CUDA
+        );
+        ocean_cuda_sparse_attention(
+            query->cuda_data, key->cuda_data, value->cuda_data,
+            summaries->cuda_data, result->cuda_data,
+            (int)batch, (int)heads, (int)query->shape[2],
+            (int)key_length, active_length, (int)head_dim,
+            (int)expected_blocks, top_k, top_blocks, block_size,
+            score_scale, query_start, causal ? 1 : 0
+        );
+        return result;
+#else
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+    }
+    if (query->device != OCEAN_TENSOR_CPU) {
+        ocean_tensor_fail(
+            "Active cached SparseAttention currently supports CPU or CUDA only"
+        );
+    }
+    if (active_length == (int)key_length) {
+        return ocean_tensor_sparse_attention_blocked_cached(
+            query, key, value, summaries, top_k, top_blocks, block_size,
+            scale, query_start, causal
+        );
+    }
+    ocean_tensor_handle_t active_key = ocean_tensor_slice(
+        key, 2, 0, active_length, 1
+    );
+    ocean_tensor_handle_t active_value = ocean_tensor_slice(
+        value, 2, 0, active_length, 1
+    );
+    size_t active_blocks =
+        ((size_t)active_length + (size_t)block_size - 1) /
+        (size_t)block_size;
+    ocean_tensor_handle_t active_summaries = ocean_tensor_slice(
+        summaries, 2, 0, (int)active_blocks, 1
+    );
+    ocean_tensor_handle_t result = ocean_tensor_sparse_attention_blocked_cached(
+        query, active_key, active_value, active_summaries,
+        top_k, top_blocks, block_size, scale, query_start, causal
+    );
+    ocean_tensor_release(active_summaries);
+    ocean_tensor_release(active_value);
+    ocean_tensor_release(active_key);
+    return result;
 }
 
 static void ocean_tensor_validate_backward_inputs(

@@ -236,6 +236,7 @@ void ocean_cuda_sparse_attention(
     int heads,
     int query_length,
     int key_length,
+    int active_length,
     int head_dim,
     int summary_blocks,
     int top_k,

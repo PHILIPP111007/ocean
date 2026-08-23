@@ -285,8 +285,17 @@ class Tensor:
         ocean_tensor_sparse_attention_update_summary(self.handle, key.handle, position, block_size)
         return None
 
+    def sparse_attention_update_summary_active(self, key: &Tensor, active_length: int, position: int, block_size: int) -> None:
+        ocean_tensor_sparse_attention_update_summary_active(self.handle, key.handle, active_length, position, block_size)
+        return None
+
     def sparse_attention_blocked_cached(self, key: &Tensor, value: &Tensor, summaries: &Tensor, top_k: int, top_blocks: int, block_size: int, scale: float64, query_start: int, causal: bool) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention_blocked_cached(self.handle, key.handle, value.handle, summaries.handle, top_k, top_blocks, block_size, scale, query_start, causal)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def sparse_attention_blocked_cached_active(self, key: &Tensor, value: &Tensor, summaries: &Tensor, active_length: int, top_k: int, top_blocks: int, block_size: int, scale: float64, query_start: int, causal: bool) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention_blocked_cached_active(self.handle, key.handle, value.handle, summaries.handle, active_length, top_k, top_blocks, block_size, scale, query_start, causal)
         var result: Tensor = Tensor(handle)
         return result
 

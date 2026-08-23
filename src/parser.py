@@ -5324,7 +5324,7 @@ class Parser:
                 "fill", "sum", "sum_dim", "mean_dim", "copy",
                 "transpose", "transpose_dims", "row", "column", "slice",
                 "reshape", "matmul", "to",
-                "exp", "log", "sqrt", "pow", "softmax", "layer_norm", "layer_norm_affine", "sparse_attention", "sparse_attention_blocked", "sparse_attention_build_summaries", "sparse_attention_build_summaries_active", "sparse_attention_update_summary", "sparse_attention_blocked_cached", "masked_fill", "permute",
+                "exp", "log", "sqrt", "pow", "softmax", "layer_norm", "layer_norm_affine", "sparse_attention", "sparse_attention_blocked", "sparse_attention_build_summaries", "sparse_attention_build_summaries_active", "sparse_attention_update_summary", "sparse_attention_update_summary_active", "sparse_attention_blocked_cached", "sparse_attention_blocked_cached_active", "masked_fill", "permute",
                 "relu",
                 "shape", "ndim", "size", "device", "device_info", "sparse_attention_cuda_available", "get", "set", "release",
                 "mean", "max", "min", "dtype",
