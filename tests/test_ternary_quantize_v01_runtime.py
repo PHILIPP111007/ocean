@@ -39,6 +39,37 @@ int main(void) {
         }
     }
 
+    double packed_scale = ocean_tensor_ternary_scale(input);
+    if (fabs(packed_scale - (double)scale) > 1e-6) return 1;
+    ocean_tensor_handle_t packed = ocean_tensor_ternary_pack(
+        input, packed_scale, false
+    );
+    if (ocean_tensor_shape(packed, 0) != 2 ||
+        ocean_tensor_shape(packed, 1) != 1) return 1;
+    if (ocean_tensor_get_flat_i32(packed, 0) != 66 ||
+        ocean_tensor_get_flat_i32(packed, 1) != 73) return 1;
+
+    size_t vector_shape[2] = {1, 2};
+    ocean_tensor_handle_t vector = ocean_tensor_zeros_nd(
+        vector_shape, 2, "float32", "cpu"
+    );
+    ocean_tensor_set_flat_f32(vector, 0, 1.0f);
+    ocean_tensor_set_flat_f32(vector, 1, 2.0f);
+    ocean_tensor_handle_t packed_result = ocean_tensor_packed_matmul_inference(
+        vector, packed, packed_scale, 4
+    );
+    const float packed_expected[4] = {
+        scale, -2.0f * scale, 0.0f, 3.0f * scale,
+    };
+    for (size_t index = 0; index < 4; ++index) {
+        if (fabsf(ocean_tensor_get_flat_f32(packed_result, index) - packed_expected[index]) > 1e-6f) {
+            return 1;
+        }
+    }
+
+    ocean_tensor_release(packed_result);
+    ocean_tensor_release(vector);
+    ocean_tensor_release(packed);
     ocean_tensor_release(output);
     ocean_tensor_release(input);
     puts("Ternary quantize v0.1 CPU: OK");

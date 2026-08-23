@@ -80,7 +80,8 @@ class TernaryLinear(Module):
         self.weight: Parameter = Parameter(weight_tensor)
         var bias_tensor: Tensor[float32] = Tensor.zeros(1, out_features, "cpu")
         self.bias: Parameter = Parameter(bias_tensor)
-        self.inference_weight: Tensor[float32] = Tensor.zeros(0, 0, "cpu")
+        self.inference_packed_weight: Tensor[int32] = Tensor.zeros(0, 0, "cpu")
+        self.inference_scale: float64 = 0.0
         self.inference_ready: bool = False
 
     def ternary_weight(self) -> Tensor[float32]:
@@ -92,15 +93,14 @@ class TernaryLinear(Module):
         return ste_weight
 
     def weight_for_forward(self) -> Tensor[float32]:
-        if self.inference_ready:
-            var gradients_enabled: bool = Tensor.grad_enabled()
-            if gradients_enabled == False:
-                return self.inference_weight
         return self.ternary_weight()
 
     def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
-        var weight: Tensor[float32] = self.weight_for_forward()
         var gradients_enabled: bool = Tensor.grad_enabled()
+        if gradients_enabled == False and self.inference_ready:
+            var packed_bias: Tensor[float32] = self.bias.tensor()
+            return input.packed_linear_inference(self.inference_packed_weight, self.inference_scale, packed_bias, self.out_features)
+        var weight: Tensor[float32] = self.weight_for_forward()
         if gradients_enabled == False:
             var bias_for_inference: Tensor[float32] = self.bias.tensor()
             return input.linear_inference(weight, bias_for_inference)
@@ -110,7 +110,9 @@ class TernaryLinear(Module):
 
     def prepare_inference(self) -> None:
         if self.inference_ready == False:
-            self.inference_weight = self.ternary_weight()
+            var master: Tensor[float32] = self.weight.tensor()
+            self.inference_scale = master.ternary_scale()
+            self.inference_packed_weight = master.ternary_pack(self.inference_scale, False)
             self.inference_ready = True
         return None
 
@@ -360,19 +362,13 @@ class GPT2Ternary(Module):
         self.block11: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
         self.block12: GPT2Block = GPT2Block(config.d_model, config.n_heads, config.d_ff)
         self.ln_f: LayerNorm = LayerNorm(config.d_model, 0.00001)
-        self.inference_lm_weight: Tensor[float32] = Tensor.zeros(0, 0, "cpu")
+        self.inference_lm_packed: Tensor[int32] = Tensor.zeros(0, 0, "cpu")
+        self.inference_lm_scale: float64 = 0.0
         self.inference_lm_ready: bool = False
 
     def tied_lm_weight(self) -> Tensor[float32]:
         # GPT-2 ties the output projection to the token embedding matrix.
         # Quantize the tied weight with STE, then transpose to [C, V].
-        var use_cached_weight: bool = False
-        if self.inference_lm_ready:
-            var gradients_enabled: bool = Tensor.grad_enabled()
-            if gradients_enabled == False:
-                use_cached_weight = True
-        if use_cached_weight:
-            return self.inference_lm_weight
         var master: Tensor[float32] = self.token_embedding.weight.tensor()
         var detached: Tensor[float32] = master.copy()
         var quantized: Tensor[float32] = master.ternary_quantize()
@@ -411,12 +407,17 @@ class GPT2Ternary(Module):
             hidden = self.block12.forward(hidden, causal_bias)
 
         var normalized: Tensor[float32] = self.ln_f.forward(hidden)
+        var gradients_enabled: bool = Tensor.grad_enabled()
+        if gradients_enabled == False and self.inference_lm_ready:
+            return normalized.packed_matmul_inference(self.inference_lm_packed, self.inference_lm_scale, self.vocab_size)
         var lm_weight: Tensor[float32] = self.tied_lm_weight()
         return normalized.matmul(lm_weight)
 
     def prepare_inference(self) -> None:
         if self.inference_lm_ready == False:
-            self.inference_lm_weight = self.tied_lm_weight()
+            var master_embedding: Tensor[float32] = self.token_embedding.weight.tensor()
+            self.inference_lm_scale = master_embedding.ternary_scale()
+            self.inference_lm_packed = master_embedding.ternary_pack(self.inference_lm_scale, True)
             self.inference_lm_ready = True
         if self.n_layers > 0:
             self.block1.prepare_inference()
@@ -519,6 +520,9 @@ class GPT2Ternary(Module):
 
     def logits_from_hidden(self, hidden: &Tensor[float32], lm_weight: &Tensor[float32]) -> Tensor[float32]:
         return hidden.matmul(lm_weight)
+
+    def packed_logits_from_hidden(self, hidden: &Tensor[float32]) -> Tensor[float32]:
+        return hidden.packed_matmul_inference(self.inference_lm_packed, self.inference_lm_scale, self.vocab_size)
 
     def parameters(self) -> list[Parameter]:
         # The tied LM head is not a second Parameter.
@@ -660,12 +664,11 @@ class GPT2Ternary(Module):
         Tensor.set_grad_enabled(False)
         self.eval()
         self.prepare_inference()
-        var lm_weight: Tensor[float32] = self.tied_lm_weight()
 
         var prompt_positions: Tensor[int64] = positions.slice(1, 0, prompt_length, 1)
         var prompt_hidden: Tensor[float32] = self.forward_prefill_hidden(prompt, prompt_positions, cache)
         var prompt_last: Tensor[float32] = prompt_hidden.slice(1, prompt_length - 1, prompt_length, 1)
-        var prompt_logits: Tensor[float32] = self.logits_from_hidden(prompt_last, lm_weight)
+        var prompt_logits: Tensor[float32] = self.packed_logits_from_hidden(prompt_last)
         var next_token: int = self.greedy_from_logits(prompt_logits)
 
         var generated: int = total_length - prompt_length
@@ -679,7 +682,7 @@ class GPT2Ternary(Module):
                 next_input[0, 0] = next_token
                 next_position[0, 0] = output_position
                 var next_hidden: Tensor[float32] = self.forward_cached_hidden(next_input, next_position, cache, output_position)
-                var next_logits: Tensor[float32] = self.logits_from_hidden(next_hidden, lm_weight)
+                var next_logits: Tensor[float32] = self.packed_logits_from_hidden(next_hidden)
                 next_token = self.greedy_from_logits(next_logits)
             step = step + 1
 

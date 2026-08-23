@@ -100,6 +100,14 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+    def ternary_scale(self) -> float64:
+        return ocean_tensor_ternary_scale(self.handle)
+
+    def ternary_pack(self, scale: float64, transpose: bool) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_ternary_pack(self.handle, scale, transpose)
+        var value: Tensor = Tensor(handle)
+        return value
+
     def matmul(self, other: &Tensor) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_autograd_matmul(self.handle, other.handle)
         var value: Tensor = Tensor(handle)
@@ -107,6 +115,16 @@ class Tensor:
 
     def linear_inference(self, weight: &Tensor, bias: &Tensor) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_linear_inference(self.handle, weight.handle, bias.handle)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def packed_matmul_inference(self, packed_weight: &Tensor, scale: float64, out_features: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_packed_matmul_inference(self.handle, packed_weight.handle, scale, out_features)
+        var value: Tensor = Tensor(handle)
+        return value
+
+    def packed_linear_inference(self, packed_weight: &Tensor, scale: float64, bias: &Tensor, out_features: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_packed_linear_inference(self.handle, packed_weight.handle, scale, bias.handle, out_features)
         var value: Tensor = Tensor(handle)
         return value
 

@@ -180,6 +180,12 @@ static void ocean_tensor_opencl_gelu(
     ocean_tensor_handle_t output,
     int key
 );
+static void ocean_tensor_opencl_ternary_pack(
+    const ocean_tensor_handle_t input,
+    const ocean_tensor_handle_t output,
+    double scale,
+    bool transpose
+);
 #endif
 static void ocean_tensor_write_scalar(
     const ocean_tensor_handle_t tensor,
@@ -754,6 +760,95 @@ static const char *ocean_tensor_causal_softmax_kernel_source =
     "}"
     "}";
 
+static const char *ocean_tensor_packed_ternary_kernel_source =
+    "__kernel void ocean_tensor_ternary_pack("
+    "__global const float *input, __global int *output, "
+    "const int source_rows, const int source_cols, "
+    "const int output_rows, const int packed_cols, "
+    "const float scale, const int transpose) {"
+    "int index = (int)get_global_id(0);"
+    "int output_size = output_rows * packed_cols;"
+    "if (index >= output_size) return;"
+    "int row = index / packed_cols;"
+    "int group = index - row * packed_cols;"
+    "uint packed = 0u;"
+    "float threshold = 0.5f * scale;"
+    "for (int bit = 0; bit < 16; ++bit) {"
+    "int source_row = transpose ? group * 16 + bit : row;"
+    "int source_col = transpose ? row : group * 16 + bit;"
+    "uint code = 0u;"
+    "if (source_row < source_rows && source_col < source_cols) {"
+    "float value = input[source_row * source_cols + source_col];"
+    "code = value > threshold ? 1u : (value < -threshold ? 2u : 0u);"
+    "}"
+    "packed |= code << (2 * bit);"
+    "}"
+    "output[index] = (int)packed;"
+    "}"
+    "__kernel void ocean_tensor_packed_matmul("
+    "__global const float *input, __global const int *packed, "
+    "__global float *output, const int rows, const int cols_a, "
+    "const int cols_b, const int packed_cols, const float scale) {"
+    "int local_index = (int)get_local_id(0);"
+    "int group = (int)get_group_id(0);"
+    "int groups_per_row = (cols_b + 127) / 128;"
+    "int row = group / groups_per_row;"
+    "int col = (group - row * groups_per_row) * 128 + local_index;"
+    "__local float input_tile[128];"
+    "float sum = 0.0f;"
+    "for (int tile = 0; tile < cols_a; tile += 128) {"
+    "int input_index = tile + local_index;"
+    "input_tile[local_index] = input_index < cols_a ? "
+    "input[row * cols_a + input_index] : 0.0f;"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "int tile_end = tile + 128;"
+    "if (tile_end > cols_a) tile_end = cols_a;"
+    "if (row < rows && col < cols_b) {"
+    "for (int k = tile; k < tile_end; ++k) {"
+    "uint word = (uint)packed[k * packed_cols + col / 16];"
+    "uint code = (word >> (2 * (col % 16))) & 3u;"
+    "float sign = code == 1u ? 1.0f : (code == 2u ? -1.0f : 0.0f);"
+    "sum += input_tile[k - tile] * sign;"
+    "}"
+    "}"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "}"
+    "if (row < rows && col < cols_b) output[row * cols_b + col] = sum * scale;"
+    "}"
+    "__kernel void ocean_tensor_packed_linear("
+    "__global const float *input, __global const int *packed, "
+    "__global const float *bias, __global float *output, "
+    "const int rows, const int cols_a, const int cols_b, "
+    "const int packed_cols, const float scale) {"
+    "int local_index = (int)get_local_id(0);"
+    "int group = (int)get_group_id(0);"
+    "int groups_per_row = (cols_b + 127) / 128;"
+    "int row = group / groups_per_row;"
+    "int col = (group - row * groups_per_row) * 128 + local_index;"
+    "__local float input_tile[128];"
+    "float sum = 0.0f;"
+    "for (int tile = 0; tile < cols_a; tile += 128) {"
+    "int input_index = tile + local_index;"
+    "input_tile[local_index] = input_index < cols_a ? "
+    "input[row * cols_a + input_index] : 0.0f;"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "int tile_end = tile + 128;"
+    "if (tile_end > cols_a) tile_end = cols_a;"
+    "if (row < rows && col < cols_b) {"
+    "for (int k = tile; k < tile_end; ++k) {"
+    "uint word = (uint)packed[k * packed_cols + col / 16];"
+    "uint code = (word >> (2 * (col % 16))) & 3u;"
+    "float sign = code == 1u ? 1.0f : (code == 2u ? -1.0f : 0.0f);"
+    "sum += input_tile[k - tile] * sign;"
+    "}"
+    "}"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "}"
+    "if (row < rows && col < cols_b) {"
+    "output[row * cols_b + col] = sum * scale + bias[col];"
+    "}"
+    "}";
+
 static const char *ocean_tensor_gelu_kernel_source =
     "__kernel void ocean_tensor_gelu("
     "__global const float *input, __global float *output, "
@@ -1001,6 +1096,9 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_kernel cache_slice_kernel;
     cl_kernel argmax_kernel;
     cl_kernel causal_softmax_kernel;
+    cl_kernel ternary_pack_kernel;
+    cl_kernel packed_matmul_kernel;
+    cl_kernel packed_linear_kernel;
     cl_mem argmax_result;
 } ocean_tensor_opencl_runtime;
 
@@ -1033,6 +1131,9 @@ typedef enum ocean_tensor_opencl_kernel_key {
     OCEAN_TENSOR_OPENCL_KERNEL_CACHE_SLICE_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_ARGMAX_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_CAUSAL_SOFTMAX_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_PACK_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_PACKED_MATMUL_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_PACKED_LINEAR_FLOAT32,
 } ocean_tensor_opencl_kernel_key;
 
 static ocean_tensor_opencl_runtime ocean_tensor_opencl;
@@ -1143,6 +1244,18 @@ static void ocean_tensor_opencl_shutdown(void) {
     if (ocean_tensor_opencl.causal_softmax_kernel) {
         clReleaseKernel(ocean_tensor_opencl.causal_softmax_kernel);
         ocean_tensor_opencl.causal_softmax_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.ternary_pack_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.ternary_pack_kernel);
+        ocean_tensor_opencl.ternary_pack_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.packed_matmul_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.packed_matmul_kernel);
+        ocean_tensor_opencl.packed_matmul_kernel = NULL;
+    }
+    if (ocean_tensor_opencl.packed_linear_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.packed_linear_kernel);
+        ocean_tensor_opencl.packed_linear_kernel = NULL;
     }
     if (ocean_tensor_opencl.argmax_result) {
         clReleaseMemObject(ocean_tensor_opencl.argmax_result);
@@ -1259,9 +1372,10 @@ static void ocean_tensor_opencl_init(void) {
         ocean_tensor_cache_kernel_source,
         ocean_tensor_argmax_kernel_source,
         ocean_tensor_causal_softmax_kernel_source,
+        ocean_tensor_packed_ternary_kernel_source,
     };
     ocean_tensor_opencl.program = clCreateProgramWithSource(
-        ocean_tensor_opencl.context, 12, sources, NULL, &status
+        ocean_tensor_opencl.context, 13, sources, NULL, &status
     );
     ocean_tensor_opencl_check(status, "clCreateProgramWithSource");
     status = clBuildProgram(
@@ -1404,6 +1518,18 @@ static cl_kernel ocean_tensor_opencl_get_kernel(
         case OCEAN_TENSOR_OPENCL_KERNEL_CAUSAL_SOFTMAX_FLOAT32:
             slot = &ocean_tensor_opencl.causal_softmax_kernel;
             name = "ocean_tensor_causal_softmax";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_PACK_FLOAT32:
+            slot = &ocean_tensor_opencl.ternary_pack_kernel;
+            name = "ocean_tensor_ternary_pack";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_PACKED_MATMUL_FLOAT32:
+            slot = &ocean_tensor_opencl.packed_matmul_kernel;
+            name = "ocean_tensor_packed_matmul";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_PACKED_LINEAR_FLOAT32:
+            slot = &ocean_tensor_opencl.packed_linear_kernel;
+            name = "ocean_tensor_packed_linear";
             break;
     }
     if (!slot || !name) ocean_tensor_fail("invalid OpenCL Tensor kernel key");
@@ -1852,6 +1978,93 @@ ocean_tensor_handle_t ocean_tensor_ternary_quantize(
     ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
     return NULL;
 #endif
+}
+
+double ocean_tensor_ternary_scale(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("Tensor.ternary_scale on null handle");
+    if (tensor->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Tensor.ternary_scale currently requires float32");
+    }
+    ocean_tensor_handle_t cpu = tensor->device == OCEAN_TENSOR_CPU
+        ? tensor : ocean_tensor_to(tensor, "cpu");
+    long double sum = 0.0L;
+    const float *values = (const float *)cpu->cpu_data;
+    for (size_t index = 0; index < cpu->size; ++index) {
+        float value = values[index];
+        sum += value < 0.0f ? -(long double)value : (long double)value;
+    }
+    double scale = cpu->size == 0
+        ? 1.0e-8
+        : (double)(sum / (long double)cpu->size);
+    if (scale < 1.0e-8) scale = 1.0e-8;
+    if (cpu != tensor) ocean_tensor_release(cpu);
+    return scale;
+}
+
+ocean_tensor_handle_t ocean_tensor_ternary_pack(
+    ocean_tensor_handle_t tensor,
+    double scale,
+    bool transpose
+) {
+    if (!tensor) ocean_tensor_fail("Tensor.ternary_pack on null handle");
+    if (tensor->dtype != OCEAN_TENSOR_FLOAT32 || tensor->ndim != 2) {
+        ocean_tensor_fail(
+            "Tensor.ternary_pack requires a rank-2 float32 Tensor"
+        );
+    }
+    if (!(scale > 0.0)) {
+        ocean_tensor_fail("Tensor.ternary_pack scale must be positive");
+    }
+    ocean_tensor_handle_t contiguous = ocean_tensor_is_contiguous(tensor)
+        ? tensor : ocean_tensor_contiguous(tensor);
+    size_t source_rows = contiguous->shape[0];
+    size_t source_cols = contiguous->shape[1];
+    size_t output_rows = transpose ? source_cols : source_rows;
+    size_t packed_source = transpose ? source_rows : source_cols;
+    size_t packed_cols = (packed_source + 15u) / 16u;
+    size_t output_shape[2] = {output_rows, packed_cols};
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        output_shape, 2, OCEAN_TENSOR_INT32, contiguous->device
+    );
+
+    if (contiguous->device == OCEAN_TENSOR_CPU) {
+        const float *values = (const float *)contiguous->cpu_data;
+        int32_t *packed = (int32_t *)result->cpu_data;
+        float threshold = (float)(0.5 * scale);
+        for (size_t row = 0; row < output_rows; ++row) {
+            for (size_t group = 0; group < packed_cols; ++group) {
+                uint32_t word = 0u;
+                for (size_t bit = 0; bit < 16; ++bit) {
+                    size_t source_row = transpose
+                        ? group * 16u + bit : row;
+                    size_t source_col = transpose
+                        ? row : group * 16u + bit;
+                    uint32_t code = 0u;
+                    if (source_row < source_rows && source_col < source_cols) {
+                        float value = values[source_row * source_cols + source_col];
+                        code = value > threshold
+                            ? 1u : (value < -threshold ? 2u : 0u);
+                    }
+                    word |= code << (2u * (uint32_t)bit);
+                }
+                packed[row * packed_cols + group] = (int32_t)word;
+            }
+        }
+    } else {
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+        ocean_tensor_opencl_ternary_pack(
+            contiguous, result, scale, transpose
+        );
+#else
+        ocean_tensor_release(result);
+        if (contiguous != tensor) ocean_tensor_release(contiguous);
+        ocean_tensor_fail(
+            "GPU backend is unavailable: rebuild with OpenCL support"
+        );
+#endif
+    }
+    if (contiguous != tensor) ocean_tensor_release(contiguous);
+    return result;
 }
 
 ocean_tensor_handle_t ocean_tensor_gelu(ocean_tensor_handle_t tensor) {
@@ -5217,6 +5430,158 @@ static void ocean_tensor_opencl_matvec_bias(
     ocean_tensor_opencl_release_event(event);
 }
 
+static void ocean_tensor_opencl_ternary_pack(
+    const ocean_tensor_handle_t input,
+    const ocean_tensor_handle_t output,
+    double scale,
+    bool transpose
+) {
+    if (output->size == 0) return;
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_TERNARY_PACK_FLOAT32
+    );
+    size_t source_rows_size = input->shape[0];
+    size_t source_cols_size = input->shape[1];
+    size_t output_rows_size = output->shape[0];
+    size_t packed_cols_size = output->shape[1];
+    if (source_rows_size > (size_t)INT32_MAX ||
+        source_cols_size > (size_t)INT32_MAX ||
+        output_rows_size > (size_t)INT32_MAX ||
+        packed_cols_size > (size_t)INT32_MAX) {
+        ocean_tensor_fail("Tensor.ternary_pack dimensions are too large");
+    }
+    int source_rows = (int)source_rows_size;
+    int source_cols = (int)source_cols_size;
+    int output_rows = (int)output_rows_size;
+    int packed_cols = (int)packed_cols_size;
+    float scale_value = (float)scale;
+    int transpose_value = transpose ? 1 : 0;
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &input->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &output->gpu_data),
+        "clSetKernelArg"
+    );
+    int values[] = {
+        source_rows, source_cols, output_rows, packed_cols,
+    };
+    for (int index = 0; index < 4; ++index) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(
+                kernel, (cl_uint)(2 + index), sizeof(int), &values[index]
+            ),
+            "clSetKernelArg"
+        );
+    }
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 6, sizeof(float), &scale_value),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 7, sizeof(int), &transpose_value),
+        "clSetKernelArg"
+    );
+    size_t global_size = output->size;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, NULL, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
+static void ocean_tensor_opencl_packed_linear(
+    const ocean_tensor_handle_t input,
+    const ocean_tensor_handle_t packed,
+    const ocean_tensor_handle_t bias,
+    const ocean_tensor_handle_t output,
+    int out_features,
+    double scale
+) {
+    if (output->size == 0) return;
+    bool with_bias = bias != NULL;
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        with_bias
+            ? OCEAN_TENSOR_OPENCL_KERNEL_PACKED_LINEAR_FLOAT32
+            : OCEAN_TENSOR_OPENCL_KERNEL_PACKED_MATMUL_FLOAT32
+    );
+    size_t cols_a_size = input->shape[input->ndim - 1];
+    size_t rows_size = input->size / cols_a_size;
+    size_t packed_cols_size = packed->shape[1];
+    if (cols_a_size > (size_t)INT32_MAX || rows_size > (size_t)INT32_MAX ||
+        packed_cols_size > (size_t)INT32_MAX) {
+        ocean_tensor_fail(
+            "packed Tensor matmul dimensions are too large for OpenCL"
+        );
+    }
+    int rows = (int)rows_size;
+    int cols_a = (int)cols_a_size;
+    int cols_b = out_features;
+    int packed_cols = (int)packed_cols_size;
+    float scale_value = (float)scale;
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &input->gpu_data),
+        "clSetKernelArg"
+    );
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &packed->gpu_data),
+        "clSetKernelArg"
+    );
+    int next_argument = 2;
+    if (with_bias) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(kernel, next_argument, sizeof(cl_mem), &bias->gpu_data),
+            "clSetKernelArg"
+        );
+        next_argument += 1;
+    }
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, next_argument, sizeof(cl_mem), &output->gpu_data),
+        "clSetKernelArg"
+    );
+    next_argument += 1;
+    int values[] = {rows, cols_a, cols_b, packed_cols};
+    for (int index = 0; index < 4; ++index) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(
+                kernel, (cl_uint)(next_argument + index), sizeof(int),
+                &values[index]
+            ),
+            "clSetKernelArg"
+        );
+    }
+    ocean_tensor_opencl_check(
+        clSetKernelArg(
+            kernel, (cl_uint)(next_argument + 4), sizeof(float), &scale_value
+        ),
+        "clSetKernelArg"
+    );
+    const size_t local_size = 128u;
+    size_t groups_per_row =
+        ((size_t)cols_b + local_size - 1u) / local_size;
+    size_t global_size = (size_t)rows * groups_per_row * local_size;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, &local_size, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
 static ocean_tensor_handle_t ocean_tensor_matmul_opencl_batched(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right,
@@ -6446,6 +6811,135 @@ ocean_tensor_handle_t ocean_tensor_linear_inference(
     ocean_tensor_handle_t result = ocean_tensor_binary(product, bias, 0);
     ocean_tensor_release(product);
     return result;
+}
+
+static ocean_tensor_handle_t ocean_tensor_packed_linear_inference_impl(
+    ocean_tensor_handle_t input,
+    ocean_tensor_handle_t packed_weight,
+    double scale,
+    ocean_tensor_handle_t bias,
+    int out_features
+) {
+    if (!input || !packed_weight) {
+        ocean_tensor_fail("packed inference does not accept null Tensors");
+    }
+    if (input->dtype != OCEAN_TENSOR_FLOAT32 ||
+        packed_weight->dtype != OCEAN_TENSOR_INT32 ||
+        input->device != packed_weight->device) {
+        ocean_tensor_fail(
+            "packed inference requires float32 input and int32 packed weights on one device"
+        );
+    }
+    if (input->ndim < 2 || packed_weight->ndim != 2 || out_features <= 0) {
+        ocean_tensor_fail("packed inference shape mismatch");
+    }
+    size_t cols_a = input->shape[input->ndim - 1];
+    size_t expected_packed_cols = ((size_t)out_features + 15u) / 16u;
+    if (packed_weight->shape[0] != cols_a ||
+        packed_weight->shape[1] != expected_packed_cols) {
+        ocean_tensor_fail("packed inference weight metadata mismatch");
+    }
+    if (bias && (bias->dtype != OCEAN_TENSOR_FLOAT32 ||
+        bias->device != input->device || bias->ndim != 2 ||
+        bias->shape[0] != 1 || bias->shape[1] != (size_t)out_features)) {
+        ocean_tensor_fail("packed inference bias metadata mismatch");
+    }
+    if (!(scale > 0.0)) {
+        ocean_tensor_fail("packed inference scale must be positive");
+    }
+
+    size_t *output_shape = (size_t *)malloc(input->ndim * sizeof(size_t));
+    if (!output_shape) ocean_tensor_fail("out of memory in packed inference");
+    for (size_t axis = 0; axis < input->ndim; ++axis) {
+        output_shape[axis] = input->shape[axis];
+    }
+    output_shape[input->ndim - 1] = (size_t)out_features;
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        output_shape, input->ndim, OCEAN_TENSOR_FLOAT32, input->device
+    );
+    free(output_shape);
+
+    if (input->device == OCEAN_TENSOR_CPU) {
+        ocean_tensor_handle_t input_contiguous = ocean_tensor_is_contiguous(input)
+            ? input : ocean_tensor_contiguous(input);
+        ocean_tensor_handle_t packed_contiguous = ocean_tensor_is_contiguous(packed_weight)
+            ? packed_weight : ocean_tensor_contiguous(packed_weight);
+        ocean_tensor_handle_t bias_contiguous = bias && !ocean_tensor_is_contiguous(bias)
+            ? ocean_tensor_contiguous(bias) : bias;
+        const float *input_values = (const float *)input_contiguous->cpu_data;
+        const int32_t *packed_values = (const int32_t *)packed_contiguous->cpu_data;
+        const float *bias_values = bias_contiguous
+            ? (const float *)bias_contiguous->cpu_data : NULL;
+        size_t rows = input_contiguous->size / cols_a;
+        for (size_t row = 0; row < rows; ++row) {
+            for (int col = 0; col < out_features; ++col) {
+                float sum = 0.0f;
+                for (size_t k = 0; k < cols_a; ++k) {
+                    uint32_t word = (uint32_t)packed_values[
+                        k * expected_packed_cols + (size_t)col / 16u
+                    ];
+                    uint32_t code = (word >> (2u * ((uint32_t)col % 16u))) & 3u;
+                    float sign = code == 1u
+                        ? 1.0f : (code == 2u ? -1.0f : 0.0f);
+                    sum += input_values[row * cols_a + k] * sign;
+                }
+                float output_value = sum * (float)scale;
+                if (bias_values) output_value += bias_values[col];
+                ((float *)result->cpu_data)[row * (size_t)out_features + (size_t)col] =
+                    output_value;
+            }
+        }
+        if (input_contiguous != input) ocean_tensor_release(input_contiguous);
+        if (packed_contiguous != packed_weight) ocean_tensor_release(packed_contiguous);
+        if (bias_contiguous != bias) ocean_tensor_release(bias_contiguous);
+        return result;
+    }
+
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    ocean_tensor_handle_t input_contiguous = ocean_tensor_is_contiguous(input)
+        ? input : ocean_tensor_contiguous(input);
+    ocean_tensor_handle_t packed_contiguous = ocean_tensor_is_contiguous(packed_weight)
+        ? packed_weight : ocean_tensor_contiguous(packed_weight);
+    ocean_tensor_handle_t bias_contiguous = bias && !ocean_tensor_is_contiguous(bias)
+        ? ocean_tensor_contiguous(bias) : bias;
+    ocean_tensor_opencl_packed_linear(
+        input_contiguous, packed_contiguous, bias_contiguous, result,
+        out_features, scale
+    );
+    if (input_contiguous != input) ocean_tensor_release(input_contiguous);
+    if (packed_contiguous != packed_weight) ocean_tensor_release(packed_contiguous);
+    if (bias_contiguous != bias) ocean_tensor_release(bias_contiguous);
+    return result;
+#else
+    ocean_tensor_release(result);
+    ocean_tensor_fail(
+        "GPU backend is unavailable: rebuild with OpenCL support"
+    );
+    return NULL;
+#endif
+}
+
+ocean_tensor_handle_t ocean_tensor_packed_matmul_inference(
+    ocean_tensor_handle_t input,
+    ocean_tensor_handle_t packed_weight,
+    double scale,
+    int out_features
+) {
+    return ocean_tensor_packed_linear_inference_impl(
+        input, packed_weight, scale, NULL, out_features
+    );
+}
+
+ocean_tensor_handle_t ocean_tensor_packed_linear_inference(
+    ocean_tensor_handle_t input,
+    ocean_tensor_handle_t packed_weight,
+    double scale,
+    ocean_tensor_handle_t bias,
+    int out_features
+) {
+    return ocean_tensor_packed_linear_inference_impl(
+        input, packed_weight, scale, bias, out_features
+    );
 }
 
 static bool ocean_tensor_host_is_little_endian(void) {

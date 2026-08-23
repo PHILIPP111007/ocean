@@ -67,6 +67,8 @@ class Tensor:
     def fill(self, value: float64) -> None
     def copy(self) -> Tensor[T]
     def ternary_quantize(self) -> Tensor[float32]
+    def ternary_scale(self) -> float64
+    def ternary_pack(self, scale: float64, transpose: bool) -> Tensor[int32]
     def shape(self, axis: int) -> int
     def ndim() -> int
     def size() -> size_t
@@ -265,6 +267,12 @@ the former recursive transpose path.
 weight scale, the `0.5 * scale` threshold, and the ternary values `{-scale, 0, +scale}` inside
 the selected backend. The OpenCL implementation uses one work-group reduction and quantization
 kernel, so GPU weights are not downloaded for host-side element access.
+
+`ternary_pack()` stores 16 ternary values per 32-bit word using two-bit codes
+(`00 = 0`, `01 = +1`, `10 = -1`). The packed inference kernels accept the
+separate scale and decode weights on the GPU. `TernaryLinear` and the tied GPT-2
+LM head use this path only when gradients are disabled; full-precision master
+weights remain untouched for training.
 
 The OpenCL runtime caches its context, queue, program, and kernels for the process and releases
 them through an exit handler. Individual GPU buffers are released with their owning `Tensor`

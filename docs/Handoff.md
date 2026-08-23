@@ -1138,9 +1138,12 @@ estimator: forward видит `{-scale, 0, +scale}`, а AdamW обновляет
 полноточный master Parameter. Конфигурация smoke-теста компактная, но классы
 поддерживают до 12 decoder blocks — глубину GPT-2 small.
 
-Это пока QAT/STE-режим, а не packed deployment: master weights и optimizer
-state остаются `float32`. Для настоящего уменьшения checkpoint до ternary
-storage нужны packing в 2 bits, scale metadata и отдельный inference loader.
+Training остаётся QAT/STE-режимом: master weights и optimizer state остаются
+`float32`. Для inference уже добавлен packed deployment path: 16 ternary
+значений кодируются в один `int32` word (`00 = 0`, `01 = +1`, `10 = -1`), а
+общий `scale` хранится отдельно. OpenCL packed matmul декодирует коды на лету,
+включая fused bias path для `TernaryLinear`; tied LM-head также использует
+transposed packed embedding weights.
 
 Канонический профиль доступен через Ocean-фабрику:
 
