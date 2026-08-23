@@ -498,6 +498,49 @@ __global__ void ocean_cuda_layer_norm_kernel(
     }
 }
 
+__global__ void ocean_cuda_layer_norm_affine_kernel(
+    const float *input,
+    const float *gamma,
+    const float *beta,
+    float *output,
+    int rows,
+    int width,
+    float epsilon
+) {
+    extern __shared__ float partial[];
+    int row = (int)blockIdx.x;
+    int lane = (int)threadIdx.x;
+    if (row >= rows) return;
+    int offset = row * width;
+    float sum = 0.0f;
+    for (int index = lane; index < width; index += blockDim.x) {
+        sum += input[offset + index];
+    }
+    partial[lane] = sum;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        __syncthreads();
+    }
+    float mean = partial[0] / (float)width;
+    float variance = 0.0f;
+    for (int index = lane; index < width; index += blockDim.x) {
+        float delta = input[offset + index] - mean;
+        variance += delta * delta;
+    }
+    partial[lane] = variance;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        __syncthreads();
+    }
+    float inverse_std = rsqrtf(partial[0] / (float)width + epsilon);
+    for (int index = lane; index < width; index += blockDim.x) {
+        float normalized = (input[offset + index] - mean) * inverse_std;
+        output[offset + index] = normalized * gamma[index] + beta[index];
+    }
+}
+
 __global__ void ocean_cuda_gelu_kernel(
     const float *input, float *output, size_t size
 ) {
@@ -871,6 +914,28 @@ void ocean_cuda_layer_norm_last_dim(const void *input, void *output, int rows, i
         (const float *)input, (float *)output, rows, width, epsilon
     );
     ocean_cuda_check_launch("layer norm kernel");
+}
+
+void ocean_cuda_layer_norm_affine_last_dim(
+    const void *input,
+    const void *gamma,
+    const void *beta,
+    void *output,
+    int rows,
+    int width,
+    float epsilon
+) {
+    if (rows <= 0 || width <= 0) return;
+    ocean_cuda_layer_norm_affine_kernel<<<rows, 256, 256 * sizeof(float)>>>(
+        (const float *)input,
+        (const float *)gamma,
+        (const float *)beta,
+        (float *)output,
+        rows,
+        width,
+        epsilon
+    );
+    ocean_cuda_check_launch("fused layer norm affine kernel");
 }
 
 void ocean_cuda_gelu(const void *input, void *output, size_t size) {

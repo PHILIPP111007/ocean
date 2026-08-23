@@ -51,6 +51,7 @@ class Tensor:
     def mul_scalar(self, value: float64) -> Tensor[T]
     def div_scalar(self, value: float64) -> Tensor[T]
     def gelu(self) -> Tensor[float32]
+    def layer_norm_affine(self, gamma: &Tensor, beta: &Tensor, dim: int, epsilon: float64) -> Tensor[float32]
     def get(self, row: int, col: int) -> float64
     def set(self, row: int, col: int, value: float64) -> None
     def reshape(self, rows: int, cols: int) -> Tensor[T]
@@ -227,6 +228,10 @@ For Transformer hot paths, OpenCL has native float32 kernels for softmax and Lay
 and backward over the last axis, plus `sum_dim`/`mean_dim` reductions over the last axis. SGD and AdamW update GPU
 resident parameters, gradients, and AdamW moment tensors in place. Unsupported axes or dtypes
 continue to use the documented correctness-first fallback; the public API remains device-neutral.
+
+The CUDA backend additionally provides `layer_norm_affine` for inference: on a contiguous
+last-dimension float32 Tensor it computes normalization and applies `gamma`/`beta` in one kernel.
+Training continues to use the autograd-aware `layer_norm` path.
 
 `Embedding` is also GPU-native for contiguous float32 weights and contiguous int64 indices:
 forward gathers rows directly on the device, while backward accumulates duplicate token IDs with

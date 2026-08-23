@@ -256,6 +256,11 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+    def layer_norm_affine(self, gamma: &Tensor, beta: &Tensor, dim: int, epsilon: float64) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_layer_norm_affine(self.handle, gamma.handle, beta.handle, dim, epsilon)
+        var value: Tensor = Tensor(handle)
+        return value
+
     def masked_fill(self, mask: &Tensor, value: float64) -> Tensor:
         var neg_mask: Tensor = mask.mul_scalar(-1.0)
         var keep_mask: Tensor = neg_mask.add_scalar(1.0)

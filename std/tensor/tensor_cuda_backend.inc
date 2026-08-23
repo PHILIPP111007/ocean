@@ -407,6 +407,48 @@ static ocean_tensor_handle_t ocean_tensor_cuda_layer_norm(
     return result;
 }
 
+static ocean_tensor_handle_t ocean_tensor_cuda_layer_norm_affine(
+    const ocean_tensor_handle_t tensor,
+    const ocean_tensor_handle_t gamma,
+    const ocean_tensor_handle_t beta,
+    double epsilon
+) {
+    ocean_tensor_cuda_require_f32_contiguous(
+        tensor, "CUDA fused LayerNorm requires a contiguous float32 input"
+    );
+    ocean_tensor_cuda_require_f32_contiguous(
+        gamma, "CUDA fused LayerNorm requires contiguous float32 gamma"
+    );
+    ocean_tensor_cuda_require_f32_contiguous(
+        beta, "CUDA fused LayerNorm requires contiguous float32 beta"
+    );
+    size_t width_size = tensor->shape[tensor->ndim - 1];
+    if (gamma->size != width_size || beta->size != width_size) {
+        ocean_tensor_fail(
+            "CUDA fused LayerNorm gamma/beta size must match the normalized dimension"
+        );
+    }
+    size_t rows_size = width_size == 0 ? 0 : tensor->size / width_size;
+    if (width_size > (size_t)INT_MAX || rows_size > (size_t)INT_MAX) {
+        ocean_tensor_fail(
+            "CUDA fused LayerNorm dimensions exceed int32 indexing"
+        );
+    }
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_BACKEND_CUDA
+    );
+    ocean_cuda_layer_norm_affine_last_dim(
+        tensor->cuda_data,
+        gamma->cuda_data,
+        beta->cuda_data,
+        result->cuda_data,
+        (int)rows_size,
+        (int)width_size,
+        (float)epsilon
+    );
+    return result;
+}
+
 static ocean_tensor_handle_t ocean_tensor_cuda_ternary_quantize(
     const ocean_tensor_handle_t tensor
 ) {

@@ -3198,6 +3198,7 @@ float32 Embedding forward
 GELU forward
 last-dimension softmax и causal softmax
 last-dimension LayerNorm forward
+fused last-dimension LayerNorm + affine gamma/beta
 ternary quantization
 packed 2-bit ternary packing
 packed ternary Linear
@@ -3220,6 +3221,7 @@ float32 broadcast binary operations  -> native descriptor-driven CUDA kernel
 packed Linear                         -> 128-thread shared input tiles
 packed QKV                            -> 128-thread shared input tiles
 fused KV-cache attention projection   -> shared input tiles
+LayerNorm + gamma/beta                 -> one fused CUDA kernel
 ```
 
 Это устраняет наиболее дорогие per-token host round-trips в decode path и

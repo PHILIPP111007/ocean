@@ -334,6 +334,13 @@ ocean_tensor_handle_t ocean_tensor_causal_softmax(
 ocean_tensor_handle_t ocean_tensor_layer_norm(
     ocean_tensor_handle_t tensor, int dim, double epsilon
 );
+ocean_tensor_handle_t ocean_tensor_layer_norm_affine(
+    ocean_tensor_handle_t tensor,
+    ocean_tensor_handle_t gamma,
+    ocean_tensor_handle_t beta,
+    int dim,
+    double epsilon
+);
 ocean_tensor_handle_t ocean_tensor_softmax_backward(
     ocean_tensor_handle_t upstream,
     ocean_tensor_handle_t output,

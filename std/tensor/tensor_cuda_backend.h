@@ -93,6 +93,15 @@ void ocean_cuda_causal_softmax(
 void ocean_cuda_layer_norm_last_dim(
     const void *input, void *output, int rows, int width, float epsilon
 );
+void ocean_cuda_layer_norm_affine_last_dim(
+    const void *input,
+    const void *gamma,
+    const void *beta,
+    void *output,
+    int rows,
+    int width,
+    float epsilon
+);
 void ocean_cuda_gelu(const void *input, void *output, size_t size);
 void ocean_cuda_ternary_quantize(
     const void *input, void *output, size_t size

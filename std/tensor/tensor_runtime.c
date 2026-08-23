@@ -3821,6 +3821,70 @@ ocean_tensor_handle_t ocean_tensor_layer_norm(
     return ocean_tensor_restore_device(tensor, result);
 }
 
+ocean_tensor_handle_t ocean_tensor_layer_norm_affine(
+    ocean_tensor_handle_t tensor,
+    ocean_tensor_handle_t gamma,
+    ocean_tensor_handle_t beta,
+    int dim,
+    double epsilon
+) {
+    if (!tensor || !gamma || !beta) {
+        ocean_tensor_fail("Tensor.layer_norm_affine received a null Tensor");
+    }
+    if (tensor->dtype != OCEAN_TENSOR_FLOAT32 ||
+        gamma->dtype != OCEAN_TENSOR_FLOAT32 ||
+        beta->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Tensor.layer_norm_affine currently requires float32");
+    }
+    if (tensor->device != gamma->device || tensor->device != beta->device) {
+        ocean_tensor_fail(
+            "Tensor.layer_norm_affine requires matching Tensor devices"
+        );
+    }
+    if (!(epsilon > 0.0)) {
+        ocean_tensor_fail("LayerNorm epsilon must be positive");
+    }
+    size_t axis = ocean_tensor_normalize_dim_v02(tensor, dim);
+    size_t axis_size = tensor->shape[axis];
+    if (gamma->size != axis_size || beta->size != axis_size) {
+        ocean_tensor_fail(
+            "Tensor.layer_norm_affine gamma/beta size must match the normalized dimension"
+        );
+    }
+
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA &&
+        axis == tensor->ndim - 1) {
+        ocean_tensor_handle_t source = ocean_tensor_is_contiguous(tensor)
+            ? tensor : ocean_tensor_contiguous(tensor);
+        ocean_tensor_handle_t contiguous_gamma = ocean_tensor_is_contiguous(gamma)
+            ? gamma : ocean_tensor_contiguous(gamma);
+        ocean_tensor_handle_t contiguous_beta = ocean_tensor_is_contiguous(beta)
+            ? beta : ocean_tensor_contiguous(beta);
+        ocean_tensor_handle_t result = ocean_tensor_cuda_layer_norm_affine(
+            source, contiguous_gamma, contiguous_beta, epsilon
+        );
+        if (source != tensor) ocean_tensor_release(source);
+        if (contiguous_gamma != gamma) ocean_tensor_release(contiguous_gamma);
+        if (contiguous_beta != beta) ocean_tensor_release(contiguous_beta);
+        return result;
+    }
+#endif
+
+    ocean_tensor_handle_t normalized = ocean_tensor_layer_norm(
+        tensor, dim, epsilon
+    );
+    ocean_tensor_handle_t scaled = ocean_tensor_binary(
+        normalized, gamma, OCEAN_TENSOR_MUL
+    );
+    ocean_tensor_handle_t result = ocean_tensor_binary(
+        scaled, beta, OCEAN_TENSOR_ADD
+    );
+    ocean_tensor_release(normalized);
+    ocean_tensor_release(scaled);
+    return result;
+}
+
 static void ocean_tensor_validate_backward_inputs(
     ocean_tensor_handle_t upstream,
     ocean_tensor_handle_t reference,

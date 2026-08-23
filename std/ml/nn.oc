@@ -224,6 +224,10 @@ class LayerNorm(Module):
         self.beta: Parameter = beta_parameter
 
     def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
+        if Tensor.grad_enabled() == False:
+            var gamma_inference: Tensor[float32] = self.gamma.tensor()
+            var beta_inference: Tensor[float32] = self.beta.tensor()
+            return input.layer_norm_affine(gamma_inference, beta_inference, -1, self.epsilon)
         var normalized: Tensor[float32] = input.layer_norm(-1, self.epsilon)
         var gamma: Tensor[float32] = self.gamma.tensor()
         var scaled: Tensor[float32] = normalized.mul(gamma)
