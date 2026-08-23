@@ -80,6 +80,8 @@ def main() -> int:
     var positions_gpu: Tensor[int64] = positions.to("gpu")
 
     # The same frozen model and weights are used for both paths.
+    var previous_grad_enabled: bool = Tensor.grad_enabled()
+    Tensor.set_grad_enabled(False)
     var dense_logits: Tensor[float32] = prefill_logits(model, prompt_gpu, positions_gpu, 1000000)
     var dense_path_used_sparse: bool = model.prefill_sparse_used()
     var sparse_logits: Tensor[float32] = prefill_logits(model, prompt_gpu, positions_gpu, 256)
@@ -93,6 +95,7 @@ def main() -> int:
     model.set_sparse_prefill_threshold(256)
     var sparse_generated: Tensor[int64] = model.generate_greedy_kv(prompt_gpu, new_tokens, positions_gpu)
     var matching_tokens: int = token_agreement(dense_generated, sparse_generated, prompt_length, new_tokens)
+    Tensor.set_grad_enabled(previous_grad_enabled)
 
     print("long-context quality comparison")
     print("prompt tokens =", prompt_length)
