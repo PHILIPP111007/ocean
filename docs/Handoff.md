@@ -3261,3 +3261,208 @@ autograd backward kernels для GELU/LayerNorm/softmax
 
 Они требуют следующего слоя адаптации или correctness-first staging через CPU и
 не должны называться CUDA-native.
+
+---
+
+# 79. Последние CUDA inference optimizations
+
+После добавления native CUDA backend были устранены несколько источников
+лишнего overhead в autoregressive decode:
+
+```text
+per-token scalar/index assignment
+    -> single-element CUDA kernel вместо staging всего Tensor через CPU
+
+float32 broadcast elementwise
+    -> descriptor-driven CUDA kernel для поддерживаемых rank/dtype
+
+packed ternary Linear
+    -> 128-thread blocks и shared-memory input tiles
+
+packed QKV / split QKV
+    -> shared-memory input tiles и совместное вычисление Q/K/V
+
+fused packed QKV + KV-cache attention
+    -> shared input tile внутри attention projection
+
+LayerNorm inference
+    -> один fused kernel: normalize + gamma + beta
+```
+
+Публичный Tensor API для последней оптимизации:
+
+```ocean
+input.layer_norm_affine(gamma, beta, -1, epsilon)
+```
+
+`std/ml/nn.oc` использует этот путь только при отключённом autograd. Training
+по-прежнему проходит через autograd-aware `layer_norm`, поэтому градиенты
+параметров LayerNorm не меняют семантику.
+
+Добавлен CPU regression test для численного соответствия affine LayerNorm.
+Локальные проверки после изменения:
+
+```text
+strict C11 host compile                         passed
+strict CUDA-enabled host compile                passed
+LayerNorm/Tensor/TinyGPT focused tests           12 passed
+generated GPT-2 Ocean build                     passed
+```
+
+Полный regression run, завершённый перед последним fused LayerNorm изменением,
+дал `143 passed, 2 skipped, 1 failed`; единственный failure был связан с
+ограничением окружения на `bind()` в server smoke test, а GPU integration test
+оставался skipped без полностью доступного OpenCL environment. CUDA `.cu`
+локально не был собран, поскольку в текущем окружении нет `nvcc`; аппаратную
+проверку native CUDA нужно выполнять в CUDA checkout.
+
+Пользователь сообщил о росте inference benchmark примерно с 118 до 165
+tokens/sec после предыдущего CUDA optimization pass. Это около 40% прироста;
+новый benchmark после fused LayerNorm ещё нужно измерить отдельно на том же
+устройстве и с теми же параметрами.
+
+---
+
+# 80. Направление: content-dependent Sparse Attention
+
+Следующий исследовательский ML milestone — собственный Ocean-вариант
+long-context attention, вдохновлённый опубликованной идеей Subquadratic Sparse
+Attention (SSA), но не заявляющий совместимость с закрытой реализацией SubQ.
+
+Текущий GPT-2 decode с KV-cache делает для каждого нового query просмотр всех
+предыдущих K/V позиций. Это линейно по текущей длине контекста на один новый
+token и становится дорогим при очень длинной истории. SparseAttention должен
+сохранять только ограниченный бюджет релевантных позиций:
+
+```text
+полный KV-cache
+    ↓
+иерархия сегментов / summaries
+    ↓
+content-dependent routing
+    ↓
+выбор фиксированного числа сегментов
+    ↓
+выбор фиксированного числа токенов
+    ↓
+точный attention по выбранным K позициям
+```
+
+## 80.1 План архитектуры v0.1
+
+Первый вариант не должен сразу обещать 10M usable context. Он должен быть
+измеримым экспериментальным backend’ом с двумя режимами:
+
+```text
+dense attention       -> baseline
+sparse attention k=256/512/1024 -> experimental path
+```
+
+Основные компоненты:
+
+```text
+SparseKVCache
+    K/V blocks
+    per-block summary vectors
+    token positions / block metadata
+
+SparseRouter
+    query -> candidate blocks
+    candidate blocks -> selected token positions
+
+SparseAttention
+    gather selected K/V
+    exact scaled dot-product attention
+    causal masking
+```
+
+История будет разбиваться на блоки фиксированного размера, например 256 или
+512 токенов. Для каждого блока runtime хранит компактное summary. На первом
+уровне query сравнивается с summaries, затем внутри выбранных блоков выбираются
+конкретные позиции. Бюджет `k` остаётся ограниченным и известным заранее.
+
+Простое сравнение со всеми summaries всё ещё стоит `O(n / block_size)`, поэтому
+для длинных контекстов целевой вариант должен использовать иерархический
+router: coarse summaries, несколько уровней branching и небольшой набор
+кандидатов на каждом уровне. Это уменьшает routing overhead и не переносит
+скрытую квадратичность в selector.
+
+## 80.2 Где будет ускорение
+
+SparseAttention не ускорит автоматически все операции модели:
+
+```text
+FFN / packed Linear / LM head -> остаются прежними
+Embedding                   -> остаётся прежним
+attention scan по KV-cache  -> сокращается до selected K позиций
+```
+
+Поэтому эффект нужно разделять:
+
+```text
+короткий context
+    router overhead может съесть выигрыш
+
+длинный context
+    prefill получает основной выигрыш
+
+decode после большого prompt
+    attention становится дешевле, но общий tokens/sec ограничен также FFN и LM head
+```
+
+Даже идеальное ускорение attention не может превысить ускорение всей модели,
+если attention занимает только часть wall-clock времени. Все сравнения должны
+включать отдельные timings для router, gather, sparse attention, packed Linear,
+LayerNorm и LM head.
+
+## 80.3 GPU implementation milestones
+
+Порядок реализации:
+
+```text
+1. CPU reference SparseAttention с deterministic top-k.
+2. Numerical comparison с dense attention на коротких sequence.
+3. SparseKVCache и block summaries.
+4. CUDA router/gather kernel для фиксированного k.
+5. CUDA sparse attention kernel.
+6. OpenCL correctness backend после стабилизации CUDA path.
+7. Long-context benchmark: 32K, 128K, 512K, 1M tokens.
+8. Retrieval benchmarks: needle, multi-fact, RULER-like tests.
+```
+
+Критерии готовности:
+
+```text
+no hidden O(n²) selector
+CPU/GPU numerical agreement
+causal correctness
+deterministic top-k tie handling
+measured memory usage
+prefill and decode throughput reported separately
+retrieval quality compared with dense baseline
+```
+
+10M–12M токенов — это целевой исследовательский масштаб, а не текущая
+гарантированная возможность Ocean. Для него дополнительно потребуются
+sequence parallelism, memory-mapped/offloaded storage, distributed KV/summaries
+и long-context training. Сначала нужно доказать качество и scaling на меньших
+длинах.
+
+---
+
+# 81. Ближайший порядок работ
+
+```text
+P0  измерить fused LayerNorm benchmark на CUDA
+P1  добавить CUDA event profiler без overhead в обычном режиме
+P2  переиспользовать inference workspace и промежуточные buffers
+P3  реализовать CPU reference SparseAttention
+P4  добавить SparseKVCache/block summaries
+P5  перенести sparse routing и gather на CUDA
+P6  сравнить dense KV-cache и SparseAttention на long-context benchmark
+P7  только после validation рассматривать 1M+ и distributed execution
+```
+
+Backend/server vertical остаётся равноправной частью проекта: long-context ML
+работа не должна удалять или ослаблять `std/net`, HTTP, Router, middleware,
+worker pool и ownership regression tests.
