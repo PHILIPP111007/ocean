@@ -55,6 +55,11 @@ static ocean_tensor_backend_kind ocean_tensor_select_gpu_backend(void) {
     const char *requested = getenv("OCEAN_TENSOR_GPU_BACKEND");
     if (!requested || strcmp(requested, "") == 0 ||
         strcmp(requested, "auto") == 0) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (ocean_tensor_cuda_backend.compiled) {
+            return OCEAN_TENSOR_BACKEND_CUDA;
+        }
+#endif
         if (ocean_tensor_opencl_backend.compiled) {
             return OCEAN_TENSOR_BACKEND_OPENCL;
         }

@@ -317,12 +317,23 @@ Some Tensor operations are already GPU-native, while others still use
 correctness-first CPU fallback internally. A CUDA backend can later live behind
 the same `"gpu"` API.
 
+OpenCL:
+
 ```bash
-ocean build examples/ML/medium_gpt_native_ternary_train_gpu.oc \
+ocean build examples/ML/gpt2_native_ternary_inference.oc \
     --cflag=-lOpenCL \
     --cflag=-I"/usr/include/CL/" \
     --cflag=-L"/usr/lib/x86_64-linux-gnu/libOpenCL.so" \
     --cflag=-O3
+```
+
+CUDA:
+
+```bash
+ocean build examples/ML/gpt2_native_ternary_inference.oc \
+    --compiler nvcc \
+    --cflag=-O3 \
+    --cflag=-DOCEAN_TENSOR_ENABLE_CUDA
 ```
 
 ---

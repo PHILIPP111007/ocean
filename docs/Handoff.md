@@ -3149,6 +3149,8 @@ static validation
 ```text
 std/tensor/tensor_backend_dispatch.inc
 std/tensor/tensor_cuda_backend.inc
+std/tensor/tensor_cuda_backend.h
+std/tensor/tensor_cuda_backend.cu
 std/tensor/tensor_opencl_kernels.inc
 std/tensor/tensor_opencl_runtime.inc
 std/tensor/tensor_opencl_memory.inc
@@ -3178,8 +3180,31 @@ OCEAN_TENSOR_GPU_BACKEND=opencl
 OCEAN_TENSOR_GPU_BACKEND=cuda
 ```
 
-`cuda`/`nvidia` уже представлены отдельным backend ABI и таблицей операций, но
-native NVIDIA kernels пока не реализованы. Поэтому запрос CUDA завершается
-явной ошибкой и не подменяется CPU или OpenCL. Следующий этап — добавить
-реализацию CUDA allocation/copy/release и hot kernels за тем же
-`ocean_tensor_backend_ops`, не меняя `Tensor.to("gpu")`.
+Native CUDA backend v0.1 теперь реализует отдельным `.cu`-модулем:
+
+```text
+device allocation / release
+host-device и device-device copy
+zero/fill
+float32/int32 binary operations
+float32/int32 scalar operations
+тильную float32/int32 2D matmul
+```
+
+Включение выполняется только явно:
+
+```bash
+ocean build ./examples/your_model.oc \
+  --compiler nvcc \
+  --cflags "-O3 -DOCEAN_TENSOR_ENABLE_CUDA -arch=sm_120"
+```
+
+Сборщик сначала компилирует `tensor_cuda_backend.cu` через `nvcc`, затем
+линкует generated C и обычные C runtime-файлы host-компилятором с `-lcudart`.
+В текущем окружении `nvcc` не установлен, поэтому CUDA launch пока не прошёл
+аппаратную проверку. При отсутствии CUDA-флага backend не активируется; при
+явном запросе CUDA без CUDA-сборки runtime завершается диагностикой.
+
+Операции, для которых ещё нет CUDA kernel path (например, часть ND/ML
+примитивов), не должны называться CUDA-native; они требуют следующего слоя
+адаптации или явного staging через CPU.

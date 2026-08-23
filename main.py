@@ -8,6 +8,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -259,6 +260,84 @@ def compile_c(
     flags = [flag for flag in flags if not flag.startswith("-l")]
     if "#include <math.h>" in generated_c and "-lm" not in link_flags:
         link_flags.append("-lm")
+
+    cuda_requested = any(
+        flag == "-DOCEAN_TENSOR_ENABLE_CUDA" or
+        flag.startswith("-DOCEAN_TENSOR_ENABLE_CUDA=")
+        for flag in flags
+    )
+    if cuda_requested:
+        if Path(compiler).name != "nvcc":
+            raise RuntimeError(
+                "CUDA Tensor builds require --compiler nvcc when "
+                "-DOCEAN_TENSOR_ENABLE_CUDA is enabled"
+            )
+        cuda_sources = [
+            Path(source).parent / "tensor_cuda_backend.cu"
+            for source in runtime_sources
+            if Path(source).name == "tensor_runtime.c"
+        ]
+        cuda_source = next((source for source in cuda_sources if source.is_file()), None)
+        if cuda_source is None:
+            raise RuntimeError(
+                "CUDA Tensor backend source tensor_cuda_backend.cu was not found"
+            )
+        host_compiler = shutil.which("gcc") or shutil.which("cc")
+        if host_compiler is None:
+            raise RuntimeError("CUDA Tensor builds require a host C compiler")
+
+        nvcc_only_prefixes = (
+            "-arch=", "--gpu-architecture=", "-gencode=", "--generate-code=",
+        )
+        nvcc_flags = [
+            flag for flag in flags
+            if not flag.startswith("-std=")
+        ]
+        host_flags = [
+            flag for flag in flags
+            if not flag.startswith(nvcc_only_prefixes)
+        ]
+        if "-lcudart" not in link_flags:
+            link_flags.append("-lcudart")
+
+        _ensure_parent(binary_path)
+        with tempfile.TemporaryDirectory(prefix="ocean-cuda-") as temp_dir:
+            cuda_object = Path(temp_dir) / "tensor_cuda_backend.o"
+            cuda_command = [
+                compiler,
+                *nvcc_flags,
+                "-std=c++14",
+                "-c",
+                str(cuda_source),
+                "-o",
+                str(cuda_object),
+            ]
+            print("\n=========== CUDA compiler ===========")
+            print("$ " + " ".join(cuda_command))
+            if timeout is None:
+                subprocess.run(cuda_command, check=True)
+            else:
+                subprocess.run(cuda_command, check=True, timeout=timeout)
+
+            command = [
+                host_compiler,
+                *host_flags,
+                str(c_path),
+                *runtime_sources,
+                str(cuda_object),
+                "-o",
+                str(binary_path),
+                *link_flags,
+                *runtime_link_flags,
+            ]
+            print("\n=========== C/CUDA linker ===========")
+            print("$ " + " ".join(command))
+            if timeout is None:
+                subprocess.run(command, check=True)
+            else:
+                subprocess.run(command, check=True, timeout=timeout)
+        return command
+
     command = [
         compiler,
         *flags,

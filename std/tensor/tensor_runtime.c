@@ -14,6 +14,9 @@
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
 #include <CL/cl.h>
 #endif
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+#include "std/tensor/tensor_cuda_backend.h"
+#endif
 
 typedef enum ocean_tensor_dtype {
     OCEAN_TENSOR_BOOL,
@@ -49,6 +52,9 @@ struct ocean_tensor_handle {
     void *cpu_data;
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     cl_mem gpu_data;
+#endif
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    void *cuda_data;
 #endif
 };
 
@@ -225,7 +231,18 @@ static int ocean_tensor_parse_device(const char *device) {
     if (device && strcmp(device, "gpu") == 0) {
         return (int)ocean_tensor_select_gpu_backend();
     }
-    ocean_tensor_fail("device must be \"cpu\" or \"gpu\"");
+    /* Internal backend-preserving transfers use these names.  The public
+       Ocean API continues to document only cpu/gpu. */
+    if (device && strcmp(device, "opencl") == 0) {
+        return OCEAN_TENSOR_BACKEND_OPENCL;
+    }
+    if (device && (strcmp(device, "cuda") == 0 ||
+                   strcmp(device, "nvidia") == 0)) {
+        return OCEAN_TENSOR_BACKEND_CUDA;
+    }
+    ocean_tensor_fail(
+        "device must be \"cpu\" or \"gpu\" (internal: opencl/cuda)"
+    );
     return OCEAN_TENSOR_CPU;
 }
 
@@ -626,6 +643,12 @@ ocean_tensor_handle_t ocean_tensor_ternary_quantize(
         if (contiguous) ocean_tensor_release(contiguous);
         return result;
     }
+    if (source->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        if (contiguous) ocean_tensor_release(contiguous);
+        ocean_tensor_fail(
+            "CUDA ternary quantization kernel is not implemented yet"
+        );
+    }
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
@@ -713,6 +736,11 @@ ocean_tensor_handle_t ocean_tensor_ternary_pack(
             }
         }
     } else {
+        if (contiguous->device == OCEAN_TENSOR_BACKEND_CUDA) {
+            ocean_tensor_release(result);
+            if (contiguous != tensor) ocean_tensor_release(contiguous);
+            ocean_tensor_fail("CUDA ternary packing kernel is not implemented yet");
+        }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
         ocean_tensor_opencl_ternary_pack(
             contiguous, result, scale, transpose
@@ -737,6 +765,9 @@ ocean_tensor_handle_t ocean_tensor_gelu(ocean_tensor_handle_t tensor) {
 
     if (tensor->device == OCEAN_TENSOR_CPU) {
         return ocean_tensor_gelu_cpu(tensor);
+    }
+    if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_fail("CUDA GELU kernel is not implemented yet");
     }
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
@@ -785,6 +816,9 @@ ocean_tensor_handle_t ocean_tensor_gelu_backward(
 
     if (input->device == OCEAN_TENSOR_CPU) {
         return ocean_tensor_gelu_backward_cpu(upstream, input);
+    }
+    if (input->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_fail("CUDA GELU backward kernel is not implemented yet");
     }
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
@@ -857,6 +891,11 @@ ocean_tensor_handle_t ocean_tensor_embedding_forward(
         );
         if (cpu_indices != contiguous_indices) ocean_tensor_release(cpu_indices);
     } else {
+        if (weight->device == OCEAN_TENSOR_BACKEND_CUDA) {
+            ocean_tensor_release(contiguous_weight);
+            ocean_tensor_release(contiguous_indices);
+            ocean_tensor_fail("CUDA Embedding kernel is not implemented yet");
+        }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
         ocean_tensor_handle_t gpu_indices = contiguous_indices;
         if (gpu_indices->device != OCEAN_TENSOR_GPU) {
@@ -980,6 +1019,13 @@ ocean_tensor_handle_t ocean_tensor_embedding_backward(
         );
         if (cpu_indices != contiguous_indices) ocean_tensor_release(cpu_indices);
     } else {
+        if (upstream->device == OCEAN_TENSOR_BACKEND_CUDA) {
+            ocean_tensor_release(contiguous_upstream);
+            ocean_tensor_release(contiguous_indices);
+            ocean_tensor_fail(
+                "CUDA Embedding backward kernel is not implemented yet"
+            );
+        }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
         ocean_tensor_handle_t gpu_indices = contiguous_indices;
         if (gpu_indices->device != OCEAN_TENSOR_GPU) {
@@ -1115,6 +1161,11 @@ ocean_tensor_handle_t ocean_tensor_cross_entropy_forward(
         );
         if (cpu_targets != contiguous_targets) ocean_tensor_release(cpu_targets);
     } else {
+        if (logits->device == OCEAN_TENSOR_BACKEND_CUDA) {
+            if (contiguous_logits != logits) ocean_tensor_release(contiguous_logits);
+            if (contiguous_targets != targets) ocean_tensor_release(contiguous_targets);
+            ocean_tensor_fail("CUDA CrossEntropyLoss kernel is not implemented yet");
+        }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
         if (rows > (size_t)INT32_MAX || vocab > (size_t)INT32_MAX ||
             rows * vocab > (size_t)INT32_MAX) {
@@ -1239,6 +1290,14 @@ ocean_tensor_handle_t ocean_tensor_cross_entropy_backward(
         );
         if (cpu_targets != contiguous_targets) ocean_tensor_release(cpu_targets);
     } else {
+        if (probabilities->device == OCEAN_TENSOR_BACKEND_CUDA) {
+            ocean_tensor_release(contiguous_upstream);
+            ocean_tensor_release(contiguous_probabilities);
+            ocean_tensor_release(contiguous_targets);
+            ocean_tensor_fail(
+                "CUDA CrossEntropyLoss backward kernel is not implemented yet"
+            );
+        }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
         if (rows > (size_t)INT32_MAX || vocab > (size_t)INT32_MAX ||
             rows * vocab > (size_t)INT32_MAX) {
@@ -1358,8 +1417,17 @@ ocean_tensor_handle_t ocean_tensor_to(
     target_backend->allocate(result);
     if (target == OCEAN_TENSOR_CPU) {
         source_backend->read(tensor, result->cpu_data);
-    } else {
+    } else if (tensor->device == OCEAN_TENSOR_CPU) {
         target_backend->write(result, tensor->cpu_data);
+    } else {
+        /* Cross-GPU transfers are staged through host memory until the CUDA
+           backend exposes a peer-to-peer transfer contract. */
+        ocean_tensor_handle_t host = ocean_tensor_alloc_uninitialized(
+            tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_CPU
+        );
+        source_backend->read(tensor, host->cpu_data);
+        target_backend->write(result, host->cpu_data);
+        ocean_tensor_release(host);
     }
     return result;
 }
@@ -2113,6 +2181,9 @@ void ocean_tensor_cache_write(
         }
         return;
     }
+    if (cache->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_fail("CUDA cache_write kernel is not implemented yet");
+    }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (heads > (size_t)INT32_MAX || sequence > (size_t)INT32_MAX ||
         value_sequence > (size_t)INT32_MAX || width > (size_t)INT32_MAX ||
@@ -2306,7 +2377,9 @@ static ocean_tensor_handle_t ocean_tensor_restore_device(
     ocean_tensor_handle_t cpu_result
 ) {
     if (source->device == OCEAN_TENSOR_CPU) return cpu_result;
-    ocean_tensor_handle_t result = ocean_tensor_to(cpu_result, "gpu");
+    const char *device = source->device == OCEAN_TENSOR_BACKEND_CUDA
+        ? "cuda" : "opencl";
+    ocean_tensor_handle_t result = ocean_tensor_to(cpu_result, device);
     ocean_tensor_release(cpu_result);
     return result;
 }
@@ -2720,6 +2793,13 @@ static void ocean_tensor_set_flat_long_double(
         ocean_tensor_write_scalar(tensor, index, value);
         return;
     }
+    if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
+        ocean_tensor_set_flat_long_double(cpu, index, value);
+        ocean_tensor_copy_into(tensor, cpu);
+        ocean_tensor_release(cpu);
+        return;
+    }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     size_t scalar_shape[1] = {1};
     ocean_tensor_handle_t scalar = ocean_tensor_alloc_uninitialized(
@@ -2778,6 +2858,13 @@ void ocean_tensor_set_nd(
     if (tensor->device == OCEAN_TENSOR_CPU) {
         size_t offset = ocean_tensor_index_offset(tensor, indices, ndim);
         ocean_tensor_write_scalar(tensor, offset, (long double)value);
+        return;
+    }
+    if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
+        ocean_tensor_set_nd(cpu, indices, ndim, value);
+        ocean_tensor_copy_into(tensor, cpu);
+        ocean_tensor_release(cpu);
         return;
     }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
@@ -3712,6 +3799,9 @@ void ocean_tensor_sgd_update(
     if (learning_rate < 0.0) {
         ocean_tensor_fail("SGD learning rate must be non-negative");
     }
+    if (parameter->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_fail("CUDA SGD kernel is not implemented yet");
+    }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (parameter->device == OCEAN_TENSOR_GPU) {
         ocean_tensor_opencl_sgd_update(parameter, gradient, learning_rate);
@@ -3751,6 +3841,9 @@ void ocean_tensor_adamw_update(
         weight_decay < 0.0 || bias_correction1 <= 0.0 ||
         bias_correction2 <= 0.0) {
         ocean_tensor_fail("invalid AdamW optimizer arguments");
+    }
+    if (parameter->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_fail("CUDA AdamW kernel is not implemented yet");
     }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (parameter->device == OCEAN_TENSOR_GPU) {
@@ -4026,6 +4119,11 @@ static ocean_tensor_handle_t ocean_tensor_packed_linear_inference_impl(
     );
     free(output_shape);
 
+    if (input->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_release(result);
+        ocean_tensor_fail("CUDA packed linear kernel is not implemented yet");
+    }
+
     if (input->device == OCEAN_TENSOR_CPU) {
         ocean_tensor_handle_t input_contiguous = ocean_tensor_is_contiguous(input)
             ? input : ocean_tensor_contiguous(input);
@@ -4187,6 +4285,11 @@ static ocean_tensor_handle_t ocean_tensor_packed_qkv_inference_impl(
         output_shape, input->ndim, OCEAN_TENSOR_FLOAT32, input->device
     );
     free(output_shape);
+
+    if (input->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_release(result);
+        ocean_tensor_fail("CUDA packed QKV kernel is not implemented yet");
+    }
 
     if (input->device == OCEAN_TENSOR_CPU) {
         ocean_tensor_handle_t input_contiguous = ocean_tensor_is_contiguous(input)
@@ -4364,6 +4467,10 @@ void ocean_tensor_packed_qkv_inference_into(
         }
         ocean_tensor_release(combined);
         return;
+    }
+
+    if (input->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_fail("CUDA packed QKV kernel is not implemented yet");
     }
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
@@ -5010,7 +5117,7 @@ size_t ocean_tensor_size(ocean_tensor_handle_t tensor) {
 
 char *ocean_tensor_device(ocean_tensor_handle_t tensor) {
     if (!tensor) ocean_tensor_fail("device() does not accept a null Tensor");
-    const char *name = tensor->device == OCEAN_TENSOR_GPU ? "gpu" : "cpu";
+    const char *name = tensor->device == OCEAN_TENSOR_CPU ? "cpu" : "gpu";
     char *result = (char *)malloc(strlen(name) + 1);
     if (!result) ocean_tensor_fail("out of memory copying device name");
     strcpy(result, name);
@@ -5020,7 +5127,8 @@ char *ocean_tensor_device(ocean_tensor_handle_t tensor) {
 char *ocean_tensor_device_info(ocean_tensor_handle_t tensor) {
     if (!tensor) ocean_tensor_fail("device_info() does not accept a null Tensor");
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
-    if (tensor->device == OCEAN_TENSOR_GPU && ocean_tensor_opencl_initialized) {
+    if (tensor->device == OCEAN_TENSOR_BACKEND_OPENCL &&
+        ocean_tensor_opencl_initialized) {
         size_t size = 0;
         ocean_tensor_opencl_check(
             clGetDeviceInfo(
@@ -5047,9 +5155,10 @@ char *ocean_tensor_device_info(ocean_tensor_handle_t tensor) {
         return result;
     }
 #endif
-    const char *name = tensor->device == OCEAN_TENSOR_GPU
-        ? "OpenCL GPU (not initialized)"
-        : "CPU";
+    const char *name = tensor->device == OCEAN_TENSOR_BACKEND_CUDA
+        ? "CUDA GPU (native kernels)"
+        : (tensor->device == OCEAN_TENSOR_BACKEND_OPENCL
+            ? "OpenCL GPU (not initialized)" : "CPU");
     char *result = (char *)malloc(strlen(name) + 1);
     if (!result) ocean_tensor_fail("out of memory copying device info");
     strcpy(result, name);
@@ -5134,6 +5243,19 @@ ocean_tensor_handle_t ocean_tensor_permute(
         return result;
     }
 #endif
+
+    if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_handle_t cpu_tensor = ocean_tensor_to(tensor, "cpu");
+        ocean_tensor_handle_t cpu_result = ocean_tensor_permute_cpu(
+            cpu_tensor, normalized, ndim
+        );
+        ocean_tensor_handle_t result = ocean_tensor_to(cpu_result, "cuda");
+        ocean_tensor_release(cpu_result);
+        ocean_tensor_release(cpu_tensor);
+        free(normalized);
+        free(seen);
+        return result;
+    }
 
     ocean_tensor_handle_t result = ocean_tensor_permute_cpu(
         tensor, normalized, ndim
