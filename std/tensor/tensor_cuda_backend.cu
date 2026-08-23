@@ -759,6 +759,290 @@ __global__ void ocean_cuda_cache_slice_kernel(
     output[linear] = cache[source];
 }
 
+__device__ static bool ocean_cuda_sparse_precedes(
+    float score, int index, float other_score, int other_index
+) {
+    return score > other_score ||
+        (score == other_score && index < other_index);
+}
+
+__global__ void ocean_cuda_sparse_build_summaries_kernel(
+    const float *key,
+    float *summaries,
+    int batches,
+    int heads,
+    int key_length,
+    int active_length,
+    int head_dim,
+    int block_size,
+    int summary_blocks
+) {
+    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)batches * (size_t)heads *
+        (size_t)summary_blocks * (size_t)head_dim;
+    if (linear >= total) return;
+    int dimension = (int)(linear % (size_t)head_dim);
+    size_t block_linear = linear / (size_t)head_dim;
+    int block = (int)(block_linear % (size_t)summary_blocks);
+    size_t head_linear = block_linear / (size_t)summary_blocks;
+    int head = (int)(head_linear % (size_t)heads);
+    int batch = (int)(head_linear / (size_t)heads);
+    int start = block * block_size;
+    int end = start + block_size;
+    if (end > active_length) end = active_length;
+    if (start >= end) {
+        summaries[linear] = 0.0f;
+        return;
+    }
+    float sum = 0.0f;
+    for (int token = start; token < end; ++token) {
+        size_t offset = ((size_t)batch * (size_t)heads + (size_t)head) *
+            (size_t)key_length * (size_t)head_dim +
+            (size_t)token * (size_t)head_dim + (size_t)dimension;
+        sum += key[offset];
+    }
+    summaries[linear] = sum / (float)(end - start);
+}
+
+__global__ void ocean_cuda_sparse_update_summary_kernel(
+    const float *key,
+    float *summaries,
+    int batches,
+    int heads,
+    int key_length,
+    int summary_blocks,
+    int active_length,
+    int head_dim,
+    int block_size,
+    int position
+) {
+    int lane = (int)threadIdx.x;
+    int group = (int)blockIdx.x;
+    if (group >= batches * heads || lane >= head_dim) return;
+    int batch = group / heads;
+    int head = group % heads;
+    int block = position / block_size;
+    if (block < 0 || block >= summary_blocks) return;
+    int start = block * block_size;
+    int end = start + block_size;
+    if (end > active_length) end = active_length;
+    if (start >= end) return;
+    float sum = 0.0f;
+    for (int token = start; token < end; ++token) {
+        size_t offset = ((size_t)batch * (size_t)heads + (size_t)head) *
+            (size_t)key_length * (size_t)head_dim +
+            (size_t)token * (size_t)head_dim + (size_t)lane;
+        sum += key[offset];
+    }
+    size_t summary_offset = ((size_t)batch * (size_t)heads + (size_t)head) *
+        (size_t)summary_blocks * (size_t)head_dim +
+        (size_t)block * (size_t)head_dim + (size_t)lane;
+    summaries[summary_offset] = sum / (float)(end - start);
+}
+
+__global__ void ocean_cuda_sparse_attention_kernel(
+    const float *query,
+    const float *key,
+    const float *value,
+    const float *summaries,
+    float *output,
+    int batches,
+    int heads,
+    int query_length,
+    int key_length,
+    int head_dim,
+    int summary_blocks,
+    int top_k,
+    int top_blocks,
+    int block_size,
+    float scale,
+    int query_start,
+    int causal
+) {
+    extern __shared__ unsigned char storage[];
+    float *q_vector = (float *)storage;
+    int *selected_blocks = (int *)(q_vector + head_dim);
+    float *selected_block_scores =
+        (float *)(selected_blocks + top_blocks);
+    int *selected_indices =
+        (int *)(selected_block_scores + top_blocks);
+    float *selected_scores = (float *)(selected_indices + top_k);
+    int *selected_count = (int *)(selected_scores + top_k);
+
+    size_t group = (size_t)blockIdx.x;
+    size_t total = (size_t)batches * (size_t)heads * (size_t)query_length;
+    if (group >= total) return;
+    int query_index = (int)(group % (size_t)query_length);
+    size_t head_group = group / (size_t)query_length;
+    int head = (int)(head_group % (size_t)heads);
+    int batch = (int)(head_group / (size_t)heads);
+    int lane = (int)threadIdx.x;
+    int absolute_query = query_start + query_index;
+    size_t query_base = ((size_t)batch * (size_t)heads + (size_t)head) *
+        (size_t)query_length * (size_t)head_dim +
+        (size_t)query_index * (size_t)head_dim;
+    if (lane < head_dim) q_vector[lane] = query[query_base + (size_t)lane];
+    __syncthreads();
+
+    if (lane == 0) {
+        int block_count = (key_length + block_size - 1) / block_size;
+        int block_limit = top_blocks < block_count ? top_blocks : block_count;
+        int token_limit = top_k < key_length ? top_k : key_length;
+        int chosen_blocks = 0;
+        for (int block = 0; block < block_count; ++block) {
+            int start = block * block_size;
+            int end = start + block_size;
+            if (end > key_length) end = key_length;
+            int visible_end = end;
+            if (causal && visible_end > absolute_query + 1) {
+                visible_end = absolute_query + 1;
+            }
+            if (visible_end <= start) continue;
+            int visible_count = visible_end - start;
+            float block_score = 0.0f;
+            if (visible_count == end - start && block < summary_blocks) {
+                size_t summary_base = ((size_t)batch * (size_t)heads +
+                    (size_t)head) * (size_t)summary_blocks * (size_t)head_dim +
+                    (size_t)block * (size_t)head_dim;
+                for (int dimension = 0; dimension < head_dim; ++dimension) {
+                    block_score += q_vector[dimension] *
+                        summaries[summary_base + (size_t)dimension];
+                }
+            } else {
+                for (int token = start; token < visible_end; ++token) {
+                    size_t key_base = ((size_t)batch * (size_t)heads +
+                        (size_t)head) * (size_t)key_length * (size_t)head_dim +
+                        (size_t)token * (size_t)head_dim;
+                    float score = 0.0f;
+                    for (int dimension = 0; dimension < head_dim; ++dimension) {
+                        score += q_vector[dimension] *
+                            key[key_base + (size_t)dimension];
+                    }
+                    block_score += score / (float)visible_count;
+                }
+            }
+            block_score *= scale;
+            if (chosen_blocks < block_limit) {
+                int insert = chosen_blocks;
+                while (insert > 0 && ocean_cuda_sparse_precedes(
+                    block_score, block,
+                    selected_block_scores[insert - 1],
+                    selected_blocks[insert - 1]
+                )) {
+                    selected_block_scores[insert] = selected_block_scores[insert - 1];
+                    selected_blocks[insert] = selected_blocks[insert - 1];
+                    --insert;
+                }
+                selected_block_scores[insert] = block_score;
+                selected_blocks[insert] = block;
+                ++chosen_blocks;
+            } else if (ocean_cuda_sparse_precedes(
+                block_score, block,
+                selected_block_scores[block_limit - 1],
+                selected_blocks[block_limit - 1]
+            )) {
+                int insert = block_limit - 1;
+                while (insert > 0 && ocean_cuda_sparse_precedes(
+                    block_score, block,
+                    selected_block_scores[insert - 1],
+                    selected_blocks[insert - 1]
+                )) {
+                    selected_block_scores[insert] = selected_block_scores[insert - 1];
+                    selected_blocks[insert] = selected_blocks[insert - 1];
+                    --insert;
+                }
+                selected_block_scores[insert] = block_score;
+                selected_blocks[insert] = block;
+            }
+        }
+
+        int chosen_tokens = 0;
+        for (int selected_block = 0; selected_block < chosen_blocks; ++selected_block) {
+            int block = selected_blocks[selected_block];
+            int start = block * block_size;
+            int end = start + block_size;
+            if (end > key_length) end = key_length;
+            if (causal && end > absolute_query + 1) end = absolute_query + 1;
+            for (int token = start; token < end; ++token) {
+                size_t key_base = ((size_t)batch * (size_t)heads +
+                    (size_t)head) * (size_t)key_length * (size_t)head_dim +
+                    (size_t)token * (size_t)head_dim;
+                float token_score = 0.0f;
+                for (int dimension = 0; dimension < head_dim; ++dimension) {
+                    token_score += q_vector[dimension] *
+                        key[key_base + (size_t)dimension];
+                }
+                token_score *= scale;
+                if (chosen_tokens < token_limit) {
+                    int insert = chosen_tokens;
+                    while (insert > 0 && ocean_cuda_sparse_precedes(
+                        token_score, token,
+                        selected_scores[insert - 1],
+                        selected_indices[insert - 1]
+                    )) {
+                        selected_scores[insert] = selected_scores[insert - 1];
+                        selected_indices[insert] = selected_indices[insert - 1];
+                        --insert;
+                    }
+                    selected_scores[insert] = token_score;
+                    selected_indices[insert] = token;
+                    ++chosen_tokens;
+                } else if (ocean_cuda_sparse_precedes(
+                    token_score, token,
+                    selected_scores[token_limit - 1],
+                    selected_indices[token_limit - 1]
+                )) {
+                    int insert = token_limit - 1;
+                    while (insert > 0 && ocean_cuda_sparse_precedes(
+                        token_score, token,
+                        selected_scores[insert - 1],
+                        selected_indices[insert - 1]
+                    )) {
+                        selected_scores[insert] = selected_scores[insert - 1];
+                        selected_indices[insert] = selected_indices[insert - 1];
+                        --insert;
+                    }
+                    selected_scores[insert] = token_score;
+                    selected_indices[insert] = token;
+                }
+            }
+        }
+        float maximum = -INFINITY;
+        for (int selected = 0; selected < chosen_tokens; ++selected) {
+            if (selected_scores[selected] > maximum) {
+                maximum = selected_scores[selected];
+            }
+        }
+        float denominator = 0.0f;
+        for (int selected = 0; selected < chosen_tokens; ++selected) {
+            selected_scores[selected] = expf(selected_scores[selected] - maximum);
+            denominator += selected_scores[selected];
+        }
+        if (denominator > 0.0f) {
+            for (int selected = 0; selected < chosen_tokens; ++selected) {
+                selected_scores[selected] /= denominator;
+            }
+        }
+        *selected_count = chosen_tokens;
+    }
+    __syncthreads();
+
+    size_t output_base = ((size_t)batch * (size_t)heads + (size_t)head) *
+        (size_t)query_length * (size_t)head_dim +
+        (size_t)query_index * (size_t)head_dim;
+    float context = 0.0f;
+    if (lane < head_dim) {
+        for (int selected = 0; selected < *selected_count; ++selected) {
+            int token = selected_indices[selected];
+            size_t value_base = ((size_t)batch * (size_t)heads +
+                (size_t)head) * (size_t)key_length * (size_t)head_dim +
+                (size_t)token * (size_t)head_dim;
+            context += selected_scores[selected] * value[value_base + (size_t)lane];
+        }
+        output[output_base + (size_t)lane] = context;
+    }
+}
+
 __global__ void ocean_cuda_embedding_kernel(
     const float *weight, const int64_t *indices, float *output,
     int index_count, int vocab, int dim
@@ -1039,6 +1323,82 @@ void ocean_cuda_cache_slice(const void *cache, void *output, int batches, int he
         output_sequence, width, start
     );
     ocean_cuda_check_launch("cache slice kernel");
+}
+
+void ocean_cuda_sparse_build_summaries(
+    const void *key,
+    void *summaries,
+    int batches,
+    int heads,
+    int key_length,
+    int active_length,
+    int head_dim,
+    int block_size
+) {
+    int summary_blocks = (key_length + block_size - 1) / block_size;
+    size_t total = (size_t)batches * (size_t)heads *
+        (size_t)summary_blocks * (size_t)head_dim;
+    if (total == 0) return;
+    ocean_cuda_sparse_build_summaries_kernel<<<ocean_cuda_blocks(total), 256>>>(
+        (const float *)key, (float *)summaries,
+        batches, heads, key_length, active_length, head_dim,
+        block_size, summary_blocks
+    );
+    ocean_cuda_check_launch("sparse summary build kernel");
+}
+
+void ocean_cuda_sparse_update_summary(
+    const void *key,
+    void *summaries,
+    int batches,
+    int heads,
+    int key_length,
+    int summary_blocks,
+    int active_length,
+    int head_dim,
+    int block_size,
+    int position
+) {
+    if (batches <= 0 || heads <= 0 || head_dim <= 0) return;
+    ocean_cuda_sparse_update_summary_kernel<<<batches * heads, 128>>>(
+        (const float *)key, (float *)summaries,
+        batches, heads, key_length, summary_blocks, active_length,
+        head_dim, block_size, position
+    );
+    ocean_cuda_check_launch("sparse summary update kernel");
+}
+
+void ocean_cuda_sparse_attention(
+    const void *query,
+    const void *key,
+    const void *value,
+    const void *summaries,
+    void *output,
+    int batches,
+    int heads,
+    int query_length,
+    int key_length,
+    int head_dim,
+    int summary_blocks,
+    int top_k,
+    int top_blocks,
+    int block_size,
+    float scale,
+    int query_start,
+    int causal
+) {
+    size_t total = (size_t)batches * (size_t)heads * (size_t)query_length;
+    if (total == 0) return;
+    size_t shared_bytes = (size_t)head_dim * sizeof(float) +
+        (size_t)top_blocks * (sizeof(int) + sizeof(float)) +
+        (size_t)top_k * (sizeof(int) + sizeof(float)) + sizeof(int);
+    ocean_cuda_sparse_attention_kernel<<<ocean_cuda_blocks(total), 128, shared_bytes>>>(
+        (const float *)query, (const float *)key, (const float *)value,
+        (const float *)summaries, (float *)output,
+        batches, heads, query_length, key_length, head_dim, summary_blocks,
+        top_k, top_blocks, block_size, scale, query_start, causal
+    );
+    ocean_cuda_check_launch("sparse attention kernel");
 }
 
 void ocean_cuda_embedding_forward(const void *weight, const void *indices, void *output, int index_count, int vocab, int dim) {

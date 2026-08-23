@@ -454,9 +454,9 @@ class TypedIRBuilder:
                 "add", "sub", "mul", "div",
                 "add_scalar", "sub_scalar", "mul_scalar", "div_scalar",
                 "reshape", "sum", "sum_dim", "mean_dim",
-                "exp", "log", "sqrt", "pow", "softmax", "layer_norm", "layer_norm_affine", "sparse_attention", "sparse_attention_blocked", "sparse_attention_build_summaries", "sparse_attention_update_summary", "sparse_attention_blocked_cached", "masked_fill", "permute",
+                "exp", "log", "sqrt", "pow", "softmax", "layer_norm", "layer_norm_affine", "sparse_attention", "sparse_attention_blocked", "sparse_attention_build_summaries", "sparse_attention_build_summaries_active", "sparse_attention_update_summary", "sparse_attention_blocked_cached", "masked_fill", "permute",
                 "relu", "to", "contiguous", "grad",
-                "shape", "ndim", "size", "device", "get", "set",
+                "shape", "ndim", "size", "device", "device_info", "sparse_attention_cuda_available", "get", "set",
                 "mean", "max", "min", "dtype", "is_contiguous", "item",
                 "requires_grad", "has_grad",
                 "requires_grad_", "zero_grad", "backward", "fill", "release",
@@ -470,9 +470,9 @@ class TypedIRBuilder:
                     return IRType.parse("int")
                 if method == "size":
                     return IRType.parse("size_t")
-                if method in {"device", "dtype"}:
+                if method in {"device", "device_info", "dtype"}:
                     return IRType.parse("str")
-                if method in {"is_contiguous", "requires_grad", "has_grad"}:
+                if method in {"is_contiguous", "requires_grad", "has_grad", "sparse_attention_cuda_available"}:
                     return IRType.parse("bool")
                 if method in {
                     "set", "requires_grad_", "zero_grad",

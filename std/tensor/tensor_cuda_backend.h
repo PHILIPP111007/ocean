@@ -204,6 +204,47 @@ void ocean_cuda_cache_slice(
     int width,
     int start
 );
+void ocean_cuda_sparse_build_summaries(
+    const void *key,
+    void *summaries,
+    int batches,
+    int heads,
+    int key_length,
+    int active_length,
+    int head_dim,
+    int block_size
+);
+void ocean_cuda_sparse_update_summary(
+    const void *key,
+    void *summaries,
+    int batches,
+    int heads,
+    int key_length,
+    int summary_blocks,
+    int active_length,
+    int head_dim,
+    int block_size,
+    int position
+);
+void ocean_cuda_sparse_attention(
+    const void *query,
+    const void *key,
+    const void *value,
+    const void *summaries,
+    void *output,
+    int batches,
+    int heads,
+    int query_length,
+    int key_length,
+    int head_dim,
+    int summary_blocks,
+    int top_k,
+    int top_blocks,
+    int block_size,
+    float scale,
+    int query_start,
+    int causal
+);
 void ocean_cuda_embedding_forward(
     const void *weight,
     const void *indices,

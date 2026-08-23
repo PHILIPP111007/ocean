@@ -317,6 +317,7 @@ int ocean_tensor_ndim(ocean_tensor_handle_t tensor);
 size_t ocean_tensor_size(ocean_tensor_handle_t tensor);
 char *ocean_tensor_device(ocean_tensor_handle_t tensor);
 char *ocean_tensor_device_info(ocean_tensor_handle_t tensor);
+bool ocean_tensor_sparse_attention_cuda_available(ocean_tensor_handle_t tensor);
 uint64_t ocean_tensor_identity(ocean_tensor_handle_t tensor);
 void ocean_tensor_release(ocean_tensor_handle_t tensor);
 
@@ -363,6 +364,11 @@ ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked(
 );
 ocean_tensor_handle_t ocean_tensor_sparse_attention_build_summaries(
     ocean_tensor_handle_t key,
+    int block_size
+);
+ocean_tensor_handle_t ocean_tensor_sparse_attention_build_summaries_active(
+    ocean_tensor_handle_t key,
+    int active_length,
     int block_size
 );
 void ocean_tensor_sparse_attention_update_summary(

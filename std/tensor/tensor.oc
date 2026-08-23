@@ -276,6 +276,11 @@ class Tensor:
         var result: Tensor = Tensor(handle)
         return result
 
+    def sparse_attention_build_summaries_active(self, active_length: int, block_size: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention_build_summaries_active(self.handle, active_length, block_size)
+        var result: Tensor = Tensor(handle)
+        return result
+
     def sparse_attention_update_summary(self, key: &Tensor, position: int, block_size: int) -> None:
         ocean_tensor_sparse_attention_update_summary(self.handle, key.handle, position, block_size)
         return None
@@ -359,6 +364,9 @@ class Tensor:
 
     def device_info(self) -> str:
         return ocean_tensor_device_info(self.handle)
+
+    def sparse_attention_cuda_available(self) -> bool:
+        return ocean_tensor_sparse_attention_cuda_available(self.handle)
 
     def release(self) -> None:
         ocean_tensor_release(self.handle)

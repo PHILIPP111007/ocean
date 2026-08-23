@@ -3459,11 +3459,34 @@ output = ocean_tensor_sparse_attention_blocked_cached(
 при переходе на новый блок summaries перестраиваются с учётом нового размера.
 `forward()` вызывает `update()` автоматически после записи нового key в cache.
 
-Это всё ещё CPU-only correctness/performance prototype. Выбор блока пока
-сканирует все block summaries (`O(number_of_blocks)`), summaries используют
-простое mean pooling, а CUDA/OpenCL kernels отсутствуют. Поэтому v0.2 ещё не
-является полной реализацией subquadratic attention и не гарантирует ускорение
-всей LLM.
+CPU routing v0.2 всё ещё сканирует все block summaries (`O(number_of_blocks)`),
+а summaries используют простое mean pooling. Поэтому v0.2 сама по себе ещё не
+является полной hierarchical/subquadratic реализацией.
+
+## 80.1.3 CUDA sparse decode v0.3
+
+Добавлен CUDA backend для трёх операций:
+
+```text
+build summaries      -> один kernel на все summary elements
+update summary       -> обновляется только текущий block
+blocked attention    -> CUDA block на каждый [batch, head, query]
+```
+
+CUDA selector использует тот же deterministic tie-break, что и CPU reference:
+сначала выбираются `top_blocks`, затем точный top-k по токенам внутри них.
+`GPT2KVCache` теперь хранит summaries для каждого слоя, строит их после prefill
+и передаёт active summary slice в autoregressive decode.
+
+Текущая GPT-2 интеграция correctness-first: GPU decode использует packed QKV
+split, cache write и CUDA SparseAttention вместо прежнего dense attention
+decode. Это ещё не означает прирост tokens/sec: на коротком контексте overhead
+split/slice и serial selector может быть выше dense fused kernel. Нужны CUDA
+benchmark и numerical comparison с прежним dense path.
+
+В текущем окружении `nvcc` отсутствует, поэтому `.cu` kernels не прошли
+аппаратную компиляцию здесь. CPU host/runtime и Ocean frontend проверены;
+CUDA validation нужно выполнить в окружении с NVIDIA toolkit.
 
 ## 80.2 Где будет ускорение
 
@@ -3536,9 +3559,9 @@ P1  добавить CUDA event profiler без overhead в обычном ре�
 P2  переиспользовать inference workspace и промежуточные buffers
 P3  CPU reference SparseAttention                  -> реализован, correctness-only
 P4  SparseKVCache/block summaries                   -> summaries + cached API + block update реализованы
-P5  интегрировать SparseAttention в GPT2 KV-cache и перенести routing/gather на CUDA
+P5  интегрировать SparseAttention в GPT2 KV-cache и перенести routing/gather на CUDA -> реализовано, CUDA hardware validation pending
 P6  сравнить dense KV-cache и SparseAttention на long-context benchmark
-P7  только после validation рассматривать 1M+ и distributed execution
+P7  после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
 ```
 
 Backend/server vertical остаётся равноправной частью проекта: long-context ML
