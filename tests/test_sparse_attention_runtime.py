@@ -74,6 +74,30 @@ int main(void) {
         "top-k q1 dim1"
     );
 
+    ocean_tensor_handle_t blocked = ocean_tensor_sparse_attention_blocked(
+        query, key, value, 2, 2, 2, 1.0, 0, false
+    );
+    for (size_t i = 0; i < 4; ++i) {
+        check_close(
+            ocean_tensor_get_flat_f32(blocked, i),
+            ocean_tensor_get_flat_f32(output, i),
+            "blocked attention"
+        );
+    }
+
+    ocean_tensor_handle_t summaries =
+        ocean_tensor_sparse_attention_build_summaries(key, 2);
+    ocean_tensor_handle_t cached = ocean_tensor_sparse_attention_blocked_cached(
+        query, key, value, summaries, 2, 2, 2, 1.0, 0, false
+    );
+    for (size_t i = 0; i < 4; ++i) {
+        check_close(
+            ocean_tensor_get_flat_f32(cached, i),
+            ocean_tensor_get_flat_f32(blocked, i),
+            "cached blocked attention"
+        );
+    }
+
     ocean_tensor_handle_t causal = ocean_tensor_sparse_attention(
         query, key, value, 4, 1.0, 0, true
     );
@@ -91,6 +115,9 @@ int main(void) {
     );
 
     ocean_tensor_release(causal);
+    ocean_tensor_release(cached);
+    ocean_tensor_release(summaries);
+    ocean_tensor_release(blocked);
     ocean_tensor_release(output);
     ocean_tensor_release(value);
     ocean_tensor_release(key);

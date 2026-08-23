@@ -266,6 +266,21 @@ class Tensor:
         var result: Tensor = Tensor(handle)
         return result
 
+    def sparse_attention_blocked(self, key: &Tensor, value: &Tensor, top_k: int, top_blocks: int, block_size: int, scale: float64, query_start: int, causal: bool) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention_blocked(self.handle, key.handle, value.handle, top_k, top_blocks, block_size, scale, query_start, causal)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def sparse_attention_build_summaries(self, block_size: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention_build_summaries(self.handle, block_size)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def sparse_attention_blocked_cached(self, key: &Tensor, value: &Tensor, summaries: &Tensor, top_k: int, top_blocks: int, block_size: int, scale: float64, query_start: int, causal: bool) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention_blocked_cached(self.handle, key.handle, value.handle, summaries.handle, top_k, top_blocks, block_size, scale, query_start, causal)
+        var result: Tensor = Tensor(handle)
+        return result
+
     def masked_fill(self, mask: &Tensor, value: float64) -> Tensor:
         var neg_mask: Tensor = mask.mul_scalar(-1.0)
         var keep_mask: Tensor = neg_mask.add_scalar(1.0)

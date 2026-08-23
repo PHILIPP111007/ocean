@@ -217,9 +217,21 @@ class SparseAttention(Module):
         self.head_dim: int = head_dim
         self.causal: bool = causal
         self.scale: float64 = 1.0 / sqrt(head_dim)
+        self.block_size: int = 64
+        self.top_blocks: int = 8
+        self.summaries: Tensor[float32] = Tensor.zeros(0, 0, "cpu")
+        self.summaries_ready: bool = False
+
+    def prepare(self, key: &Tensor[float32]) -> None:
+        # Build once for a stable KV cache. Call again after appending keys.
+        self.summaries = key.sparse_attention_build_summaries(self.block_size)
+        self.summaries_ready = True
+        return None
 
     def forward(self, query: &Tensor[float32], key: &Tensor[float32], value: &Tensor[float32], query_start: int) -> Tensor[float32]:
-        return query.sparse_attention(key, value, self.top_k, self.scale, query_start, self.causal)
+        if self.summaries_ready:
+            return query.sparse_attention_blocked_cached(key, value, self.summaries, self.top_k, self.top_blocks, self.block_size, self.scale, query_start, self.causal)
+        return query.sparse_attention_blocked(key, value, self.top_k, self.top_blocks, self.block_size, self.scale, query_start, self.causal)
 
 
 class LayerNorm(Module):

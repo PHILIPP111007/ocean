@@ -350,6 +350,33 @@ ocean_tensor_handle_t ocean_tensor_sparse_attention(
     int query_start,
     bool causal
 );
+ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked(
+    ocean_tensor_handle_t query,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t value,
+    int top_k,
+    int top_blocks,
+    int block_size,
+    double scale,
+    int query_start,
+    bool causal
+);
+ocean_tensor_handle_t ocean_tensor_sparse_attention_build_summaries(
+    ocean_tensor_handle_t key,
+    int block_size
+);
+ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked_cached(
+    ocean_tensor_handle_t query,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t value,
+    ocean_tensor_handle_t summaries,
+    int top_k,
+    int top_blocks,
+    int block_size,
+    double scale,
+    int query_start,
+    bool causal
+);
 ocean_tensor_handle_t ocean_tensor_softmax_backward(
     ocean_tensor_handle_t upstream,
     ocean_tensor_handle_t output,

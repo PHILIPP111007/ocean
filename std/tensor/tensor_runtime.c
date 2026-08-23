@@ -4079,6 +4079,445 @@ ocean_tensor_handle_t ocean_tensor_sparse_attention(
     return result;
 }
 
+static ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked_impl(
+    ocean_tensor_handle_t query,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t value,
+    int top_k,
+    int top_blocks,
+    int block_size,
+    double scale,
+    int query_start,
+    bool causal,
+    const float *precomputed_summaries
+) {
+    if (!query || !key || !value) {
+        ocean_tensor_fail("Blocked SparseAttention received a null Tensor");
+    }
+    if (query->dtype != OCEAN_TENSOR_FLOAT32 ||
+        key->dtype != OCEAN_TENSOR_FLOAT32 ||
+        value->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail("Blocked SparseAttention requires float32 Tensors");
+    }
+    if (query->device != OCEAN_TENSOR_CPU ||
+        key->device != OCEAN_TENSOR_CPU ||
+        value->device != OCEAN_TENSOR_CPU) {
+        ocean_tensor_fail(
+            "Blocked SparseAttention v0.2 is CPU-only; CUDA routing is not implemented yet"
+        );
+    }
+    if (query->ndim != 4 || key->ndim != 4 || value->ndim != 4) {
+        ocean_tensor_fail(
+            "Blocked SparseAttention expects [batch, heads, sequence, head_dim]"
+        );
+    }
+    if (top_k <= 0 || top_blocks <= 0 || block_size <= 0) {
+        ocean_tensor_fail(
+            "Blocked SparseAttention top_k, top_blocks, and block_size must be positive"
+        );
+    }
+    if (query_start < 0) {
+        ocean_tensor_fail("Blocked SparseAttention query_start must be non-negative");
+    }
+
+    size_t batch = query->shape[0];
+    size_t heads = query->shape[1];
+    size_t query_length = query->shape[2];
+    size_t head_dim = query->shape[3];
+    size_t key_length = key->shape[2];
+    if (key->shape[0] != batch || key->shape[1] != heads ||
+        value->shape[0] != batch || value->shape[1] != heads ||
+        key->shape[3] != head_dim || value->shape[2] != key_length ||
+        value->shape[3] != head_dim) {
+        ocean_tensor_fail("Blocked SparseAttention shapes are incompatible");
+    }
+    if (head_dim == 0 || key_length == 0) {
+        ocean_tensor_fail("Blocked SparseAttention cannot use an empty key dimension");
+    }
+    if ((size_t)query_start > SIZE_MAX - query_length) {
+        ocean_tensor_fail("Blocked SparseAttention query position overflows size_t");
+    }
+
+    size_t block_width = (size_t)block_size;
+    size_t block_count = (key_length + block_width - 1) / block_width;
+    size_t block_limit = (size_t)top_blocks < block_count
+        ? (size_t)top_blocks : block_count;
+    size_t token_limit = (size_t)top_k < key_length
+        ? (size_t)top_k : key_length;
+    if (block_count == 0 || block_limit == 0 || token_limit == 0) {
+        ocean_tensor_fail("Blocked SparseAttention produced an empty routing domain");
+    }
+    if (batch != 0 && heads > SIZE_MAX / batch) {
+        ocean_tensor_fail("Blocked SparseAttention summary shape overflows size_t");
+    }
+    size_t summary_count = batch * heads;
+    if (block_count != 0 && summary_count > SIZE_MAX / block_count) {
+        ocean_tensor_fail("Blocked SparseAttention summary shape overflows size_t");
+    }
+    summary_count *= block_count;
+    if (head_dim != 0 && summary_count > SIZE_MAX / head_dim) {
+        ocean_tensor_fail("Blocked SparseAttention summary shape overflows size_t");
+    }
+    summary_count *= head_dim;
+
+    ocean_tensor_handle_t query_contiguous = ocean_tensor_is_contiguous(query)
+        ? query : ocean_tensor_contiguous(query);
+    ocean_tensor_handle_t key_contiguous = ocean_tensor_is_contiguous(key)
+        ? key : ocean_tensor_contiguous(key);
+    ocean_tensor_handle_t value_contiguous = ocean_tensor_is_contiguous(value)
+        ? value : ocean_tensor_contiguous(value);
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        query->shape, query->ndim, OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_CPU
+    );
+    bool owns_summaries = precomputed_summaries == NULL;
+    float *summaries = (float *)precomputed_summaries;
+    if (owns_summaries) {
+        summaries = (float *)calloc(summary_count, sizeof(float));
+    }
+    size_t *selected_blocks = (size_t *)malloc(block_limit * sizeof(size_t));
+    float *selected_block_scores =
+        (float *)malloc(block_limit * sizeof(float));
+    size_t *selected_indices = (size_t *)malloc(token_limit * sizeof(size_t));
+    float *selected_scores = (float *)malloc(token_limit * sizeof(float));
+    if (!summaries || !selected_blocks || !selected_block_scores ||
+        !selected_indices || !selected_scores) {
+        if (owns_summaries) free(summaries);
+        free(selected_blocks);
+        free(selected_block_scores);
+        free(selected_indices);
+        free(selected_scores);
+        if (query_contiguous != query) ocean_tensor_release(query_contiguous);
+        if (key_contiguous != key) ocean_tensor_release(key_contiguous);
+        if (value_contiguous != value) ocean_tensor_release(value_contiguous);
+        ocean_tensor_release(result);
+        ocean_tensor_fail("out of memory in blocked SparseAttention");
+    }
+
+    const float *query_data = (const float *)query_contiguous->cpu_data;
+    const float *key_data = (const float *)key_contiguous->cpu_data;
+    const float *value_data = (const float *)value_contiguous->cpu_data;
+    float *result_data = (float *)result->cpu_data;
+    if (owns_summaries) {
+        for (size_t batch_index = 0; batch_index < batch; ++batch_index) {
+            for (size_t head = 0; head < heads; ++head) {
+                for (size_t block = 0; block < block_count; ++block) {
+                    size_t start = block * block_width;
+                    size_t end = start + block_width;
+                    if (end > key_length) end = key_length;
+                    size_t count = end - start;
+                    size_t summary_base =
+                        ((batch_index * heads + head) * block_count + block)
+                        * head_dim;
+                    for (size_t key_index = start; key_index < end; ++key_index) {
+                        size_t key_base =
+                            ((batch_index * heads + head) * key_length + key_index)
+                            * head_dim;
+                        for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                            summaries[summary_base + dimension] +=
+                                key_data[key_base + dimension] / (float)count;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    float score_scale = scale == 0.0
+        ? 1.0f / sqrtf((float)head_dim) : (float)scale;
+    if (!(score_scale > 0.0f) || !isfinite(score_scale)) {
+        if (owns_summaries) free(summaries);
+        free(selected_blocks);
+        free(selected_block_scores);
+        free(selected_indices);
+        free(selected_scores);
+        if (query_contiguous != query) ocean_tensor_release(query_contiguous);
+        if (key_contiguous != key) ocean_tensor_release(key_contiguous);
+        if (value_contiguous != value) ocean_tensor_release(value_contiguous);
+        ocean_tensor_release(result);
+        ocean_tensor_fail("Blocked SparseAttention scale must be finite and positive");
+    }
+
+    for (size_t batch_index = 0; batch_index < batch; ++batch_index) {
+        for (size_t head = 0; head < heads; ++head) {
+            for (size_t query_index = 0; query_index < query_length; ++query_index) {
+                size_t absolute_query = (size_t)query_start + query_index;
+                size_t query_base =
+                    ((batch_index * heads + head) * query_length + query_index)
+                    * head_dim;
+                size_t selected_block_count = 0;
+                for (size_t block = 0; block < block_count; ++block) {
+                    size_t start = block * block_width;
+                    size_t end = start + block_width;
+                    if (end > key_length) end = key_length;
+                    size_t visible_end = end;
+                    if (causal && visible_end > absolute_query + 1) {
+                        visible_end = absolute_query + 1;
+                    }
+                    if (visible_end <= start) continue;
+
+                    size_t visible_count = visible_end - start;
+                    float block_score = 0.0f;
+                    if (visible_count == end - start) {
+                        size_t summary_base =
+                            ((batch_index * heads + head) * block_count + block)
+                            * head_dim;
+                        for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                            block_score += query_data[query_base + dimension]
+                                * summaries[summary_base + dimension];
+                        }
+                    } else {
+                        for (size_t key_index = start; key_index < visible_end; ++key_index) {
+                            size_t key_base =
+                                ((batch_index * heads + head) * key_length + key_index)
+                                * head_dim;
+                            float score = 0.0f;
+                            for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                                score += query_data[query_base + dimension]
+                                    * key_data[key_base + dimension];
+                            }
+                            block_score += score / (float)visible_count;
+                        }
+                    }
+                    block_score *= score_scale;
+
+                    if (selected_block_count < block_limit) {
+                        size_t insert = selected_block_count;
+                        while (insert > 0 && ocean_tensor_sparse_score_precedes(
+                            block_score, block,
+                            selected_block_scores[insert - 1],
+                            selected_blocks[insert - 1]
+                        )) {
+                            selected_block_scores[insert] = selected_block_scores[insert - 1];
+                            selected_blocks[insert] = selected_blocks[insert - 1];
+                            --insert;
+                        }
+                        selected_block_scores[insert] = block_score;
+                        selected_blocks[insert] = block;
+                        ++selected_block_count;
+                    } else if (ocean_tensor_sparse_score_precedes(
+                        block_score, block,
+                        selected_block_scores[block_limit - 1],
+                        selected_blocks[block_limit - 1]
+                    )) {
+                        size_t insert = block_limit - 1;
+                        while (insert > 0 && ocean_tensor_sparse_score_precedes(
+                            block_score, block,
+                            selected_block_scores[insert - 1],
+                            selected_blocks[insert - 1]
+                        )) {
+                            selected_block_scores[insert] = selected_block_scores[insert - 1];
+                            selected_blocks[insert] = selected_blocks[insert - 1];
+                            --insert;
+                        }
+                        selected_block_scores[insert] = block_score;
+                        selected_blocks[insert] = block;
+                    }
+                }
+
+                size_t selected_count = 0;
+                for (size_t selected_block = 0;
+                     selected_block < selected_block_count;
+                     ++selected_block) {
+                    size_t block = selected_blocks[selected_block];
+                    size_t start = block * block_width;
+                    size_t end = start + block_width;
+                    if (end > key_length) end = key_length;
+                    if (causal && end > absolute_query + 1) {
+                        end = absolute_query + 1;
+                    }
+                    for (size_t key_index = start; key_index < end; ++key_index) {
+                        size_t key_base =
+                            ((batch_index * heads + head) * key_length + key_index)
+                            * head_dim;
+                        float token_score = 0.0f;
+                        for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                            token_score += query_data[query_base + dimension]
+                                * key_data[key_base + dimension];
+                        }
+                        token_score *= score_scale;
+                        if (selected_count < token_limit) {
+                            size_t insert = selected_count;
+                            while (insert > 0 && ocean_tensor_sparse_score_precedes(
+                                token_score, key_index,
+                                selected_scores[insert - 1],
+                                selected_indices[insert - 1]
+                            )) {
+                                selected_scores[insert] = selected_scores[insert - 1];
+                                selected_indices[insert] = selected_indices[insert - 1];
+                                --insert;
+                            }
+                            selected_scores[insert] = token_score;
+                            selected_indices[insert] = key_index;
+                            ++selected_count;
+                        } else if (ocean_tensor_sparse_score_precedes(
+                            token_score, key_index,
+                            selected_scores[token_limit - 1],
+                            selected_indices[token_limit - 1]
+                        )) {
+                            size_t insert = token_limit - 1;
+                            while (insert > 0 && ocean_tensor_sparse_score_precedes(
+                                token_score, key_index,
+                                selected_scores[insert - 1],
+                                selected_indices[insert - 1]
+                            )) {
+                                selected_scores[insert] = selected_scores[insert - 1];
+                                selected_indices[insert] = selected_indices[insert - 1];
+                                --insert;
+                            }
+                            selected_scores[insert] = token_score;
+                            selected_indices[insert] = key_index;
+                        }
+                    }
+                }
+
+                float maximum = -INFINITY;
+                for (size_t selected = 0; selected < selected_count; ++selected) {
+                    if (selected_scores[selected] > maximum) {
+                        maximum = selected_scores[selected];
+                    }
+                }
+                float denominator = 0.0f;
+                for (size_t selected = 0; selected < selected_count; ++selected) {
+                    selected_scores[selected] = expf(
+                        selected_scores[selected] - maximum
+                    );
+                    denominator += selected_scores[selected];
+                }
+                for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                    float output = 0.0f;
+                    for (size_t selected = 0; selected < selected_count; ++selected) {
+                        size_t value_base =
+                            ((batch_index * heads + head) * key_length
+                                + selected_indices[selected]) * head_dim;
+                        output += (selected_scores[selected] / denominator)
+                            * value_data[value_base + dimension];
+                    }
+                    result_data[query_base + dimension] = output;
+                }
+            }
+        }
+    }
+
+    if (owns_summaries) free(summaries);
+    free(selected_blocks);
+    free(selected_block_scores);
+    free(selected_indices);
+    free(selected_scores);
+    if (query_contiguous != query) ocean_tensor_release(query_contiguous);
+    if (key_contiguous != key) ocean_tensor_release(key_contiguous);
+    if (value_contiguous != value) ocean_tensor_release(value_contiguous);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked(
+    ocean_tensor_handle_t query,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t value,
+    int top_k,
+    int top_blocks,
+    int block_size,
+    double scale,
+    int query_start,
+    bool causal
+) {
+    return ocean_tensor_sparse_attention_blocked_impl(
+        query, key, value, top_k, top_blocks, block_size,
+        scale, query_start, causal, NULL
+    );
+}
+
+ocean_tensor_handle_t ocean_tensor_sparse_attention_build_summaries(
+    ocean_tensor_handle_t key,
+    int block_size
+) {
+    if (!key || key->dtype != OCEAN_TENSOR_FLOAT32 ||
+        key->device != OCEAN_TENSOR_CPU || key->ndim != 4 || block_size <= 0) {
+        ocean_tensor_fail(
+            "SparseAttention summaries require a CPU float32 key Tensor [B,H,K,D]"
+        );
+    }
+    size_t batch = key->shape[0];
+    size_t heads = key->shape[1];
+    size_t key_length = key->shape[2];
+    size_t head_dim = key->shape[3];
+    if (key_length == 0 || head_dim == 0) {
+        ocean_tensor_fail("SparseAttention summaries cannot use empty key dimensions");
+    }
+    size_t width = (size_t)block_size;
+    size_t block_count = (key_length + width - 1) / width;
+    size_t shape[4] = {batch, heads, block_count, head_dim};
+    ocean_tensor_handle_t contiguous = ocean_tensor_is_contiguous(key)
+        ? key : ocean_tensor_contiguous(key);
+    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+        shape, 4, OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_CPU
+    );
+    const float *source = (const float *)contiguous->cpu_data;
+    float *destination = (float *)result->cpu_data;
+    for (size_t batch_index = 0; batch_index < batch; ++batch_index) {
+        for (size_t head = 0; head < heads; ++head) {
+            for (size_t block = 0; block < block_count; ++block) {
+                size_t start = block * width;
+                size_t end = start + width;
+                if (end > key_length) end = key_length;
+                size_t count = end - start;
+                size_t summary_base =
+                    ((batch_index * heads + head) * block_count + block)
+                    * head_dim;
+                for (size_t key_index = start; key_index < end; ++key_index) {
+                    size_t source_base =
+                        ((batch_index * heads + head) * key_length + key_index)
+                        * head_dim;
+                    for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                        destination[summary_base + dimension] +=
+                            source[source_base + dimension] / (float)count;
+                    }
+                }
+            }
+        }
+    }
+    if (contiguous != key) ocean_tensor_release(contiguous);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked_cached(
+    ocean_tensor_handle_t query,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t value,
+    ocean_tensor_handle_t summaries,
+    int top_k,
+    int top_blocks,
+    int block_size,
+    double scale,
+    int query_start,
+    bool causal
+) {
+    if (!summaries || summaries->dtype != OCEAN_TENSOR_FLOAT32 ||
+        summaries->device != OCEAN_TENSOR_CPU || summaries->ndim != 4) {
+        ocean_tensor_fail(
+            "Cached SparseAttention requires CPU float32 summaries [B,H,blocks,D]"
+        );
+    }
+    if (!key || key->ndim != 4 || block_size <= 0) {
+        ocean_tensor_fail("Cached SparseAttention received invalid key metadata");
+    }
+    size_t expected_blocks =
+        (key->shape[2] + (size_t)block_size - 1) / (size_t)block_size;
+    if (summaries->shape[0] != key->shape[0] ||
+        summaries->shape[1] != key->shape[1] ||
+        summaries->shape[2] != expected_blocks ||
+        summaries->shape[3] != key->shape[3]) {
+        ocean_tensor_fail("Cached SparseAttention summaries do not match key metadata");
+    }
+    ocean_tensor_handle_t contiguous = ocean_tensor_is_contiguous(summaries)
+        ? summaries : ocean_tensor_contiguous(summaries);
+    ocean_tensor_handle_t result = ocean_tensor_sparse_attention_blocked_impl(
+        query, key, value, top_k, top_blocks, block_size,
+        scale, query_start, causal, (const float *)contiguous->cpu_data
+    );
+    if (contiguous != summaries) ocean_tensor_release(contiguous);
+    return result;
+}
+
 static void ocean_tensor_validate_backward_inputs(
     ocean_tensor_handle_t upstream,
     ocean_tensor_handle_t reference,
