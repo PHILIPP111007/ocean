@@ -482,7 +482,6 @@ static const char *ocean_tensor_matmul_kernel_source =
     "else if (operation == 2) out[index] = value * scalar;"
     "else out[index] = scalar == 0 ? 0 : value / scalar;"
     "}"
-    "}"
     "}";
 
 static const char *ocean_tensor_batched_matmul_kernel_source =
