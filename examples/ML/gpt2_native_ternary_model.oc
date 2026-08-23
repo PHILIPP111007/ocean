@@ -215,6 +215,7 @@ class GPT2Attention(Module):
         self.sparse_top_blocks: int = 8
         self.sparse_block_size: int = 64
         self.sparse_prefill_threshold: int = 256
+        self.last_prefill_sparse: bool = False
 
     def forward(self, input: &Tensor[float32], causal_bias: &Tensor[float32]) -> Tensor[float32]:
         if Tensor.grad_enabled() == False and self.q_proj.inference_ready and self.k_proj.inference_ready and self.v_proj.inference_ready:
@@ -331,7 +332,9 @@ class GPT2Attention(Module):
     def forward_prefill_fused(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32]) -> Tensor[float32]:
         var batch_size: int = input.shape(0)
         var sequence_length: int = input.shape(1)
+        self.last_prefill_sparse = False
         if input.device() == "gpu" and input.sparse_attention_cuda_available() and sequence_length >= self.sparse_prefill_threshold:
+            self.last_prefill_sparse = True
             return self.forward_prefill_sparse(input, cache_k, cache_v)
         var q_linear: Tensor[float32] = Tensor.empty(batch_size, sequence_length, self.d_model, input.device())
         var k_linear: Tensor[float32] = Tensor.empty(batch_size, sequence_length, self.d_model, input.device())
@@ -378,6 +381,9 @@ class GPT2Attention(Module):
     def set_sparse_prefill_threshold(self, threshold: int) -> None:
         self.sparse_prefill_threshold = threshold
         return None
+
+    def prefill_sparse_used(self) -> bool:
+        return self.last_prefill_sparse
 
     def forward_cached_sparse(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], summary: &Tensor[float32], position: int) -> Tensor[float32]:
         var batch_size: int = input.shape(0)
@@ -677,6 +683,11 @@ class GPT2Ternary(Module):
         if self.n_layers > 11:
             self.block12.set_sparse_prefill_threshold(threshold)
         return None
+
+    def prefill_sparse_used(self) -> bool:
+        if self.n_layers > 0:
+            return self.block1.attn.prefill_sparse_used()
+        return False
 
     def forward_prefill_hidden(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &GPT2KVCache) -> Tensor[float32]:
         var token_hidden: Tensor[float32] = self.token_embedding.forward(tokens)

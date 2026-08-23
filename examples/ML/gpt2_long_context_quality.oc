@@ -81,7 +81,9 @@ def main() -> int:
 
     # The same frozen model and weights are used for both paths.
     var dense_logits: Tensor[float32] = prefill_logits(model, prompt_gpu, positions_gpu, 1000000)
+    var dense_path_used_sparse: bool = model.prefill_sparse_used()
     var sparse_logits: Tensor[float32] = prefill_logits(model, prompt_gpu, positions_gpu, 256)
+    var sparse_path_used_sparse: bool = model.prefill_sparse_used()
     var dense_next: int = dense_logits.argmax()
     var sparse_next: int = sparse_logits.argmax()
     var max_logit_difference: float64 = max_abs_difference(dense_logits, sparse_logits, config.vocab_size)
@@ -97,6 +99,8 @@ def main() -> int:
     print("generated tokens =", new_tokens)
     print("dense prefill next token =", dense_next)
     print("sparse prefill next token =", sparse_next)
+    print("dense path used sparse =", dense_path_used_sparse)
+    print("sparse path used sparse =", sparse_path_used_sparse)
     print("prefill argmax match =", dense_next == sparse_next)
     print("max prefill logit abs diff =", max_logit_difference)
     print("scaled prefill logit diff =", max_logit_difference * 1000000.0)
