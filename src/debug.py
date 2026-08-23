@@ -153,6 +153,7 @@ class Validator:
                             "ocean_tensor_argmax",
                             "ocean_tensor_causal_softmax",
                             "ocean_tensor_layer_norm_affine",
+                            "ocean_tensor_sparse_attention",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",
                             "ocean_tensor_linear_inference",

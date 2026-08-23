@@ -3387,6 +3387,44 @@ router: coarse summaries, несколько уровней branching и неб�
 кандидатов на каждом уровне. Это уменьшает routing overhead и не переносит
 скрытую квадратичность в selector.
 
+## 80.1.1 Реализованный CPU reference v0.1
+
+Первый API-контракт уже добавлен:
+
+```c
+ocean_tensor_sparse_attention(
+    query, key, value,
+    top_k, scale, query_start, causal
+)
+```
+
+В Ocean он доступен как:
+
+```ocean
+query.sparse_attention(key, value, top_k, scale, query_start, causal)
+```
+
+Поддерживается формат:
+
+```text
+query [B, H, Q, D]
+key   [B, H, K, D]
+value [B, H, K, D]
+output [B, H, Q, D]
+```
+
+Reference выполняет точный deterministic top-k по score каждого query, stable
+tie-break по меньшему token index, optional causal restriction и exact softmax
+по выбранным позициям. Добавлен также `std/ml/nn.oc::SparseAttention` как
+тонкая модельная оболочка.
+
+Это намеренно correctness oracle, а не scalable backend: v0.1 сканирует все
+key positions при выборе top-k и поэтому имеет квадратичный selector. Его задача
+— зафиксировать форму Tensor, causal semantics, top-k ordering и numerical
+reference перед реализацией block summaries и hierarchical routing. Нельзя
+называть этот CPU path линейным или использовать его как long-context
+production implementation.
+
 ## 80.2 Где будет ускорение
 
 SparseAttention не ускорит автоматически все операции модели:
@@ -3456,8 +3494,8 @@ sequence parallelism, memory-mapped/offloaded storage, distributed KV/summaries
 P0  измерить fused LayerNorm benchmark на CUDA
 P1  добавить CUDA event profiler без overhead в обычном режиме
 P2  переиспользовать inference workspace и промежуточные buffers
-P3  реализовать CPU reference SparseAttention
-P4  добавить SparseKVCache/block summaries
+P3  CPU reference SparseAttention                  -> реализован, correctness-only
+P4  добавить SparseKVCache/block summaries         -> следующий Sparse milestone
 P5  перенести sparse routing и gather на CUDA
 P6  сравнить dense KV-cache и SparseAttention на long-context benchmark
 P7  только после validation рассматривать 1M+ и distributed execution

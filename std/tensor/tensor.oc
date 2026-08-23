@@ -261,6 +261,11 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+    def sparse_attention(self, key: &Tensor, value: &Tensor, top_k: int, scale: float64, query_start: int, causal: bool) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention(self.handle, key.handle, value.handle, top_k, scale, query_start, causal)
+        var result: Tensor = Tensor(handle)
+        return result
+
     def masked_fill(self, mask: &Tensor, value: float64) -> Tensor:
         var neg_mask: Tensor = mask.mul_scalar(-1.0)
         var keep_mask: Tensor = neg_mask.add_scalar(1.0)

@@ -208,6 +208,20 @@ class MultiHeadAttention(Module):
         return self.out_proj.weight.has_grad()
 
 
+class SparseAttention(Module):
+    # CPU reference content-selective attention with a fixed top-k budget.
+
+    def __init__(self, top_k: int, head_dim: int, causal: bool) -> None:
+        self.training: bool = True
+        self.top_k: int = top_k
+        self.head_dim: int = head_dim
+        self.causal: bool = causal
+        self.scale: float64 = 1.0 / sqrt(head_dim)
+
+    def forward(self, query: &Tensor[float32], key: &Tensor[float32], value: &Tensor[float32], query_start: int) -> Tensor[float32]:
+        return query.sparse_attention(key, value, self.top_k, self.scale, query_start, self.causal)
+
+
 class LayerNorm(Module):
     def __init__(self, d_model: int, epsilon: float64) -> None:
         self.training: bool = True

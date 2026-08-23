@@ -52,6 +52,7 @@ class Tensor:
     def div_scalar(self, value: float64) -> Tensor[T]
     def gelu(self) -> Tensor[float32]
     def layer_norm_affine(self, gamma: &Tensor, beta: &Tensor, dim: int, epsilon: float64) -> Tensor[float32]
+    def sparse_attention(self, key: &Tensor, value: &Tensor, top_k: int, scale: float64, query_start: int, causal: bool) -> Tensor[float32]
     def get(self, row: int, col: int) -> float64
     def set(self, row: int, col: int, value: float64) -> None
     def reshape(self, rows: int, cols: int) -> Tensor[T]

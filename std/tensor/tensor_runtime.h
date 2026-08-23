@@ -341,6 +341,15 @@ ocean_tensor_handle_t ocean_tensor_layer_norm_affine(
     int dim,
     double epsilon
 );
+ocean_tensor_handle_t ocean_tensor_sparse_attention(
+    ocean_tensor_handle_t query,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t value,
+    int top_k,
+    double scale,
+    int query_start,
+    bool causal
+);
 ocean_tensor_handle_t ocean_tensor_softmax_backward(
     ocean_tensor_handle_t upstream,
     ocean_tensor_handle_t output,
