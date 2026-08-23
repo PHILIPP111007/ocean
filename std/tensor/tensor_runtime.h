@@ -365,6 +365,12 @@ ocean_tensor_handle_t ocean_tensor_sparse_attention_build_summaries(
     ocean_tensor_handle_t key,
     int block_size
 );
+void ocean_tensor_sparse_attention_update_summary(
+    ocean_tensor_handle_t summaries,
+    ocean_tensor_handle_t key,
+    int position,
+    int block_size
+);
 ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked_cached(
     ocean_tensor_handle_t query,
     ocean_tensor_handle_t key,

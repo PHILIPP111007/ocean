@@ -3455,8 +3455,9 @@ output = ocean_tensor_sparse_attention_blocked_cached(
 `Tensor.sparse_attention_build_summaries()` и
 `Tensor.sparse_attention_blocked_cached()`. `std/ml/nn.oc::SparseAttention`
 теперь имеет `prepare(key)`: summaries строятся один раз и затем переиспользуются
-в `forward()`. После добавления новых key/value в cache `prepare()` нужно вызвать
-снова; автоматического append/update cache пока нет.
+в `forward()`. Метод `update(key, position)` обновляет только затронутый блок;
+при переходе на новый блок summaries перестраиваются с учётом нового размера.
+`forward()` вызывает `update()` автоматически после записи нового key в cache.
 
 Это всё ещё CPU-only correctness/performance prototype. Выбор блока пока
 сканирует все block summaries (`O(number_of_blocks)`), summaries используют
@@ -3534,8 +3535,8 @@ P0  измерить fused LayerNorm benchmark на CUDA
 P1  добавить CUDA event profiler без overhead в обычном режиме
 P2  переиспользовать inference workspace и промежуточные buffers
 P3  CPU reference SparseAttention                  -> реализован, correctness-only
-P4  SparseKVCache/block summaries                   -> block summaries + cached API реализованы; следующий шаг — append/update cache
-P5  перенести sparse routing и gather на CUDA
+P4  SparseKVCache/block summaries                   -> summaries + cached API + block update реализованы
+P5  интегрировать SparseAttention в GPT2 KV-cache и перенести routing/gather на CUDA
 P6  сравнить dense KV-cache и SparseAttention на long-context benchmark
 P7  только после validation рассматривать 1M+ и distributed execution
 ```

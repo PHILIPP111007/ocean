@@ -55,6 +55,7 @@ class Tensor:
     def sparse_attention(self, key: &Tensor, value: &Tensor, top_k: int, scale: float64, query_start: int, causal: bool) -> Tensor[float32]
     def sparse_attention_blocked(self, key: &Tensor, value: &Tensor, top_k: int, top_blocks: int, block_size: int, scale: float64, query_start: int, causal: bool) -> Tensor[float32]
     def sparse_attention_build_summaries(self, block_size: int) -> Tensor[float32]
+    def sparse_attention_update_summary(self, key: &Tensor, position: int, block_size: int) -> None
     def sparse_attention_blocked_cached(self, key: &Tensor, value: &Tensor, summaries: &Tensor, top_k: int, top_blocks: int, block_size: int, scale: float64, query_start: int, causal: bool) -> Tensor[float32]
     def get(self, row: int, col: int) -> float64
     def set(self, row: int, col: int, value: float64) -> None

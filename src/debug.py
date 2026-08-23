@@ -156,6 +156,7 @@ class Validator:
                             "ocean_tensor_sparse_attention",
                             "ocean_tensor_sparse_attention_blocked",
                             "ocean_tensor_sparse_attention_build_summaries",
+                            "ocean_tensor_sparse_attention_update_summary",
                             "ocean_tensor_sparse_attention_blocked_cached",
                             "ocean_tensor_to",
                             "ocean_tensor_matmul",
