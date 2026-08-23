@@ -32,6 +32,8 @@ The initial API contract is:
 ```text
 class Tensor:
     @staticmethod
+    def empty(*shape: int, device: str) -> Tensor[T]
+    @staticmethod
     def zeros(*shape: int, device: str) -> Tensor[T]
     def from_list(source: list, device: str) -> Tensor[T]
     @staticmethod
@@ -70,6 +72,7 @@ class Tensor:
     def ternary_scale(self) -> float64
     def ternary_pack(self, scale: float64, transpose: bool) -> Tensor[int32]
     def packed_qkv_inference(self, q_weight: &Tensor, q_scale: float64, q_bias: &Tensor, k_weight: &Tensor, k_scale: float64, k_bias: &Tensor, v_weight: &Tensor, v_scale: float64, v_bias: &Tensor, out_features: int) -> Tensor[float32]
+    def packed_qkv_inference_into(self, q_weight: &Tensor, q_scale: float64, q_bias: &Tensor, k_weight: &Tensor, k_scale: float64, k_bias: &Tensor, v_weight: &Tensor, v_scale: float64, v_bias: &Tensor, q_output: &Tensor, k_output: &Tensor, v_output: &Tensor, out_features: int) -> None
     def shape(self, axis: int) -> int
     def ndim() -> int
     def size() -> size_t
@@ -275,11 +278,13 @@ separate scale and decode weights on the GPU. `TernaryLinear` and the tied GPT-2
 LM head use this path only when gradients are disabled; full-precision master
 weights remain untouched for training.
 
-GPT-2 inference additionally uses `packed_qkv_inference()`. It evaluates the
-three packed Q/K/V projections in one 128-thread OpenCL launch while loading
-each input tile once, and returns `[... , 3 * d_model]` laid out as Q, K, V.
-The model then performs device-local last-dimension slices, so this fused path
-does not introduce a GPU-to-CPU transfer between projection and attention.
+GPT-2 inference additionally uses `packed_qkv_inference_into()`. It evaluates
+the three packed Q/K/V projections in one 128-thread OpenCL launch while
+loading each input tile once, and writes directly into three preallocated
+`[... , d_model]` outputs. This avoids both the intermediate `[... , 3*d_model]`
+buffer and three post-projection slice launches. The combined-returning
+`packed_qkv_inference()` remains available for callers that prefer a single
+Q/K/V tensor.
 
 The OpenCL runtime caches its context, queue, program, and kernels for the process and releases
 them through an exit handler. Individual GPU buffers are released with their owning `Tensor`

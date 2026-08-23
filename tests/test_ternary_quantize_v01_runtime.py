@@ -91,6 +91,34 @@ int main(void) {
         }
     }
 
+    size_t output_shape[2] = {1, 4};
+    ocean_tensor_handle_t q_output = ocean_tensor_zeros_nd(
+        output_shape, 2, "float32", "cpu"
+    );
+    ocean_tensor_handle_t k_output = ocean_tensor_zeros_nd(
+        output_shape, 2, "float32", "cpu"
+    );
+    ocean_tensor_handle_t v_output = ocean_tensor_zeros_nd(
+        output_shape, 2, "float32", "cpu"
+    );
+    ocean_tensor_packed_qkv_inference_into(
+        vector, packed, packed_scale, bias,
+        packed, packed_scale, bias,
+        packed, packed_scale, bias,
+        q_output, k_output, v_output, 4
+    );
+    for (size_t index = 0; index < 4; ++index) {
+        float expected = packed_expected[index] + (float)index;
+        if (fabsf(ocean_tensor_get_flat_f32(q_output, index) - expected) > 1e-6f ||
+            fabsf(ocean_tensor_get_flat_f32(k_output, index) - expected) > 1e-6f ||
+            fabsf(ocean_tensor_get_flat_f32(v_output, index) - expected) > 1e-6f) {
+            return 1;
+        }
+    }
+
+    ocean_tensor_release(v_output);
+    ocean_tensor_release(k_output);
+    ocean_tensor_release(q_output);
     ocean_tensor_release(fused_qkv);
     ocean_tensor_release(bias);
     ocean_tensor_release(packed_result);

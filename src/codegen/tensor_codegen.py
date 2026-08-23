@@ -37,9 +37,11 @@ class TensorCodegenMixin:
             self, "device_tensor_argument_generator", None
         ) or self.generate_expression
 
-        if method == "zeros":
+        if method in {"zeros", "empty"}:
             if len(args) < 2:
-                raise RuntimeError("Tensor[T].zeros expects dimensions and device")
+                raise RuntimeError(
+                    f"Tensor[T].{method} expects dimensions and device"
+                )
             device_ast = args[-1]
             dimensions = args[:-1]
             shape_name = f"ocean_device_tensor_shape_{self.temp_var_counter}"
@@ -52,8 +54,12 @@ class TensorCodegenMixin:
                 f"size_t {shape_name}[{len(dimensions)}] = {{ {values} }};"
             )
             device = generate_argument(device_ast)
+            runtime_constructor = (
+                "ocean_tensor_zeros_nd" if method == "zeros"
+                else "ocean_tensor_empty_nd"
+            )
             return (
-                f"create_Tensor(ocean_tensor_zeros_nd({shape_name}, "
+                f"create_Tensor({runtime_constructor}({shape_name}, "
                 f"{len(dimensions)}, \"{dtype}\", {device}))"
             )
 

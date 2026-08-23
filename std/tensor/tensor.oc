@@ -55,6 +55,12 @@ class Tensor:
         return value
 
     @staticmethod
+    def empty(rows: int, cols: int, device: str) -> Tensor:
+        # Compiler intrinsic replaces this fallback and preserves arbitrary
+        # rank/dtype from the annotated Tensor[T] call.
+        return Tensor.zeros(rows, cols, device)
+
+    @staticmethod
     def zeros(rows: int, cols: int, device: str) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_zeros(rows, cols, device)
         var value: Tensor = Tensor(handle)
@@ -132,6 +138,10 @@ class Tensor:
         var handle: ocean_tensor_handle_t = ocean_tensor_packed_qkv_inference(self.handle, q_weight.handle, q_scale, q_bias.handle, k_weight.handle, k_scale, k_bias.handle, v_weight.handle, v_scale, v_bias.handle, out_features)
         var value: Tensor = Tensor(handle)
         return value
+
+    def packed_qkv_inference_into(self, q_weight: &Tensor, q_scale: float64, q_bias: &Tensor, k_weight: &Tensor, k_scale: float64, k_bias: &Tensor, v_weight: &Tensor, v_scale: float64, v_bias: &Tensor, q_output: &Tensor, k_output: &Tensor, v_output: &Tensor, out_features: int) -> None:
+        ocean_tensor_packed_qkv_inference_into(self.handle, q_weight.handle, q_scale, q_bias.handle, k_weight.handle, k_scale, k_bias.handle, v_weight.handle, v_scale, v_bias.handle, q_output.handle, k_output.handle, v_output.handle, out_features)
+        return None
 
     def add(self, other: &Tensor) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 0)

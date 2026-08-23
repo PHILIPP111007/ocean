@@ -16,6 +16,9 @@ ocean_tensor_handle_t ocean_tensor_zeros(int rows, int cols, const char *device)
 ocean_tensor_handle_t ocean_tensor_zeros_nd(
     const size_t *shape, size_t ndim, const char *dtype, const char *device
 );
+ocean_tensor_handle_t ocean_tensor_empty_nd(
+    const size_t *shape, size_t ndim, const char *dtype, const char *device
+);
 ocean_tensor_handle_t ocean_tensor_from_cpu_strided(
     const void *data,
     const size_t *shape,
@@ -122,6 +125,22 @@ ocean_tensor_handle_t ocean_tensor_packed_qkv_inference(
     ocean_tensor_handle_t v_packed_weight,
     double v_scale,
     ocean_tensor_handle_t v_bias,
+    int out_features
+);
+void ocean_tensor_packed_qkv_inference_into(
+    ocean_tensor_handle_t input,
+    ocean_tensor_handle_t q_packed_weight,
+    double q_scale,
+    ocean_tensor_handle_t q_bias,
+    ocean_tensor_handle_t k_packed_weight,
+    double k_scale,
+    ocean_tensor_handle_t k_bias,
+    ocean_tensor_handle_t v_packed_weight,
+    double v_scale,
+    ocean_tensor_handle_t v_bias,
+    ocean_tensor_handle_t q_output,
+    ocean_tensor_handle_t k_output,
+    ocean_tensor_handle_t v_output,
     int out_features
 );
 ocean_tensor_handle_t ocean_tensor_scalar(

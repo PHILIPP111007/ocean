@@ -110,6 +110,7 @@ class Validator:
                         {
                             "ocean_tensor_zeros",
                             "ocean_tensor_zeros_nd",
+                            "ocean_tensor_empty_nd",
                             "ocean_tensor_from_cpu_strided",
                             "ocean_tensor_load_npy",
                             "ocean_tensor_load_npy_typed",
@@ -157,6 +158,7 @@ class Validator:
                             "ocean_tensor_packed_matmul_inference",
                             "ocean_tensor_packed_linear_inference",
                             "ocean_tensor_packed_qkv_inference",
+                            "ocean_tensor_packed_qkv_inference_into",
                             "ocean_tensor_binary",
                             "ocean_tensor_scalar",
                             "ocean_tensor_reshape",
