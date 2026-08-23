@@ -644,10 +644,14 @@ ocean_tensor_handle_t ocean_tensor_ternary_quantize(
         return result;
     }
     if (source->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        ocean_tensor_handle_t result = ocean_tensor_cuda_ternary_quantize(source);
         if (contiguous) ocean_tensor_release(contiguous);
-        ocean_tensor_fail(
-            "CUDA ternary quantization kernel is not implemented yet"
-        );
+        return result;
+#else
+        if (contiguous) ocean_tensor_release(contiguous);
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
     }
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
@@ -737,9 +741,15 @@ ocean_tensor_handle_t ocean_tensor_ternary_pack(
         }
     } else {
         if (contiguous->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+            ocean_tensor_cuda_ternary_pack(contiguous, result, scale, transpose);
+            if (contiguous != tensor) ocean_tensor_release(contiguous);
+            return result;
+#else
             ocean_tensor_release(result);
             if (contiguous != tensor) ocean_tensor_release(contiguous);
-            ocean_tensor_fail("CUDA ternary packing kernel is not implemented yet");
+            ocean_tensor_fail("CUDA backend was not compiled");
+#endif
         }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
         ocean_tensor_opencl_ternary_pack(
@@ -767,7 +777,15 @@ ocean_tensor_handle_t ocean_tensor_gelu(ocean_tensor_handle_t tensor) {
         return ocean_tensor_gelu_cpu(tensor);
     }
     if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
-        ocean_tensor_fail("CUDA GELU kernel is not implemented yet");
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        ocean_tensor_handle_t source = ocean_tensor_is_contiguous(tensor)
+            ? tensor : ocean_tensor_contiguous(tensor);
+        ocean_tensor_handle_t result = ocean_tensor_cuda_gelu(source);
+        if (source != tensor) ocean_tensor_release(source);
+        return result;
+#else
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
     }
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
@@ -818,7 +836,18 @@ ocean_tensor_handle_t ocean_tensor_gelu_backward(
         return ocean_tensor_gelu_backward_cpu(upstream, input);
     }
     if (input->device == OCEAN_TENSOR_BACKEND_CUDA) {
-        ocean_tensor_fail("CUDA GELU backward kernel is not implemented yet");
+        /* Backward is not part of inference. Keep the correctness-first CPU
+           path until the CUDA autograd kernels are added. */
+        ocean_tensor_handle_t cpu_upstream = ocean_tensor_to(upstream, "cpu");
+        ocean_tensor_handle_t cpu_input = ocean_tensor_to(input, "cpu");
+        ocean_tensor_handle_t cpu_result = ocean_tensor_gelu_backward_cpu(
+            cpu_upstream, cpu_input
+        );
+        ocean_tensor_release(cpu_upstream);
+        ocean_tensor_release(cpu_input);
+        ocean_tensor_handle_t result = ocean_tensor_to(cpu_result, "cuda");
+        ocean_tensor_release(cpu_result);
+        return result;
     }
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
@@ -892,9 +921,50 @@ ocean_tensor_handle_t ocean_tensor_embedding_forward(
         if (cpu_indices != contiguous_indices) ocean_tensor_release(cpu_indices);
     } else {
         if (weight->device == OCEAN_TENSOR_BACKEND_CUDA) {
+            if (count > (size_t)INT_MAX || vocab > (size_t)INT_MAX ||
+                dim > (size_t)INT_MAX || count * dim > (size_t)INT_MAX) {
+                ocean_tensor_release(contiguous_weight);
+                ocean_tensor_release(contiguous_indices);
+                ocean_tensor_fail("CUDA Embedding dimensions exceed int32 indexing");
+            }
+            ocean_tensor_handle_t cpu_indices = ocean_tensor_to(
+                contiguous_indices, "cpu"
+            );
+            const int64_t *index_values = (const int64_t *)cpu_indices->cpu_data;
+            for (size_t index = 0; index < count; ++index) {
+                if (index_values[index] < 0 || (uint64_t)index_values[index] >= vocab) {
+                    ocean_tensor_release(cpu_indices);
+                    ocean_tensor_release(contiguous_weight);
+                    ocean_tensor_release(contiguous_indices);
+                    ocean_tensor_fail("Embedding token id is out of range");
+                }
+            }
+            ocean_tensor_release(cpu_indices);
+            size_t output_shape[indices->ndim + 1];
+            for (size_t axis = 0; axis < indices->ndim; ++axis) {
+                output_shape[axis] = indices->shape[axis];
+            }
+            output_shape[indices->ndim] = dim;
+            result = ocean_tensor_alloc_uninitialized(
+                output_shape, indices->ndim + 1,
+                OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_BACKEND_CUDA
+            );
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+            ocean_cuda_embedding_forward(
+                contiguous_weight->cuda_data,
+                contiguous_indices->cuda_data,
+                result->cuda_data,
+                (int)count, (int)vocab, (int)dim
+            );
+#else
+            ocean_tensor_release(result);
             ocean_tensor_release(contiguous_weight);
             ocean_tensor_release(contiguous_indices);
-            ocean_tensor_fail("CUDA Embedding kernel is not implemented yet");
+            ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+            ocean_tensor_release(contiguous_weight);
+            ocean_tensor_release(contiguous_indices);
+            return result;
         }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
         ocean_tensor_handle_t gpu_indices = contiguous_indices;
@@ -2182,7 +2252,21 @@ void ocean_tensor_cache_write(
         return;
     }
     if (cache->device == OCEAN_TENSOR_BACKEND_CUDA) {
-        ocean_tensor_fail("CUDA cache_write kernel is not implemented yet");
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (batches > (size_t)INT_MAX || heads > (size_t)INT_MAX ||
+            sequence > (size_t)INT_MAX || value_sequence > (size_t)INT_MAX ||
+            width > (size_t)INT_MAX || value->size > (size_t)INT_MAX) {
+            ocean_tensor_fail("Tensor.cache_write dimensions are too large for CUDA");
+        }
+        ocean_cuda_cache_write(
+            cache->cuda_data, value->cuda_data,
+            (int)batches, (int)heads, (int)sequence, (int)value_sequence,
+            (int)width, position
+        );
+        return;
+#else
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
     }
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (heads > (size_t)INT32_MAX || sequence > (size_t)INT32_MAX ||
@@ -2199,6 +2283,16 @@ void ocean_tensor_cache_write(
 int ocean_tensor_argmax(ocean_tensor_handle_t tensor) {
     if (!tensor) ocean_tensor_fail("Tensor.argmax received a null Tensor");
     if (tensor->size == 0) ocean_tensor_fail("Tensor.argmax on an empty Tensor");
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA &&
+        tensor->dtype == OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_handle_t contiguous = ocean_tensor_is_contiguous(tensor)
+            ? tensor : ocean_tensor_contiguous(tensor);
+        int result = ocean_cuda_argmax_f32(contiguous->cuda_data, contiguous->size);
+        if (contiguous != tensor) ocean_tensor_release(contiguous);
+        return result;
+    }
+#endif
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (tensor->device == OCEAN_TENSOR_GPU &&
         tensor->dtype == OCEAN_TENSOR_FLOAT32) {
@@ -3406,6 +3500,16 @@ ocean_tensor_handle_t ocean_tensor_softmax(
     size_t axis = ocean_tensor_normalize_dim_v02(tensor, dim);
     size_t axis_size = tensor->shape[axis];
 
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA &&
+        axis == tensor->ndim - 1) {
+        ocean_tensor_handle_t source = ocean_tensor_is_contiguous(tensor)
+            ? tensor : ocean_tensor_contiguous(tensor);
+        ocean_tensor_handle_t result = ocean_tensor_cuda_softmax(source);
+        if (source != tensor) ocean_tensor_release(source);
+        return result;
+    }
+#endif
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (tensor->device == OCEAN_TENSOR_GPU &&
         axis == tensor->ndim - 1) {
@@ -3510,6 +3614,13 @@ ocean_tensor_handle_t ocean_tensor_causal_softmax(
         ? (contiguous = ocean_tensor_contiguous(tensor))
         : tensor;
 
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (source->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_handle_t result = ocean_tensor_cuda_causal_softmax(source);
+        if (contiguous) ocean_tensor_release(contiguous);
+        return result;
+    }
+#endif
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (source->device == OCEAN_TENSOR_GPU) {
         ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
@@ -3580,6 +3691,18 @@ ocean_tensor_handle_t ocean_tensor_layer_norm(
     size_t axis = ocean_tensor_normalize_dim_v02(tensor, dim);
     size_t axis_size = tensor->shape[axis];
 
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA &&
+        axis == tensor->ndim - 1) {
+        ocean_tensor_handle_t source = ocean_tensor_is_contiguous(tensor)
+            ? tensor : ocean_tensor_contiguous(tensor);
+        ocean_tensor_handle_t result = ocean_tensor_cuda_layer_norm(
+            source, epsilon
+        );
+        if (source != tensor) ocean_tensor_release(source);
+        return result;
+    }
+#endif
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     if (tensor->device == OCEAN_TENSOR_GPU &&
         axis == tensor->ndim - 1) {
@@ -4120,8 +4243,25 @@ static ocean_tensor_handle_t ocean_tensor_packed_linear_inference_impl(
     free(output_shape);
 
     if (input->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        ocean_tensor_handle_t input_contiguous = ocean_tensor_is_contiguous(input)
+            ? input : ocean_tensor_contiguous(input);
+        ocean_tensor_handle_t packed_contiguous = ocean_tensor_is_contiguous(packed_weight)
+            ? packed_weight : ocean_tensor_contiguous(packed_weight);
+        ocean_tensor_handle_t bias_contiguous = bias && !ocean_tensor_is_contiguous(bias)
+            ? ocean_tensor_contiguous(bias) : bias;
+        ocean_tensor_cuda_packed_linear(
+            input_contiguous, packed_contiguous, bias_contiguous, result,
+            out_features, scale
+        );
+        if (input_contiguous != input) ocean_tensor_release(input_contiguous);
+        if (packed_contiguous != packed_weight) ocean_tensor_release(packed_contiguous);
+        if (bias_contiguous != bias) ocean_tensor_release(bias_contiguous);
+        return result;
+#else
         ocean_tensor_release(result);
-        ocean_tensor_fail("CUDA packed linear kernel is not implemented yet");
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
     }
 
     if (input->device == OCEAN_TENSOR_CPU) {
@@ -4287,8 +4427,42 @@ static ocean_tensor_handle_t ocean_tensor_packed_qkv_inference_impl(
     free(output_shape);
 
     if (input->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        ocean_tensor_handle_t input_contiguous = ocean_tensor_is_contiguous(input)
+            ? input : ocean_tensor_contiguous(input);
+        ocean_tensor_handle_t packed_contiguous[3];
+        ocean_tensor_handle_t bias_contiguous[3];
+        ocean_tensor_handle_t packed_weights[] = {
+            q_packed_weight, k_packed_weight, v_packed_weight,
+        };
+        ocean_tensor_handle_t biases[] = {q_bias, k_bias, v_bias};
+        for (int index = 0; index < 3; ++index) {
+            packed_contiguous[index] = ocean_tensor_is_contiguous(packed_weights[index])
+                ? packed_weights[index] : ocean_tensor_contiguous(packed_weights[index]);
+            bias_contiguous[index] = ocean_tensor_is_contiguous(biases[index])
+                ? biases[index] : ocean_tensor_contiguous(biases[index]);
+        }
+        ocean_tensor_cuda_packed_qkv(
+            input_contiguous,
+            packed_contiguous[0], bias_contiguous[0],
+            packed_contiguous[1], bias_contiguous[1],
+            packed_contiguous[2], bias_contiguous[2],
+            result, out_features, q_scale, k_scale, v_scale
+        );
+        if (input_contiguous != input) ocean_tensor_release(input_contiguous);
+        for (int index = 0; index < 3; ++index) {
+            if (packed_contiguous[index] != packed_weights[index]) {
+                ocean_tensor_release(packed_contiguous[index]);
+            }
+            if (bias_contiguous[index] != biases[index]) {
+                ocean_tensor_release(bias_contiguous[index]);
+            }
+        }
+        return result;
+#else
         ocean_tensor_release(result);
-        ocean_tensor_fail("CUDA packed QKV kernel is not implemented yet");
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
     }
 
     if (input->device == OCEAN_TENSOR_CPU) {
@@ -4470,7 +4644,42 @@ void ocean_tensor_packed_qkv_inference_into(
     }
 
     if (input->device == OCEAN_TENSOR_BACKEND_CUDA) {
-        ocean_tensor_fail("CUDA packed QKV kernel is not implemented yet");
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        ocean_tensor_handle_t input_contiguous = ocean_tensor_is_contiguous(input)
+            ? input : ocean_tensor_contiguous(input);
+        ocean_tensor_handle_t packed_weights[] = {
+            q_packed_weight, k_packed_weight, v_packed_weight,
+        };
+        ocean_tensor_handle_t biases[] = {q_bias, k_bias, v_bias};
+        ocean_tensor_handle_t packed_contiguous[3];
+        ocean_tensor_handle_t bias_contiguous[3];
+        for (int index = 0; index < 3; ++index) {
+            packed_contiguous[index] = ocean_tensor_is_contiguous(packed_weights[index])
+                ? packed_weights[index] : ocean_tensor_contiguous(packed_weights[index]);
+            bias_contiguous[index] = ocean_tensor_is_contiguous(biases[index])
+                ? biases[index] : ocean_tensor_contiguous(biases[index]);
+        }
+        ocean_tensor_cuda_packed_qkv_split(
+            input_contiguous,
+            packed_contiguous[0], bias_contiguous[0],
+            packed_contiguous[1], bias_contiguous[1],
+            packed_contiguous[2], bias_contiguous[2],
+            q_output, k_output, v_output,
+            out_features, q_scale, k_scale, v_scale
+        );
+        if (input_contiguous != input) ocean_tensor_release(input_contiguous);
+        for (int index = 0; index < 3; ++index) {
+            if (packed_contiguous[index] != packed_weights[index]) {
+                ocean_tensor_release(packed_contiguous[index]);
+            }
+            if (bias_contiguous[index] != biases[index]) {
+                ocean_tensor_release(bias_contiguous[index]);
+            }
+        }
+        return;
+#else
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
     }
 
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
@@ -4540,12 +4749,12 @@ ocean_tensor_handle_t ocean_tensor_packed_qkv_attention_decode(
             ocean_tensor_fail("fused attention received a null Tensor");
         }
     }
-    if (input->device != OCEAN_TENSOR_GPU ||
+    if (input->device == OCEAN_TENSOR_BACKEND_CPU ||
         input->dtype != OCEAN_TENSOR_FLOAT32 || input->ndim != 3 ||
         input->shape[0] != 1 || input->shape[1] != 1 ||
         n_heads <= 0 || head_dim <= 0 || head_dim > 128 ||
-        position < 0 || cache_k->device != OCEAN_TENSOR_GPU ||
-        cache_v->device != OCEAN_TENSOR_GPU ||
+        position < 0 || cache_k->device != input->device ||
+        cache_v->device != input->device ||
         cache_k->dtype != OCEAN_TENSOR_FLOAT32 ||
         cache_v->dtype != OCEAN_TENSOR_FLOAT32 || cache_k->ndim != 4 ||
         cache_v->ndim != 4 || cache_k->shape[0] != 1 ||
@@ -4571,11 +4780,11 @@ ocean_tensor_handle_t ocean_tensor_packed_qkv_attention_decode(
         !(q_scale > 0.0) || !(k_scale > 0.0) || !(v_scale > 0.0)) {
         ocean_tensor_fail("fused attention projection metadata mismatch");
     }
-    if (q_packed_weight->device != OCEAN_TENSOR_GPU ||
-        k_packed_weight->device != OCEAN_TENSOR_GPU ||
-        v_packed_weight->device != OCEAN_TENSOR_GPU ||
-        q_bias->device != OCEAN_TENSOR_GPU || k_bias->device != OCEAN_TENSOR_GPU ||
-        v_bias->device != OCEAN_TENSOR_GPU) {
+    if (q_packed_weight->device != input->device ||
+        k_packed_weight->device != input->device ||
+        v_packed_weight->device != input->device ||
+        q_bias->device != input->device || k_bias->device != input->device ||
+        v_bias->device != input->device) {
         ocean_tensor_fail("fused attention requires GPU projection tensors");
     }
     size_t packed_cols = (d_model + 15u) / 16u;
@@ -4599,8 +4808,21 @@ ocean_tensor_handle_t ocean_tensor_packed_qkv_attention_decode(
     }
     size_t output_shape[3] = {1, 1, d_model};
     ocean_tensor_handle_t output = ocean_tensor_alloc_uninitialized(
-        output_shape, 3, OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_GPU
+        output_shape, 3, OCEAN_TENSOR_FLOAT32, input->device
     );
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (input->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_cuda_packed_attention_decode(
+            input, q_packed_weight, q_bias,
+            k_packed_weight, k_bias,
+            v_packed_weight, v_bias,
+            cache_k, cache_v, output,
+            position, n_heads, head_dim,
+            q_scale, k_scale, v_scale
+        );
+        return output;
+    }
+#endif
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     ocean_tensor_opencl_packed_qkv_attention_decode(
         input, q_packed_weight, q_bias,

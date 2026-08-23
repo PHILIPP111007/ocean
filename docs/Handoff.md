@@ -3189,6 +3189,29 @@ zero/fill
 float32/int32 binary operations
 float32/int32 scalar operations
 тильную float32/int32 2D matmul
+
+Inference-critical CUDA path дополнительно включает:
+
+```text
+float32 Embedding forward
+GELU forward
+last-dimension softmax и causal softmax
+last-dimension LayerNorm forward
+ternary quantization
+packed 2-bit ternary packing
+packed ternary Linear
+packed QKV и split QKV
+fused packed QKV + KV-cache attention decode
+KV-cache write/slice
+float32 argmax
+```
+
+Это позволяет перенести основной autoregressive decode GPT-2 на CUDA: lookup
+embedding, packed projections, LayerNorm, GELU, residual elementwise operations,
+fused attention с KV-cache, packed LM head и argmax выполняются без обязательной
+передачи каждого generated token через CPU. Prefill и общие arbitrary-rank
+`permute`/batched matmul пока могут использовать correctness-first staging через
+CPU; это не следует считать полностью CUDA-native prefill.
 ```
 
 Включение выполняется только явно:
@@ -3205,6 +3228,15 @@ ocean build ./examples/your_model.oc \
 аппаратную проверку. При отсутствии CUDA-флага backend не активируется; при
 явном запросе CUDA без CUDA-сборки runtime завершается диагностикой.
 
-Операции, для которых ещё нет CUDA kernel path (например, часть ND/ML
-примитивов), не должны называться CUDA-native; они требуют следующего слоя
-адаптации или явного staging через CPU.
+Операции, для которых ещё нет CUDA kernel path, остаются явно ограниченными:
+
+```text
+Embedding backward
+CrossEntropyLoss forward/backward
+GPU SGD/AdamW
+autograd backward kernels для GELU/LayerNorm/softmax
+часть arbitrary-rank reductions, permute и batched matmul
+```
+
+Они требуют следующего слоя адаптации или correctness-first staging через CPU и
+не должны называться CUDA-native.

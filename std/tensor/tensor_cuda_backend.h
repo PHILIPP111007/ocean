@@ -61,6 +61,127 @@ void ocean_cuda_matmul_i32(
     int columns
 );
 
+void ocean_cuda_softmax_last_dim(
+    const void *input, void *output, int rows, int width
+);
+void ocean_cuda_causal_softmax(
+    const void *input, void *output, int rows, int width
+);
+void ocean_cuda_layer_norm_last_dim(
+    const void *input, void *output, int rows, int width, float epsilon
+);
+void ocean_cuda_gelu(const void *input, void *output, size_t size);
+void ocean_cuda_ternary_quantize(
+    const void *input, void *output, size_t size
+);
+void ocean_cuda_ternary_pack(
+    const void *input,
+    void *output,
+    int source_rows,
+    int source_cols,
+    int output_rows,
+    int packed_cols,
+    float scale,
+    int transpose
+);
+void ocean_cuda_packed_linear(
+    const void *input,
+    const void *packed,
+    const void *bias,
+    void *output,
+    int rows,
+    int cols_a,
+    int cols_b,
+    int packed_cols,
+    float scale
+);
+void ocean_cuda_packed_qkv(
+    const void *input,
+    const void *q_packed,
+    const void *q_bias,
+    const void *k_packed,
+    const void *k_bias,
+    const void *v_packed,
+    const void *v_bias,
+    void *output,
+    int rows,
+    int cols_a,
+    int cols_b,
+    int packed_cols,
+    float q_scale,
+    float k_scale,
+    float v_scale
+);
+void ocean_cuda_packed_qkv_split(
+    const void *input,
+    const void *q_packed,
+    const void *q_bias,
+    const void *k_packed,
+    const void *k_bias,
+    const void *v_packed,
+    const void *v_bias,
+    void *q_output,
+    void *k_output,
+    void *v_output,
+    int rows,
+    int cols_a,
+    int cols_b,
+    int packed_cols,
+    float q_scale,
+    float k_scale,
+    float v_scale
+);
+void ocean_cuda_packed_qkv_attention_decode(
+    const void *input,
+    const void *q_packed,
+    const void *q_bias,
+    const void *k_packed,
+    const void *k_bias,
+    const void *v_packed,
+    const void *v_bias,
+    void *cache_k,
+    void *cache_v,
+    void *output,
+    int cols_a,
+    int packed_cols,
+    int max_seq,
+    int position,
+    int n_heads,
+    int head_dim,
+    float q_scale,
+    float k_scale,
+    float v_scale
+);
+void ocean_cuda_cache_write(
+    void *cache,
+    const void *value,
+    int batches,
+    int heads,
+    int sequence,
+    int value_sequence,
+    int width,
+    int position
+);
+void ocean_cuda_cache_slice(
+    const void *cache,
+    void *output,
+    int batches,
+    int heads,
+    int source_sequence,
+    int output_sequence,
+    int width,
+    int start
+);
+void ocean_cuda_embedding_forward(
+    const void *weight,
+    const void *indices,
+    void *output,
+    int index_count,
+    int vocab,
+    int dim
+);
+int ocean_cuda_argmax_f32(const void *input, size_t size);
+
 #ifdef __cplusplus
 }
 #endif

@@ -246,6 +246,331 @@ static void ocean_tensor_cuda_fill(
     }
 }
 
+static void ocean_tensor_cuda_require_f32_contiguous(
+    const ocean_tensor_handle_t tensor,
+    const char *operation
+) {
+    if (!tensor || tensor->dtype != OCEAN_TENSOR_FLOAT32) {
+        ocean_tensor_fail(operation);
+    }
+    ocean_tensor_cuda_require_contiguous(tensor, operation);
+}
+
+static ocean_tensor_handle_t ocean_tensor_cuda_gelu(
+    const ocean_tensor_handle_t tensor
+) {
+    ocean_tensor_cuda_require_f32_contiguous(
+        tensor, "CUDA GELU requires a contiguous float32 Tensor"
+    );
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_BACKEND_CUDA
+    );
+    ocean_cuda_gelu(tensor->cuda_data, result->cuda_data, tensor->size);
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_tensor_cuda_softmax(
+    const ocean_tensor_handle_t tensor
+) {
+    ocean_tensor_cuda_require_f32_contiguous(
+        tensor, "CUDA softmax requires a contiguous float32 Tensor"
+    );
+    size_t width_size = tensor->shape[tensor->ndim - 1];
+    size_t rows_size = width_size == 0 ? 0 : tensor->size / width_size;
+    if (width_size > (size_t)INT_MAX || rows_size > (size_t)INT_MAX) {
+        ocean_tensor_fail("CUDA softmax dimensions exceed int32 indexing");
+    }
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_BACKEND_CUDA
+    );
+    ocean_cuda_softmax_last_dim(
+        tensor->cuda_data, result->cuda_data,
+        (int)rows_size, (int)width_size
+    );
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_tensor_cuda_causal_softmax(
+    const ocean_tensor_handle_t tensor
+) {
+    ocean_tensor_cuda_require_f32_contiguous(
+        tensor, "CUDA causal softmax requires a contiguous float32 Tensor"
+    );
+    size_t width_size = tensor->shape[tensor->ndim - 1];
+    size_t rows_size = width_size == 0 ? 0 : tensor->size / width_size;
+    if (width_size > (size_t)INT_MAX || rows_size > (size_t)INT_MAX) {
+        ocean_tensor_fail("CUDA causal softmax dimensions exceed int32 indexing");
+    }
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_BACKEND_CUDA
+    );
+    ocean_cuda_causal_softmax(
+        tensor->cuda_data, result->cuda_data,
+        (int)rows_size, (int)width_size
+    );
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_tensor_cuda_layer_norm(
+    const ocean_tensor_handle_t tensor,
+    double epsilon
+) {
+    ocean_tensor_cuda_require_f32_contiguous(
+        tensor, "CUDA LayerNorm requires a contiguous float32 Tensor"
+    );
+    size_t width_size = tensor->shape[tensor->ndim - 1];
+    size_t rows_size = width_size == 0 ? 0 : tensor->size / width_size;
+    if (width_size > (size_t)INT_MAX || rows_size > (size_t)INT_MAX) {
+        ocean_tensor_fail("CUDA LayerNorm dimensions exceed int32 indexing");
+    }
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_BACKEND_CUDA
+    );
+    ocean_cuda_layer_norm_last_dim(
+        tensor->cuda_data, result->cuda_data,
+        (int)rows_size, (int)width_size, (float)epsilon
+    );
+    return result;
+}
+
+static ocean_tensor_handle_t ocean_tensor_cuda_ternary_quantize(
+    const ocean_tensor_handle_t tensor
+) {
+    ocean_tensor_cuda_require_f32_contiguous(
+        tensor, "CUDA ternary quantization requires a contiguous float32 Tensor"
+    );
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(
+        tensor->shape, tensor->ndim, tensor->dtype, OCEAN_TENSOR_BACKEND_CUDA
+    );
+    ocean_cuda_ternary_quantize(
+        tensor->cuda_data, result->cuda_data, tensor->size
+    );
+    return result;
+}
+
+static void ocean_tensor_cuda_ternary_pack(
+    const ocean_tensor_handle_t input,
+    const ocean_tensor_handle_t output,
+    double scale,
+    bool transpose
+) {
+    ocean_tensor_cuda_require_f32_contiguous(
+        input, "CUDA ternary packing requires a contiguous float32 input"
+    );
+    if (!output || output->dtype != OCEAN_TENSOR_INT32 ||
+        output->device != OCEAN_TENSOR_BACKEND_CUDA ||
+        !ocean_tensor_is_contiguous(output)) {
+        ocean_tensor_fail("CUDA ternary packing requires contiguous int32 output");
+    }
+    if (input->ndim != 2 || output->ndim != 2 ||
+        input->shape[0] > (size_t)INT_MAX || input->shape[1] > (size_t)INT_MAX ||
+        output->shape[0] > (size_t)INT_MAX || output->shape[1] > (size_t)INT_MAX) {
+        ocean_tensor_fail("CUDA ternary packing dimensions exceed int32 indexing");
+    }
+    ocean_cuda_ternary_pack(
+        input->cuda_data, output->cuda_data,
+        (int)input->shape[0], (int)input->shape[1],
+        (int)output->shape[0], (int)output->shape[1],
+        (float)scale, transpose ? 1 : 0
+    );
+}
+
+static void ocean_tensor_cuda_packed_linear(
+    const ocean_tensor_handle_t input,
+    const ocean_tensor_handle_t packed,
+    const ocean_tensor_handle_t bias,
+    const ocean_tensor_handle_t output,
+    int out_features,
+    double scale
+) {
+    ocean_tensor_cuda_require_f32_contiguous(
+        input, "CUDA packed Linear requires contiguous float32 input"
+    );
+    if (!packed || packed->dtype != OCEAN_TENSOR_INT32 ||
+        !ocean_tensor_is_contiguous(packed) ||
+        (bias && (bias->dtype != OCEAN_TENSOR_FLOAT32 ||
+                  !ocean_tensor_is_contiguous(bias))) ||
+        !output || output->dtype != OCEAN_TENSOR_FLOAT32 ||
+        !ocean_tensor_is_contiguous(output)) {
+        ocean_tensor_fail("CUDA packed Linear tensor metadata mismatch");
+    }
+    size_t cols_a_size = input->shape[input->ndim - 1];
+    size_t rows_size = cols_a_size == 0 ? 0 : input->size / cols_a_size;
+    if (cols_a_size > (size_t)INT_MAX || rows_size > (size_t)INT_MAX ||
+        (size_t)out_features > (size_t)INT_MAX || packed->shape[1] > (size_t)INT_MAX) {
+        ocean_tensor_fail("CUDA packed Linear dimensions exceed int32 indexing");
+    }
+    ocean_cuda_packed_linear(
+        input->cuda_data, packed->cuda_data, bias ? bias->cuda_data : NULL,
+        output->cuda_data, (int)rows_size, (int)cols_a_size, out_features,
+        (int)packed->shape[1], (float)scale
+    );
+}
+
+static void ocean_tensor_cuda_packed_qkv(
+    const ocean_tensor_handle_t input,
+    const ocean_tensor_handle_t q_packed,
+    const ocean_tensor_handle_t q_bias,
+    const ocean_tensor_handle_t k_packed,
+    const ocean_tensor_handle_t k_bias,
+    const ocean_tensor_handle_t v_packed,
+    const ocean_tensor_handle_t v_bias,
+    const ocean_tensor_handle_t output,
+    int out_features,
+    double q_scale,
+    double k_scale,
+    double v_scale
+) {
+    ocean_tensor_cuda_require_f32_contiguous(
+        input, "CUDA packed QKV requires contiguous float32 input"
+    );
+    const ocean_tensor_handle_t packed[] = {q_packed, k_packed, v_packed};
+    const ocean_tensor_handle_t biases[] = {q_bias, k_bias, v_bias};
+    for (int index = 0; index < 3; ++index) {
+        if (!packed[index] || packed[index]->dtype != OCEAN_TENSOR_INT32 ||
+            !ocean_tensor_is_contiguous(packed[index]) ||
+            !biases[index] || biases[index]->dtype != OCEAN_TENSOR_FLOAT32 ||
+            !ocean_tensor_is_contiguous(biases[index])) {
+            ocean_tensor_fail("CUDA packed QKV tensor metadata mismatch");
+        }
+    }
+    if (!output || output->dtype != OCEAN_TENSOR_FLOAT32 ||
+        !ocean_tensor_is_contiguous(output)) {
+        ocean_tensor_fail("CUDA packed QKV output metadata mismatch");
+    }
+    size_t cols_a_size = input->shape[input->ndim - 1];
+    size_t rows_size = cols_a_size == 0 ? 0 : input->size / cols_a_size;
+    if (cols_a_size > (size_t)INT_MAX || rows_size > (size_t)INT_MAX ||
+        (size_t)out_features > (size_t)INT_MAX || q_packed->shape[1] > (size_t)INT_MAX) {
+        ocean_tensor_fail("CUDA packed QKV dimensions exceed int32 indexing");
+    }
+    ocean_cuda_packed_qkv(
+        input->cuda_data, q_packed->cuda_data, q_bias->cuda_data,
+        k_packed->cuda_data, k_bias->cuda_data,
+        v_packed->cuda_data, v_bias->cuda_data, output->cuda_data,
+        (int)rows_size, (int)cols_a_size, out_features, (int)q_packed->shape[1],
+        (float)q_scale, (float)k_scale, (float)v_scale
+    );
+}
+
+static void ocean_tensor_cuda_packed_qkv_split(
+    const ocean_tensor_handle_t input,
+    const ocean_tensor_handle_t q_packed,
+    const ocean_tensor_handle_t q_bias,
+    const ocean_tensor_handle_t k_packed,
+    const ocean_tensor_handle_t k_bias,
+    const ocean_tensor_handle_t v_packed,
+    const ocean_tensor_handle_t v_bias,
+    const ocean_tensor_handle_t q_output,
+    const ocean_tensor_handle_t k_output,
+    const ocean_tensor_handle_t v_output,
+    int out_features,
+    double q_scale,
+    double k_scale,
+    double v_scale
+) {
+    ocean_tensor_cuda_require_f32_contiguous(
+        input, "CUDA packed QKV requires contiguous float32 input"
+    );
+    const ocean_tensor_handle_t packed[] = {q_packed, k_packed, v_packed};
+    const ocean_tensor_handle_t biases[] = {q_bias, k_bias, v_bias};
+    const ocean_tensor_handle_t outputs[] = {q_output, k_output, v_output};
+    for (int index = 0; index < 3; ++index) {
+        if (!packed[index] || packed[index]->dtype != OCEAN_TENSOR_INT32 ||
+            !ocean_tensor_is_contiguous(packed[index]) ||
+            !biases[index] || biases[index]->dtype != OCEAN_TENSOR_FLOAT32 ||
+            !ocean_tensor_is_contiguous(biases[index]) ||
+            !outputs[index] || outputs[index]->dtype != OCEAN_TENSOR_FLOAT32 ||
+            !ocean_tensor_is_contiguous(outputs[index])) {
+            ocean_tensor_fail("CUDA split packed QKV tensor metadata mismatch");
+        }
+    }
+    size_t cols_a_size = input->shape[input->ndim - 1];
+    size_t rows_size = cols_a_size == 0 ? 0 : input->size / cols_a_size;
+    if (cols_a_size > (size_t)INT_MAX || rows_size > (size_t)INT_MAX ||
+        (size_t)out_features > (size_t)INT_MAX || q_packed->shape[1] > (size_t)INT_MAX) {
+        ocean_tensor_fail("CUDA split packed QKV dimensions exceed int32 indexing");
+    }
+    ocean_cuda_packed_qkv_split(
+        input->cuda_data, q_packed->cuda_data, q_bias->cuda_data,
+        k_packed->cuda_data, k_bias->cuda_data,
+        v_packed->cuda_data, v_bias->cuda_data,
+        q_output->cuda_data, k_output->cuda_data, v_output->cuda_data,
+        (int)rows_size, (int)cols_a_size, out_features, (int)q_packed->shape[1],
+        (float)q_scale, (float)k_scale, (float)v_scale
+    );
+}
+
+static void ocean_tensor_cuda_packed_attention_decode(
+    const ocean_tensor_handle_t input,
+    const ocean_tensor_handle_t q_packed,
+    const ocean_tensor_handle_t q_bias,
+    const ocean_tensor_handle_t k_packed,
+    const ocean_tensor_handle_t k_bias,
+    const ocean_tensor_handle_t v_packed,
+    const ocean_tensor_handle_t v_bias,
+    const ocean_tensor_handle_t cache_k,
+    const ocean_tensor_handle_t cache_v,
+    const ocean_tensor_handle_t output,
+    int position,
+    int n_heads,
+    int head_dim,
+    double q_scale,
+    double k_scale,
+    double v_scale
+) {
+    const ocean_tensor_handle_t tensors[] = {
+        input, q_packed, q_bias, k_packed, k_bias, v_packed, v_bias,
+        cache_k, cache_v, output,
+    };
+    for (size_t index = 0; index < sizeof(tensors) / sizeof(tensors[0]); ++index) {
+        if (!tensors[index]) ocean_tensor_fail("CUDA packed attention received null Tensor");
+    }
+    ocean_tensor_cuda_require_f32_contiguous(
+        input, "CUDA packed attention requires contiguous float32 input"
+    );
+    ocean_tensor_cuda_require_f32_contiguous(
+        q_bias, "CUDA packed attention requires float32 q bias"
+    );
+    ocean_tensor_cuda_require_f32_contiguous(
+        k_bias, "CUDA packed attention requires float32 k bias"
+    );
+    ocean_tensor_cuda_require_f32_contiguous(
+        v_bias, "CUDA packed attention requires float32 v bias"
+    );
+    ocean_tensor_cuda_require_f32_contiguous(
+        cache_k, "CUDA packed attention requires contiguous cache_k"
+    );
+    ocean_tensor_cuda_require_f32_contiguous(
+        cache_v, "CUDA packed attention requires contiguous cache_v"
+    );
+    ocean_tensor_cuda_require_f32_contiguous(
+        output, "CUDA packed attention requires contiguous output"
+    );
+    const ocean_tensor_handle_t packed[] = {q_packed, k_packed, v_packed};
+    for (int index = 0; index < 3; ++index) {
+        if (packed[index]->dtype != OCEAN_TENSOR_INT32 ||
+            !ocean_tensor_is_contiguous(packed[index])) {
+            ocean_tensor_fail("CUDA packed attention weight metadata mismatch");
+        }
+    }
+    size_t cols_a = input->shape[input->ndim - 1];
+    size_t max_seq = cache_k->shape[2];
+    if (cols_a > (size_t)INT_MAX || q_packed->shape[1] > (size_t)INT_MAX ||
+        max_seq > (size_t)INT_MAX || position < 0 || (size_t)position >= max_seq ||
+        n_heads <= 0 || head_dim <= 0 || head_dim > 128) {
+        ocean_tensor_fail("CUDA packed attention dimensions exceed supported range");
+    }
+    ocean_cuda_packed_qkv_attention_decode(
+        input->cuda_data, q_packed->cuda_data, q_bias->cuda_data,
+        k_packed->cuda_data, k_bias->cuda_data,
+        v_packed->cuda_data, v_bias->cuda_data,
+        cache_k->cuda_data, cache_v->cuda_data, output->cuda_data,
+        (int)cols_a, (int)q_packed->shape[1], (int)max_seq, position,
+        n_heads, head_dim, (float)q_scale, (float)k_scale, (float)v_scale
+    );
+}
+
 static const ocean_tensor_backend_ops ocean_tensor_cuda_backend = {
     .kind = OCEAN_TENSOR_BACKEND_CUDA,
     .name = "cuda",

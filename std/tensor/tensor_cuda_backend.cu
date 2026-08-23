@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <math.h>
 
 extern "C" void ocean_tensor_fail(const char *message);
 
@@ -291,4 +292,553 @@ void ocean_cuda_matmul_i32(
         rows, inner, columns
     );
     ocean_cuda_check_launch("int32 matmul kernel");
+}
+
+static __device__ float ocean_cuda_ternary_value(
+    const int32_t *packed,
+    int row,
+    int column,
+    int packed_cols
+) {
+    uint32_t word = (uint32_t)packed[row * packed_cols + column / 16];
+    uint32_t code = (word >> (2 * (column % 16))) & 3u;
+    return code == 1u ? 1.0f : (code == 2u ? -1.0f : 0.0f);
+}
+
+__global__ void ocean_cuda_softmax_kernel(
+    const float *input, float *output, int rows, int width
+) {
+    extern __shared__ float partial[];
+    int row = (int)blockIdx.x;
+    int lane = (int)threadIdx.x;
+    if (row >= rows) return;
+    int offset = row * width;
+    float maximum = -INFINITY;
+    for (int index = lane; index < width; index += blockDim.x) {
+        maximum = fmaxf(maximum, input[offset + index]);
+    }
+    partial[lane] = maximum;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (lane < stride) partial[lane] = fmaxf(partial[lane], partial[lane + stride]);
+        __syncthreads();
+    }
+    maximum = partial[0];
+    float sum = 0.0f;
+    for (int index = lane; index < width; index += blockDim.x) {
+        sum += expf(input[offset + index] - maximum);
+    }
+    partial[lane] = sum;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        __syncthreads();
+    }
+    sum = partial[0];
+    for (int index = lane; index < width; index += blockDim.x) {
+        output[offset + index] = expf(input[offset + index] - maximum) / sum;
+    }
+}
+
+__global__ void ocean_cuda_causal_softmax_kernel(
+    const float *input, float *output, int rows, int width
+) {
+    extern __shared__ float partial[];
+    int row = (int)blockIdx.x;
+    int lane = (int)threadIdx.x;
+    if (row >= rows) return;
+    int query = row % width;
+    int offset = row * width;
+    float maximum = -INFINITY;
+    for (int index = lane; index <= query; index += blockDim.x) {
+        maximum = fmaxf(maximum, input[offset + index]);
+    }
+    partial[lane] = maximum;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (lane < stride) partial[lane] = fmaxf(partial[lane], partial[lane + stride]);
+        __syncthreads();
+    }
+    maximum = partial[0];
+    float sum = 0.0f;
+    for (int index = lane; index <= query; index += blockDim.x) {
+        sum += expf(input[offset + index] - maximum);
+    }
+    partial[lane] = sum;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        __syncthreads();
+    }
+    sum = partial[0];
+    for (int index = lane; index < width; index += blockDim.x) {
+        output[offset + index] = index <= query
+            ? expf(input[offset + index] - maximum) / sum : 0.0f;
+    }
+}
+
+__global__ void ocean_cuda_layer_norm_kernel(
+    const float *input, float *output, int rows, int width, float epsilon
+) {
+    extern __shared__ float partial[];
+    int row = (int)blockIdx.x;
+    int lane = (int)threadIdx.x;
+    if (row >= rows) return;
+    int offset = row * width;
+    float sum = 0.0f;
+    for (int index = lane; index < width; index += blockDim.x) sum += input[offset + index];
+    partial[lane] = sum;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        __syncthreads();
+    }
+    float mean = partial[0] / (float)width;
+    float variance = 0.0f;
+    for (int index = lane; index < width; index += blockDim.x) {
+        float delta = input[offset + index] - mean;
+        variance += delta * delta;
+    }
+    partial[lane] = variance;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        __syncthreads();
+    }
+    float inverse_std = rsqrtf(partial[0] / (float)width + epsilon);
+    for (int index = lane; index < width; index += blockDim.x) {
+        output[offset + index] = (input[offset + index] - mean) * inverse_std;
+    }
+}
+
+__global__ void ocean_cuda_gelu_kernel(
+    const float *input, float *output, size_t size
+) {
+    size_t index = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= size) return;
+    const float coefficient = 0.7978845608028654f;
+    const float cubic = 0.044715f;
+    float value = input[index];
+    float argument = coefficient * (value + cubic * value * value * value);
+    output[index] = 0.5f * value * (1.0f + tanhf(argument));
+}
+
+__global__ void ocean_cuda_ternary_scale_kernel(
+    const float *input, float *output, size_t size
+) {
+    extern __shared__ float partial[];
+    int lane = (int)threadIdx.x;
+    float sum = 0.0f;
+    for (size_t index = (size_t)lane; index < size; index += blockDim.x) {
+        sum += fabsf(input[index]);
+    }
+    partial[lane] = sum;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        __syncthreads();
+    }
+    float scale = partial[0] / (float)size;
+    if (scale < 1.0e-8f) scale = 1.0e-8f;
+    float threshold = 0.5f * scale;
+    for (size_t index = (size_t)lane; index < size; index += blockDim.x) {
+        float value = input[index];
+        output[index] = value > threshold ? scale : (value < -threshold ? -scale : 0.0f);
+    }
+}
+
+__global__ void ocean_cuda_ternary_pack_kernel(
+    const float *input, int32_t *output,
+    int source_rows, int source_cols, int output_rows, int packed_cols,
+    float scale, int transpose
+) {
+    int index = (int)((size_t)blockIdx.x * blockDim.x + threadIdx.x);
+    int output_size = output_rows * packed_cols;
+    if (index >= output_size) return;
+    int row = index / packed_cols;
+    int group = index - row * packed_cols;
+    uint32_t packed = 0u;
+    float threshold = 0.5f * scale;
+    for (int bit = 0; bit < 16; ++bit) {
+        int source_row = transpose ? group * 16 + bit : row;
+        int source_col = transpose ? row : group * 16 + bit;
+        uint32_t code = 0u;
+        if (source_row < source_rows && source_col < source_cols) {
+            float value = input[source_row * source_cols + source_col];
+            code = value > threshold ? 1u : (value < -threshold ? 2u : 0u);
+        }
+        packed |= code << (2 * bit);
+    }
+    output[index] = (int32_t)packed;
+}
+
+__global__ void ocean_cuda_packed_linear_kernel(
+    const float *input, const int32_t *packed, const float *bias, float *output,
+    int rows, int cols_a, int cols_b, int packed_cols, float scale
+) {
+    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)rows * (size_t)cols_b;
+    if (linear >= total) return;
+    int row = (int)(linear / (size_t)cols_b);
+    int column = (int)(linear % (size_t)cols_b);
+    float sum = 0.0f;
+    for (int k = 0; k < cols_a; ++k) {
+        sum += input[row * cols_a + k] * ocean_cuda_ternary_value(
+            packed, k, column, packed_cols
+        );
+    }
+    output[linear] = sum * scale + (bias ? bias[column] : 0.0f);
+}
+
+__global__ void ocean_cuda_packed_qkv_kernel(
+    const float *input,
+    const int32_t *q_packed, const float *q_bias,
+    const int32_t *k_packed, const float *k_bias,
+    const int32_t *v_packed, const float *v_bias,
+    float *output, int rows, int cols_a, int cols_b, int packed_cols,
+    float q_scale, float k_scale, float v_scale
+) {
+    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)rows * (size_t)cols_b;
+    if (linear >= total) return;
+    int row = (int)(linear / (size_t)cols_b);
+    int column = (int)(linear % (size_t)cols_b);
+    float q_sum = 0.0f, k_sum = 0.0f, v_sum = 0.0f;
+    for (int k = 0; k < cols_a; ++k) {
+        float value = input[row * cols_a + k];
+        q_sum += value * ocean_cuda_ternary_value(q_packed, k, column, packed_cols);
+        k_sum += value * ocean_cuda_ternary_value(k_packed, k, column, packed_cols);
+        v_sum += value * ocean_cuda_ternary_value(v_packed, k, column, packed_cols);
+    }
+    size_t offset = (size_t)row * (size_t)(3 * cols_b) + (size_t)column;
+    output[offset] = q_sum * q_scale + q_bias[column];
+    output[offset + cols_b] = k_sum * k_scale + k_bias[column];
+    output[offset + 2 * cols_b] = v_sum * v_scale + v_bias[column];
+}
+
+__global__ void ocean_cuda_packed_qkv_split_kernel(
+    const float *input,
+    const int32_t *q_packed, const float *q_bias,
+    const int32_t *k_packed, const float *k_bias,
+    const int32_t *v_packed, const float *v_bias,
+    float *q_output, float *k_output, float *v_output,
+    int rows, int cols_a, int cols_b, int packed_cols,
+    float q_scale, float k_scale, float v_scale
+) {
+    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)rows * (size_t)cols_b;
+    if (linear >= total) return;
+    int row = (int)(linear / (size_t)cols_b);
+    int column = (int)(linear % (size_t)cols_b);
+    float q_sum = 0.0f, k_sum = 0.0f, v_sum = 0.0f;
+    for (int k = 0; k < cols_a; ++k) {
+        float value = input[row * cols_a + k];
+        q_sum += value * ocean_cuda_ternary_value(q_packed, k, column, packed_cols);
+        k_sum += value * ocean_cuda_ternary_value(k_packed, k, column, packed_cols);
+        v_sum += value * ocean_cuda_ternary_value(v_packed, k, column, packed_cols);
+    }
+    q_output[linear] = q_sum * q_scale + q_bias[column];
+    k_output[linear] = k_sum * k_scale + k_bias[column];
+    v_output[linear] = v_sum * v_scale + v_bias[column];
+}
+
+__global__ void ocean_cuda_cache_write_kernel(
+    float *cache, const float *value, int batches, int heads, int sequence,
+    int value_sequence, int width, int position
+) {
+    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)batches * (size_t)heads * (size_t)value_sequence * (size_t)width;
+    if (linear >= total) return;
+    size_t row_width = (size_t)value_sequence * (size_t)width;
+    size_t head_span = (size_t)heads * row_width;
+    size_t batch = linear / head_span;
+    size_t remainder = linear % head_span;
+    size_t head = remainder / row_width;
+    remainder %= row_width;
+    size_t value_position = remainder / (size_t)width;
+    size_t column = remainder % (size_t)width;
+    size_t destination = (batch * (size_t)heads + head) * (size_t)sequence * (size_t)width
+        + ((size_t)position + value_position) * (size_t)width + column;
+    cache[destination] = value[linear];
+}
+
+__global__ void ocean_cuda_cache_slice_kernel(
+    const float *cache, float *output, int batches, int heads,
+    int source_sequence, int output_sequence, int width, int start
+) {
+    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)batches * (size_t)heads * (size_t)output_sequence * (size_t)width;
+    if (linear >= total) return;
+    size_t row_width = (size_t)output_sequence * (size_t)width;
+    size_t head_span = (size_t)heads * row_width;
+    size_t batch = linear / head_span;
+    size_t remainder = linear % head_span;
+    size_t head = remainder / row_width;
+    remainder %= row_width;
+    size_t position = remainder / (size_t)width;
+    size_t column = remainder % (size_t)width;
+    size_t source = (batch * (size_t)heads + head) * (size_t)source_sequence * (size_t)width
+        + ((size_t)start + position) * (size_t)width + column;
+    output[linear] = cache[source];
+}
+
+__global__ void ocean_cuda_embedding_kernel(
+    const float *weight, const int64_t *indices, float *output,
+    int index_count, int vocab, int dim
+) {
+    size_t index = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)index_count * (size_t)dim;
+    if (index >= total) return;
+    int token_position = (int)(index / (size_t)dim);
+    int feature = (int)(index % (size_t)dim);
+    int64_t token = indices[token_position];
+    output[index] = token >= 0 && token < (int64_t)vocab
+        ? weight[token * (int64_t)dim + feature] : 0.0f;
+}
+
+__global__ void ocean_cuda_argmax_kernel(
+    const float *input, int *result, size_t size
+) {
+    extern __shared__ unsigned char storage[];
+    float *values = (float *)storage;
+    int *indices = (int *)(values + blockDim.x);
+    int lane = (int)threadIdx.x;
+    float best_value = -INFINITY;
+    int best_index = -1;
+    for (size_t index = (size_t)lane; index < size; index += blockDim.x) {
+        float value = input[index];
+        if (value > best_value || (value == best_value &&
+            (best_index < 0 || index < (size_t)best_index))) {
+            best_value = value;
+            best_index = index > (size_t)INT_MAX ? -1 : (int)index;
+        }
+    }
+    values[lane] = best_value;
+    indices[lane] = best_index;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (lane < stride) {
+            float other_value = values[lane + stride];
+            int other_index = indices[lane + stride];
+            if (other_value > values[lane] || (other_value == values[lane] &&
+                other_index >= 0 && (indices[lane] < 0 || other_index < indices[lane]))) {
+                values[lane] = other_value;
+                indices[lane] = other_index;
+            }
+        }
+        __syncthreads();
+    }
+    if (lane == 0) *result = indices[0];
+}
+
+__global__ void ocean_cuda_packed_attention_kernel(
+    const float *input,
+    const int32_t *q_packed, const float *q_bias,
+    const int32_t *k_packed, const float *k_bias,
+    const int32_t *v_packed, const float *v_bias,
+    float *cache_k, float *cache_v, float *output,
+    int cols_a, int packed_cols, int max_seq, int position,
+    int n_heads, int head_dim, float q_scale, float k_scale, float v_scale
+) {
+    extern __shared__ float shared[];
+    float *q_vector = shared;
+    float *k_vector = q_vector + head_dim;
+    float *v_vector = k_vector + head_dim;
+    float *scores = v_vector + head_dim;
+    int lane = (int)threadIdx.x;
+    int head = (int)blockIdx.x;
+    int channel = head * head_dim + lane;
+    if (head >= n_heads) return;
+    if (lane < head_dim) {
+        float q_sum = 0.0f, k_sum = 0.0f, v_sum = 0.0f;
+        for (int input_column = 0; input_column < cols_a; ++input_column) {
+            float value = input[input_column];
+            q_sum += value * ocean_cuda_ternary_value(q_packed, input_column, channel, packed_cols);
+            k_sum += value * ocean_cuda_ternary_value(k_packed, input_column, channel, packed_cols);
+            v_sum += value * ocean_cuda_ternary_value(v_packed, input_column, channel, packed_cols);
+        }
+        q_vector[lane] = q_sum * q_scale + q_bias[channel];
+        k_vector[lane] = k_sum * k_scale + k_bias[channel];
+        v_vector[lane] = v_sum * v_scale + v_bias[channel];
+    }
+    __syncthreads();
+    if (lane < head_dim) {
+        size_t offset = ((size_t)head * (size_t)max_seq + (size_t)position) * (size_t)head_dim + (size_t)lane;
+        cache_k[offset] = k_vector[lane];
+        cache_v[offset] = v_vector[lane];
+    }
+    __syncthreads();
+    for (int token = lane; token <= position; token += blockDim.x) {
+        float score = 0.0f;
+        for (int dimension = 0; dimension < head_dim; ++dimension) {
+            size_t offset = ((size_t)head * (size_t)max_seq + (size_t)token) * (size_t)head_dim + (size_t)dimension;
+            score += q_vector[dimension] * cache_k[offset];
+        }
+        scores[token] = score / sqrtf((float)head_dim);
+    }
+    __syncthreads();
+    if (lane == 0) {
+        float maximum = -INFINITY;
+        for (int token = 0; token <= position; ++token) maximum = fmaxf(maximum, scores[token]);
+        float denominator = 0.0f;
+        for (int token = 0; token <= position; ++token) {
+            scores[token] = expf(scores[token] - maximum);
+            denominator += scores[token];
+        }
+        for (int token = 0; token <= position; ++token) scores[token] /= denominator;
+    }
+    __syncthreads();
+    if (lane < head_dim) {
+        float context = 0.0f;
+        for (int token = 0; token <= position; ++token) {
+            size_t offset = ((size_t)head * (size_t)max_seq + (size_t)token) * (size_t)head_dim + (size_t)lane;
+            context += scores[token] * cache_v[offset];
+        }
+        output[channel] = context;
+    }
+}
+
+void ocean_cuda_softmax_last_dim(const void *input, void *output, int rows, int width) {
+    if (rows <= 0 || width <= 0) return;
+    ocean_cuda_softmax_kernel<<<rows, 256, 256 * sizeof(float)>>>(
+        (const float *)input, (float *)output, rows, width
+    );
+    ocean_cuda_check_launch("softmax kernel");
+}
+
+void ocean_cuda_causal_softmax(const void *input, void *output, int rows, int width) {
+    if (rows <= 0 || width <= 0) return;
+    ocean_cuda_causal_softmax_kernel<<<rows, 256, 256 * sizeof(float)>>>(
+        (const float *)input, (float *)output, rows, width
+    );
+    ocean_cuda_check_launch("causal softmax kernel");
+}
+
+void ocean_cuda_layer_norm_last_dim(const void *input, void *output, int rows, int width, float epsilon) {
+    if (rows <= 0 || width <= 0) return;
+    ocean_cuda_layer_norm_kernel<<<rows, 256, 256 * sizeof(float)>>>(
+        (const float *)input, (float *)output, rows, width, epsilon
+    );
+    ocean_cuda_check_launch("layer norm kernel");
+}
+
+void ocean_cuda_gelu(const void *input, void *output, size_t size) {
+    if (size == 0) return;
+    ocean_cuda_gelu_kernel<<<ocean_cuda_blocks(size), 256>>>(
+        (const float *)input, (float *)output, size
+    );
+    ocean_cuda_check_launch("GELU kernel");
+}
+
+void ocean_cuda_ternary_quantize(const void *input, void *output, size_t size) {
+    if (size == 0) return;
+    ocean_cuda_ternary_scale_kernel<<<1, 256, 256 * sizeof(float)>>>(
+        (const float *)input, (float *)output, size
+    );
+    ocean_cuda_check_launch("ternary quantization kernel");
+}
+
+void ocean_cuda_ternary_pack(const void *input, void *output, int source_rows, int source_cols, int output_rows, int packed_cols, float scale, int transpose) {
+    size_t size = (size_t)output_rows * (size_t)packed_cols;
+    if (size == 0) return;
+    ocean_cuda_ternary_pack_kernel<<<ocean_cuda_blocks(size), 256>>>(
+        (const float *)input, (int32_t *)output, source_rows, source_cols,
+        output_rows, packed_cols, scale, transpose
+    );
+    ocean_cuda_check_launch("ternary packing kernel");
+}
+
+void ocean_cuda_packed_linear(const void *input, const void *packed, const void *bias, void *output, int rows, int cols_a, int cols_b, int packed_cols, float scale) {
+    size_t size = (size_t)rows * (size_t)cols_b;
+    if (size == 0) return;
+    ocean_cuda_packed_linear_kernel<<<ocean_cuda_blocks(size), 256>>>(
+        (const float *)input, (const int32_t *)packed, (const float *)bias,
+        (float *)output, rows, cols_a, cols_b, packed_cols, scale
+    );
+    ocean_cuda_check_launch("packed linear kernel");
+}
+
+void ocean_cuda_packed_qkv(const void *input, const void *q_packed, const void *q_bias, const void *k_packed, const void *k_bias, const void *v_packed, const void *v_bias, void *output, int rows, int cols_a, int cols_b, int packed_cols, float q_scale, float k_scale, float v_scale) {
+    size_t size = (size_t)rows * (size_t)cols_b;
+    if (size == 0) return;
+    ocean_cuda_packed_qkv_kernel<<<ocean_cuda_blocks(size), 256>>>(
+        (const float *)input, (const int32_t *)q_packed, (const float *)q_bias,
+        (const int32_t *)k_packed, (const float *)k_bias,
+        (const int32_t *)v_packed, (const float *)v_bias, (float *)output,
+        rows, cols_a, cols_b, packed_cols, q_scale, k_scale, v_scale
+    );
+    ocean_cuda_check_launch("packed QKV kernel");
+}
+
+void ocean_cuda_packed_qkv_split(const void *input, const void *q_packed, const void *q_bias, const void *k_packed, const void *k_bias, const void *v_packed, const void *v_bias, void *q_output, void *k_output, void *v_output, int rows, int cols_a, int cols_b, int packed_cols, float q_scale, float k_scale, float v_scale) {
+    size_t size = (size_t)rows * (size_t)cols_b;
+    if (size == 0) return;
+    ocean_cuda_packed_qkv_split_kernel<<<ocean_cuda_blocks(size), 256>>>(
+        (const float *)input, (const int32_t *)q_packed, (const float *)q_bias,
+        (const int32_t *)k_packed, (const float *)k_bias,
+        (const int32_t *)v_packed, (const float *)v_bias,
+        (float *)q_output, (float *)k_output, (float *)v_output,
+        rows, cols_a, cols_b, packed_cols, q_scale, k_scale, v_scale
+    );
+    ocean_cuda_check_launch("split packed QKV kernel");
+}
+
+void ocean_cuda_packed_qkv_attention_decode(const void *input, const void *q_packed, const void *q_bias, const void *k_packed, const void *k_bias, const void *v_packed, const void *v_bias, void *cache_k, void *cache_v, void *output, int cols_a, int packed_cols, int max_seq, int position, int n_heads, int head_dim, float q_scale, float k_scale, float v_scale) {
+    if (head_dim <= 0 || head_dim > 128 || max_seq <= 0 || position < 0 || position >= max_seq) {
+        ocean_tensor_fail("invalid CUDA packed attention dimensions");
+    }
+    size_t shared_bytes = (size_t)(3 * head_dim + max_seq) * sizeof(float);
+    ocean_cuda_packed_attention_kernel<<<n_heads, 128, shared_bytes>>>(
+        (const float *)input, (const int32_t *)q_packed, (const float *)q_bias,
+        (const int32_t *)k_packed, (const float *)k_bias,
+        (const int32_t *)v_packed, (const float *)v_bias,
+        (float *)cache_k, (float *)cache_v, (float *)output,
+        cols_a, packed_cols, max_seq, position, n_heads, head_dim,
+        q_scale, k_scale, v_scale
+    );
+    ocean_cuda_check_launch("packed QKV attention decode kernel");
+}
+
+void ocean_cuda_cache_write(void *cache, const void *value, int batches, int heads, int sequence, int value_sequence, int width, int position) {
+    size_t size = (size_t)batches * (size_t)heads * (size_t)value_sequence * (size_t)width;
+    if (size == 0) return;
+    ocean_cuda_cache_write_kernel<<<ocean_cuda_blocks(size), 256>>>(
+        (float *)cache, (const float *)value, batches, heads, sequence,
+        value_sequence, width, position
+    );
+    ocean_cuda_check_launch("cache write kernel");
+}
+
+void ocean_cuda_cache_slice(const void *cache, void *output, int batches, int heads, int source_sequence, int output_sequence, int width, int start) {
+    size_t size = (size_t)batches * (size_t)heads * (size_t)output_sequence * (size_t)width;
+    if (size == 0) return;
+    ocean_cuda_cache_slice_kernel<<<ocean_cuda_blocks(size), 256>>>(
+        (const float *)cache, (float *)output, batches, heads, source_sequence,
+        output_sequence, width, start
+    );
+    ocean_cuda_check_launch("cache slice kernel");
+}
+
+void ocean_cuda_embedding_forward(const void *weight, const void *indices, void *output, int index_count, int vocab, int dim) {
+    size_t size = (size_t)index_count * (size_t)dim;
+    if (size == 0) return;
+    ocean_cuda_embedding_kernel<<<ocean_cuda_blocks(size), 256>>>(
+        (const float *)weight, (const int64_t *)indices, (float *)output,
+        index_count, vocab, dim
+    );
+    ocean_cuda_check_launch("embedding kernel");
+}
+
+int ocean_cuda_argmax_f32(const void *input, size_t size) {
+    if (size == 0 || size > (size_t)INT_MAX) ocean_tensor_fail("CUDA argmax size is invalid");
+    int *device_result = (int *)ocean_cuda_malloc(sizeof(int));
+    ocean_cuda_argmax_kernel<<<1, 256, 256 * (sizeof(float) + sizeof(int))>>>(
+        (const float *)input, device_result, size
+    );
+    ocean_cuda_check_launch("argmax kernel");
+    int result = -1;
+    ocean_cuda_memcpy_d2h(&result, device_result, sizeof(result));
+    ocean_cuda_free(device_result);
+    if (result < 0) ocean_tensor_fail("CUDA argmax failed");
+    return result;
 }
