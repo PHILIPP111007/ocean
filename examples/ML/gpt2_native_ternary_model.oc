@@ -83,6 +83,7 @@ class TernaryLinear(Module):
         self.inference_packed_weight: Tensor[int32] = Tensor.zeros(0, 0, "cpu")
         self.inference_scale: float64 = 0.0
         self.inference_ready: bool = False
+        self.inference_frozen: bool = False
 
     def ternary_weight(self) -> Tensor[float32]:
         var master: Tensor[float32] = self.weight.tensor()
@@ -97,7 +98,7 @@ class TernaryLinear(Module):
 
     def forward(self, input: &Tensor[float32]) -> Tensor[float32]:
         var gradients_enabled: bool = Tensor.grad_enabled()
-        if gradients_enabled == False and self.inference_ready:
+        if self.inference_ready and (gradients_enabled == False or self.inference_frozen):
             var packed_bias: Tensor[float32] = self.bias.tensor()
             return input.packed_linear_inference(self.inference_packed_weight, self.inference_scale, packed_bias, self.out_features)
         var weight: Tensor[float32] = self.weight_for_forward()
@@ -114,6 +115,13 @@ class TernaryLinear(Module):
             self.inference_scale = master.ternary_scale()
             self.inference_packed_weight = master.ternary_pack(self.inference_scale, False)
             self.inference_ready = True
+        return None
+
+    def freeze_for_inference(self) -> None:
+        if self.inference_frozen == False:
+            self.prepare_inference()
+            self.weight.release_data()
+            self.inference_frozen = True
         return None
 
     def parameters(self) -> list[Parameter]:
@@ -310,6 +318,13 @@ class GPT2Attention(Module):
         self.out_proj.prepare_inference()
         return None
 
+    def freeze_for_inference(self) -> None:
+        self.q_proj.freeze_for_inference()
+        self.k_proj.freeze_for_inference()
+        self.v_proj.freeze_for_inference()
+        self.out_proj.freeze_for_inference()
+        return None
+
     def parameters(self) -> list[Parameter]:
         var result: list[Parameter] = [self.q_proj.weight, self.q_proj.bias, self.k_proj.weight, self.k_proj.bias, self.v_proj.weight, self.v_proj.bias, self.out_proj.weight, self.out_proj.bias]
         return result
@@ -329,6 +344,11 @@ class GPT2MLP(Module):
     def prepare_inference(self) -> None:
         self.fc.prepare_inference()
         self.proj.prepare_inference()
+        return None
+
+    def freeze_for_inference(self) -> None:
+        self.fc.freeze_for_inference()
+        self.proj.freeze_for_inference()
         return None
 
     def parameters(self) -> list[Parameter]:
@@ -356,6 +376,11 @@ class GPT2Block(Module):
     def prepare_inference(self) -> None:
         self.attn.prepare_inference()
         self.mlp.prepare_inference()
+        return None
+
+    def freeze_for_inference(self) -> None:
+        self.attn.freeze_for_inference()
+        self.mlp.freeze_for_inference()
         return None
 
     def forward_prefill(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32]) -> Tensor[float32]:
@@ -500,6 +525,37 @@ class GPT2Ternary(Module):
             self.block11.prepare_inference()
         if self.n_layers > 11:
             self.block12.prepare_inference()
+        return None
+
+    def freeze_for_inference(self) -> None:
+        # Keep token/position embeddings in FP32: they are still used for
+        # embedding lookup. Only the linear master weights are released after
+        # their packed ternary inference copies are ready.
+        self.prepare_inference()
+        if self.n_layers > 0:
+            self.block1.freeze_for_inference()
+        if self.n_layers > 1:
+            self.block2.freeze_for_inference()
+        if self.n_layers > 2:
+            self.block3.freeze_for_inference()
+        if self.n_layers > 3:
+            self.block4.freeze_for_inference()
+        if self.n_layers > 4:
+            self.block5.freeze_for_inference()
+        if self.n_layers > 5:
+            self.block6.freeze_for_inference()
+        if self.n_layers > 6:
+            self.block7.freeze_for_inference()
+        if self.n_layers > 7:
+            self.block8.freeze_for_inference()
+        if self.n_layers > 8:
+            self.block9.freeze_for_inference()
+        if self.n_layers > 9:
+            self.block10.freeze_for_inference()
+        if self.n_layers > 10:
+            self.block11.freeze_for_inference()
+        if self.n_layers > 11:
+            self.block12.freeze_for_inference()
         return None
 
     def forward_prefill_hidden(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &GPT2KVCache) -> Tensor[float32]:
@@ -720,7 +776,7 @@ class GPT2Ternary(Module):
         var previous_grad_enabled: bool = Tensor.grad_enabled()
         Tensor.set_grad_enabled(False)
         self.eval()
-        self.prepare_inference()
+        self.freeze_for_inference()
 
         var prompt_positions: Tensor[int64] = positions.slice(1, 0, prompt_length, 1)
         var prompt_hidden: Tensor[float32] = self.forward_prefill_hidden(prompt, prompt_positions, cache)

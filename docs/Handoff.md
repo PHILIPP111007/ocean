@@ -1181,6 +1181,24 @@ tokens/second. Prompt prefill заполняет GPU-resident `K/V` cache каж
 decoder block, после чего новый token обрабатывается только одним шагом
 attention.
 
+Для inference-only deployment добавлен отдельный lifecycle:
+
+```text
+model.prepare_inference()
+    ↓
+packed ternary weights готовы
+    ↓
+model.freeze_for_inference()
+    ↓
+освободить FP32 master weights TernaryLinear
+```
+
+`Parameter.release_data()` освобождает Tensor handle, а сам `Parameter` остаётся
+частью model object. После freeze линейные слои используют только packed-веса;
+повторный вызов freeze идемпотентен. Token/position embeddings намеренно
+остаются FP32, поскольку они нужны для embedding lookup. Frozen model является
+read-only inference object и не должен передаваться в optimizer/training path.
+
 `Tensor.grad_enabled()` / `Tensor.set_grad_enabled(...)` — глобальный runtime
 переключатель построения autograd graph. Он не заменяет `Module.eval()`: для
 inference нужно вызывать оба API, если модель содержит train/eval-зависимые
@@ -1885,10 +1903,10 @@ lifetime tests
 
 # 50. Текущая regression база
 
-Последний фактически полученный результат:
+Последний фактически полученный результат после inference-memory lifecycle:
 
 ```text
-142 passed, 2 skipped, 1 failed
+143 passed, 2 skipped, 1 failed
 ```
 
 `skipped`:

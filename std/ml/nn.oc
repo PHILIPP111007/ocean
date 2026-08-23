@@ -24,6 +24,14 @@ class Parameter:
         self.data.requires_grad_(True)
         return self.data
 
+    def release_data(self) -> None:
+        # Used by inference-only modules after their compact runtime weights
+        # have been prepared. The Parameter object remains as a model field,
+        # but its training Tensor is explicitly released.
+        self.data.zero_grad()
+        self.data.release()
+        return None
+
     def grad(self) -> Tensor[float32]:
         return self.data.grad()
 
