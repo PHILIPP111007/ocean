@@ -1,0 +1,91 @@
+import "./gpt2_native_ternary_model.oc"
+
+
+def fill_prompt(prompt: &mut Tensor[int64], vocab_size: int) -> None:
+    var index: int = 0
+    var length: int = prompt.shape(1)
+    while index < length:
+        prompt[0, index] = (index * 17 + 3) % vocab_size
+        index = index + 1
+    return None
+
+
+def prefill_logits(model: &GPT2Ternary, prompt: &Tensor[int64], positions: &Tensor[int64], threshold: int) -> Tensor[float32]:
+    model.set_sparse_prefill_threshold(threshold)
+    var prompt_length: int = prompt.shape(1)
+    var cache: GPT2KVCache = model.new_kv_cache(prompt.device())
+    var prompt_positions: Tensor[int64] = positions.slice(1, 0, prompt_length, 1)
+    var hidden: Tensor[float32] = model.forward_prefill_hidden(prompt, prompt_positions, cache)
+    var last_hidden: Tensor[float32] = hidden.slice(1, prompt_length - 1, prompt_length, 1)
+    var logits: Tensor[float32] = model.packed_logits_from_hidden(last_hidden)
+    return logits.reshape([1, model.vocab_size])
+
+
+def max_abs_difference(left: &Tensor[float32], right: &Tensor[float32], length: int) -> float64:
+    var left_cpu: Tensor[float32] = left.to("cpu")
+    var right_cpu: Tensor[float32] = right.to("cpu")
+    var maximum: float64 = 0.0
+    var index: int = 0
+    while index < length:
+        var difference: float64 = left_cpu.get(0, index) - right_cpu.get(0, index)
+        if difference < 0.0:
+            difference = -difference
+        if difference > maximum:
+            maximum = difference
+        index = index + 1
+    return maximum
+
+
+def token_agreement(left: &Tensor[int64], right: &Tensor[int64], start: int, length: int) -> int:
+    var left_cpu: Tensor[int64] = left.to("cpu")
+    var right_cpu: Tensor[int64] = right.to("cpu")
+    var matches: int = 0
+    var index: int = 0
+    while index < length:
+        if left_cpu.get(0, start + index) == right_cpu.get(0, start + index):
+            matches = matches + 1
+        index = index + 1
+    return matches
+
+
+def main() -> int:
+    var config: GPT2Config = gpt2_small_config()
+    var prompt_length: int = 1000
+    var new_tokens: int = 32
+    var total_length: int = prompt_length + new_tokens
+
+    var prompt: Tensor[int64] = Tensor.zeros(1, prompt_length, "cpu")
+    var positions: Tensor[int64] = Tensor.zeros(1, total_length, "cpu")
+    fill_prompt(prompt, config.vocab_size)
+    fill_positions(positions, total_length)
+
+    var model: GPT2Ternary = GPT2Ternary(config)
+    model.to("gpu")
+    model.eval()
+    model.freeze_for_inference()
+    var prompt_gpu: Tensor[int64] = prompt.to("gpu")
+    var positions_gpu: Tensor[int64] = positions.to("gpu")
+
+    # The same frozen model and weights are used for both paths.
+    var dense_logits: Tensor[float32] = prefill_logits(model, prompt_gpu, positions_gpu, 1000000)
+    var sparse_logits: Tensor[float32] = prefill_logits(model, prompt_gpu, positions_gpu, 256)
+    var dense_next: int = dense_logits.argmax()
+    var sparse_next: int = sparse_logits.argmax()
+    var max_logit_difference: float64 = max_abs_difference(dense_logits, sparse_logits, config.vocab_size)
+
+    model.set_sparse_prefill_threshold(1000000)
+    var dense_generated: Tensor[int64] = model.generate_greedy_kv(prompt_gpu, new_tokens, positions_gpu)
+    model.set_sparse_prefill_threshold(256)
+    var sparse_generated: Tensor[int64] = model.generate_greedy_kv(prompt_gpu, new_tokens, positions_gpu)
+    var matching_tokens: int = token_agreement(dense_generated, sparse_generated, prompt_length, new_tokens)
+
+    print("long-context quality comparison")
+    print("prompt tokens =", prompt_length)
+    print("generated tokens =", new_tokens)
+    print("dense prefill next token =", dense_next)
+    print("sparse prefill next token =", sparse_next)
+    print("prefill argmax match =", dense_next == sparse_next)
+    print("max prefill logit abs diff =", max_logit_difference)
+    print("generated token agreement =", matching_tokens, "/", new_tokens)
+    print("[ok] Ocean long-context quality comparison")
+    return 0

@@ -375,6 +375,10 @@ class GPT2Attention(Module):
         var merged: Tensor[float32] = context_bthd.reshape([batch_size, sequence_length, self.d_model])
         return self.out_proj.forward(merged)
 
+    def set_sparse_prefill_threshold(self, threshold: int) -> None:
+        self.sparse_prefill_threshold = threshold
+        return None
+
     def forward_cached_sparse(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], summary: &Tensor[float32], position: int) -> Tensor[float32]:
         var batch_size: int = input.shape(0)
         var q_linear: Tensor[float32] = Tensor.empty(batch_size, 1, self.d_model, input.device())
@@ -483,6 +487,10 @@ class GPT2Block(Module):
         var normalized2: Tensor[float32] = self.ln_2.forward(residual)
         var feed_forward: Tensor[float32] = self.mlp.forward(normalized2)
         return residual.add(feed_forward)
+
+    def set_sparse_prefill_threshold(self, threshold: int) -> None:
+        self.attn.set_sparse_prefill_threshold(threshold)
+        return None
 
     def parameters(self) -> list[Parameter]:
         var result: list[Parameter] = [self.ln_1.gamma, self.ln_1.beta]
@@ -641,6 +649,33 @@ class GPT2Ternary(Module):
             self.block11.freeze_for_inference()
         if self.n_layers > 11:
             self.block12.freeze_for_inference()
+        return None
+
+    def set_sparse_prefill_threshold(self, threshold: int) -> None:
+        if self.n_layers > 0:
+            self.block1.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 1:
+            self.block2.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 2:
+            self.block3.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 3:
+            self.block4.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 4:
+            self.block5.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 5:
+            self.block6.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 6:
+            self.block7.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 7:
+            self.block8.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 8:
+            self.block9.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 9:
+            self.block10.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 10:
+            self.block11.set_sparse_prefill_threshold(threshold)
+        if self.n_layers > 11:
+            self.block12.set_sparse_prefill_threshold(threshold)
         return None
 
     def forward_prefill_hidden(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &GPT2KVCache) -> Tensor[float32]:

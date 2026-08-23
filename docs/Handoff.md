@@ -3520,6 +3520,22 @@ prefill. Это заменяет dense `QK^T -> softmax -> AV` на экспер
 reference. Результат является sparse approximation и требует отдельного
 quality comparison с dense GPT-2.
 
+Для такой проверки добавлен `examples/ML/gpt2_long_context_quality.oc`. Он
+использует одни и те же frozen ternary weights, отдельно выполняет dense и
+sparse prefill и сообщает:
+
+```text
+prefill argmax agreement
+maximum absolute logit difference
+generated token agreement
+```
+
+Это numerical fidelity test. Поскольку текущий example создаёт случайно
+инициализированную модель без загруженного обученного checkpoint, его нельзя
+интерпретировать как semantic language-quality benchmark. Для настоящей
+оценки нужно запустить тот же evaluator на сохранённых обученных весах и
+добавить perplexity/long-context retrieval наборы.
+
 Текущая GPT-2 интеграция correctness-first: GPU decode использует packed QKV
 split, cache write и CUDA SparseAttention вместо прежнего dense attention
 decode. Это ещё не означает прирост tokens/sec: на коротком контексте overhead
