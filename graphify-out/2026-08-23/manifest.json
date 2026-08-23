@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "src/debug.py": {
-    "mtime": 1787447880.1845489,
-    "ast_hash": "4273275104e3eab353a37b1c7707fc94",
+    "mtime": 1787328751.8517187,
+    "ast_hash": "d112e7c0f8fa6eddccc5b188409d3d1b",
     "semantic_hash": ""
   },
   "src/modules/constants.py": {
@@ -255,13 +255,13 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1787434491.2363977,
-    "ast_hash": "c2e50393082e76ddf6952e64c20a0001",
+    "mtime": 1787326808.6105642,
+    "ast_hash": "c8d84a4e50f6a87f106cb13493261691",
     "semantic_hash": ""
   },
   "docs/Handoff.md": {
-    "mtime": 1787448042.6345263,
-    "ast_hash": "b52069b862a656efd7ecb8b64bef428d",
+    "mtime": 1787332279.3185556,
+    "ast_hash": "f8a209f75f5840ceaa6e9ae1ce662027",
     "semantic_hash": ""
   },
   "docs/MEMORY_MODEL.md": {
@@ -275,8 +275,8 @@
     "semantic_hash": ""
   },
   "src/codegen/tensor_codegen.py": {
-    "mtime": 1787447394.8065326,
-    "ast_hash": "ba07c28869a5b9e8b1f76cbd2e7b7ab5",
+    "mtime": 1787324713.7869666,
+    "ast_hash": "7f5d190927851dbf516f133206db309c",
     "semantic_hash": ""
   },
   "tests/test_array_tensor.py": {
@@ -365,13 +365,13 @@
     "semantic_hash": ""
   },
   "std/tensor/tensor_runtime.c": {
-    "mtime": 1787448234.1288505,
-    "ast_hash": "b33e49e863872e15a15650876e31cce0",
+    "mtime": 1787332234.1779535,
+    "ast_hash": "2b6eba9bb02fd7581ff0209c4934784c",
     "semantic_hash": ""
   },
   "std/tensor/tensor_runtime.h": {
-    "mtime": 1787447879.7205431,
-    "ast_hash": "bd703f201ac912282ea89515ff30a229",
+    "mtime": 1787331512.3962321,
+    "ast_hash": "4e18a90fffb1caeafc740b4511b545ab",
     "semantic_hash": ""
   },
   "tests/test_tensor_std.py": {
@@ -385,8 +385,8 @@
     "semantic_hash": ""
   },
   "std/tensor/README.md": {
-    "mtime": 1787448042.4025235,
-    "ast_hash": "ec4e7206372d3e106cc1d202202bd5d4",
+    "mtime": 1787332278.9985514,
+    "ast_hash": "ae6975b4efa0eb1b7210a169078ad6e1",
     "semantic_hash": ""
   },
   "std/tensor/OpenCL.md": {
@@ -555,18 +555,18 @@
     "semantic_hash": ""
   },
   "docs/BENCHMARKS.md": {
-    "mtime": 1787448632.5417151,
-    "ast_hash": "88b7cdd481e2c25bfafbecf042b9191f",
+    "mtime": 1787156613.037764,
+    "ast_hash": "3936cf16c098f3fece1195664212d4c2",
     "semantic_hash": ""
   },
   "std/tensor/autograd_runtime.c": {
-    "mtime": 1787404096.313464,
-    "ast_hash": "28da187deb6b524d0f78acee7a9c2588",
+    "mtime": 1787331544.6366723,
+    "ast_hash": "4dee039063c791e42d1a94f3687df6c5",
     "semantic_hash": ""
   },
   "std/tensor/autograd_runtime.h": {
-    "mtime": 1787404089.7853792,
-    "ast_hash": "07533835a4375b16ba36c016778cb52e",
+    "mtime": 1787156613.045764,
+    "ast_hash": "d426a35505b6e14ec783bd7ff0478810",
     "semantic_hash": ""
   },
   "tests/adamw_v01_runtime.c": {
@@ -700,23 +700,8 @@
     "semantic_hash": ""
   },
   "tests/test_ternary_quantize_v01_runtime.py": {
-    "mtime": 1787447446.8111784,
-    "ast_hash": "7778b1bcb410d5cc11b6239a6c20ddc8",
-    "semantic_hash": ""
-  },
-  "tests/test_gelu_v01_runtime.py": {
-    "mtime": 1787402353.146348,
-    "ast_hash": "32d1e57d6cefc17fd676d2c3db8717f2",
-    "semantic_hash": ""
-  },
-  "tests/test_gpt2_kv_cache_v01_ocean.py": {
-    "mtime": 1787443015.2683449,
-    "ast_hash": "4f768ac6b6d67ffe8d749f6635bd5685",
-    "semantic_hash": ""
-  },
-  "tests/test_kv_cache_v01_runtime.py": {
-    "mtime": 1787442736.8489213,
-    "ast_hash": "6e869ac72a7b98d64edaeeadce83e56d",
+    "mtime": 1787328801.1883647,
+    "ast_hash": "c0d28e7786bf500058ef54ded88a6f7b",
     "semantic_hash": ""
   }
 }
