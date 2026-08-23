@@ -51,7 +51,10 @@ def token_agreement(left: &Tensor[int64], right: &Tensor[int64], start: int, len
 def main() -> int:
     var config: GPT2Config = gpt2_small_config()
     var prompt_length: int = 1000
-    var new_tokens: int = 32
+    var requested_new_tokens: int = 32
+    var new_tokens: int = requested_new_tokens
+    if prompt_length + new_tokens > config.max_seq_len:
+        new_tokens = config.max_seq_len - prompt_length
     var total_length: int = prompt_length + new_tokens
 
     var prompt: Tensor[int64] = Tensor.zeros(1, prompt_length, "cpu")
