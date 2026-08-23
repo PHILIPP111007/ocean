@@ -156,6 +156,7 @@ class Validator:
                             "ocean_tensor_linear_inference",
                             "ocean_tensor_packed_matmul_inference",
                             "ocean_tensor_packed_linear_inference",
+                            "ocean_tensor_packed_qkv_inference",
                             "ocean_tensor_binary",
                             "ocean_tensor_scalar",
                             "ocean_tensor_reshape",

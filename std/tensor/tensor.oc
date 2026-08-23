@@ -128,6 +128,11 @@ class Tensor:
         var value: Tensor = Tensor(handle)
         return value
 
+    def packed_qkv_inference(self, q_weight: &Tensor, q_scale: float64, q_bias: &Tensor, k_weight: &Tensor, k_scale: float64, k_bias: &Tensor, v_weight: &Tensor, v_scale: float64, v_bias: &Tensor, out_features: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_packed_qkv_inference(self.handle, q_weight.handle, q_scale, q_bias.handle, k_weight.handle, k_scale, k_bias.handle, v_weight.handle, v_scale, v_bias.handle, out_features)
+        var value: Tensor = Tensor(handle)
+        return value
+
     def add(self, other: &Tensor) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 0)
         var value: Tensor = Tensor(handle)

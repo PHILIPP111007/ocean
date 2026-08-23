@@ -1,6 +1,6 @@
 # Handoff — Phils Language / Ocean
 
-> Обновлено: **2026-08-22**
+> Обновлено: **2026-08-23**
 >
 > Этот документ — актуальный технический handoff по текущему состоянию Ocean.
 > Он намеренно отделяет **что уже доказано тестами** от **что реализовано, но ещё
@@ -1143,7 +1143,11 @@ Training остаётся QAT/STE-режимом: master weights и optimizer st
 значений кодируются в один `int32` word (`00 = 0`, `01 = +1`, `10 = -1`), а
 общий `scale` хранится отдельно. OpenCL packed matmul декодирует коды на лету,
 включая fused bias path для `TernaryLinear`; tied LM-head также использует
-transposed packed embedding weights.
+transposed packed embedding weights. Q/K/V attention projections объединены в
+`packed_qkv_inference`: один OpenCL workgroup загружает input tile один раз и
+вычисляет три проекции, возвращая `[... , 3 * d_model]` в порядке Q/K/V.
+Разделение выполняется device-local last-dimension slice kernel, без round-trip
+через CPU.
 
 Канонический профиль доступен через Ocean-фабрику:
 
@@ -1404,6 +1408,11 @@ Inference-only `TernaryLinear` дополнительно использует f
 `linear_inference`: для формы `[1, 1, K] × [K, N]` bias добавляется внутри того
 же matvec kernel. Training/autograd path сохраняет обычную последовательность
 `matmul` + `add`.
+
+Для GPT-2 inference поверх этого добавлен fused packed QKV path. Вызовы
+`q_proj`, `k_proj`, `v_proj` в `forward`, prompt prefill и cached decode
+сводятся к одному `ocean_tensor_packed_qkv` kernel; training path по-прежнему
+использует независимые проекции и autograd.
 
 ---
 
