@@ -11,7 +11,16 @@ typedef struct ocean_tensor_handle *ocean_tensor_handle_t;
 typedef enum ocean_tensor_backend_kind {
     OCEAN_TENSOR_BACKEND_CPU = 0,
     OCEAN_TENSOR_BACKEND_OPENCL = 1,
+    OCEAN_TENSOR_BACKEND_CUDA = 2,
 } ocean_tensor_backend_kind;
+
+/* Selection policy for the backend behind the public device="gpu" API.
+   AUTO is the default; explicit values are useful for diagnostics and CI. */
+typedef enum ocean_tensor_gpu_backend_preference {
+    OCEAN_TENSOR_GPU_BACKEND_AUTO = 0,
+    OCEAN_TENSOR_GPU_BACKEND_OPENCL = 1,
+    OCEAN_TENSOR_GPU_BACKEND_CUDA = 2,
+} ocean_tensor_gpu_backend_preference;
 
 typedef struct ocean_tensor_backend_ops {
     ocean_tensor_backend_kind kind;

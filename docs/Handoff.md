@@ -3137,3 +3137,49 @@ classes
 containers
 static validation
 ```
+
+---
+
+# 78. Tensor runtime modules and GPU backend selection
+
+`std/tensor/tensor_runtime.c` остаётся совместимой точкой сборки Tensor runtime,
+но его крупные подсистемы вынесены во внутренние `.inc`-модули, которые
+подключаются в один translation unit:
+
+```text
+std/tensor/tensor_backend_dispatch.inc
+std/tensor/tensor_cuda_backend.inc
+std/tensor/tensor_opencl_kernels.inc
+std/tensor/tensor_opencl_runtime.inc
+std/tensor/tensor_opencl_memory.inc
+std/tensor/tensor_opencl_elementwise.inc
+std/tensor/tensor_opencl_matmul.inc
+```
+
+Такой промежуточный layout сохраняет существующую интеграцию сборщика: текущая
+система автоматически компилирует `tensor_runtime.c` и не требует перечислять
+новые `.c`-файлы в каждом тесте и примере. `.inc`-модули не являются публичным
+ABI; они разделяют kernel source, OpenCL runtime/launchers и registry backend’ов.
+
+Публичный Ocean API остаётся backend-neutral:
+
+```text
+Tensor.to("cpu")
+Tensor.to("gpu")
+```
+
+Выбор GPU backend выполняется dispatch layer. По умолчанию используется первый
+доступный рабочий backend — сейчас это OpenCL. Для диагностики можно явно
+запросить:
+
+```bash
+OCEAN_TENSOR_GPU_BACKEND=auto
+OCEAN_TENSOR_GPU_BACKEND=opencl
+OCEAN_TENSOR_GPU_BACKEND=cuda
+```
+
+`cuda`/`nvidia` уже представлены отдельным backend ABI и таблицей операций, но
+native NVIDIA kernels пока не реализованы. Поэтому запрос CUDA завершается
+явной ошибкой и не подменяется CPU или OpenCL. Следующий этап — добавить
+реализацию CUDA allocation/copy/release и hot kernels за тем же
+`ocean_tensor_backend_ops`, не меняя `Tensor.to("gpu")`.
