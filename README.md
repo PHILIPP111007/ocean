@@ -324,16 +324,19 @@ ocean build examples/ML/gpt2_native_ternary_inference.oc \
     --cflag=-lOpenCL \
     --cflag=-I"/usr/include/CL/" \
     --cflag=-L"/usr/lib/x86_64-linux-gnu/libOpenCL.so" \
-    --cflag=-O3
+    --cflag=-O3 \
+    --cflag=-DOCEAN_TENSOR_ENABLE_OPENCL
 ```
 
 CUDA:
 
 ```bash
-ocean build examples/ML/gpt2_native_ternary_inference.oc \
-    --compiler nvcc \
-    --cflag=-O3 \
-    --cflag=-DOCEAN_TENSOR_ENABLE_CUDA
+export OCEAN_TENSOR_GPU_BACKEND=cuda
+
+python main.py build \
+  ./examples/ML/gpt2_native_ternary_inference.oc \
+  --compiler nvcc \
+  --cflags "-O3 -DOCEAN_TENSOR_ENABLE_CUDA -DOCEAN_TENSOR_ENABLE_OPENCL"
 ```
 
 ---

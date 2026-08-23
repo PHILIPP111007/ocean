@@ -3060,6 +3060,14 @@ static void ocean_tensor_set_nd_long_double(
         return;
     }
 
+    if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_handle_t cpu = ocean_tensor_to(tensor, "cpu");
+        ocean_tensor_set_nd_long_double(cpu, indices, ndim, value);
+        ocean_tensor_copy_into(tensor, cpu);
+        ocean_tensor_release(cpu);
+        return;
+    }
+
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL
     size_t offset = ocean_tensor_index_offset(tensor, indices, ndim);
     size_t scalar_shape[1] = {1};
