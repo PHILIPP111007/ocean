@@ -965,6 +965,96 @@ static const char *ocean_tensor_packed_qkv_split_kernel_source =
     "}"
     "}";
 
+static const char *ocean_tensor_packed_qkv_attention_kernel_source =
+    "__kernel void ocean_tensor_packed_qkv_attention_decode("
+    "__global const float *input, __global const int *q_packed, "
+    "__global const int *k_packed, __global const int *v_packed, "
+    "__global const float *q_bias, __global const float *k_bias, "
+    "__global const float *v_bias, __global float *cache_k, "
+    "__global float *cache_v, __global float *output, "
+    "const int cols_a, const int packed_cols, const int max_seq, "
+    "const int position, const int n_heads, const int head_dim, "
+    "const float q_scale, const float k_scale, const float v_scale) {"
+    "int lane = (int)get_local_id(0);"
+    "int head = (int)get_group_id(0);"
+    "int channel = head * head_dim + lane;"
+    "__local float input_tile[128];"
+    "__local float q_vector[128];"
+    "__local float k_vector[128];"
+    "__local float v_vector[128];"
+    "__local float scores[2048];"
+    "float q_sum = 0.0f;"
+    "float k_sum = 0.0f;"
+    "float v_sum = 0.0f;"
+    "for (int tile = 0; tile < cols_a; tile += 128) {"
+    "int input_index = tile + lane;"
+    "input_tile[lane] = input_index < cols_a ? input[input_index] : 0.0f;"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "int tile_end = tile + 128;"
+    "if (tile_end > cols_a) tile_end = cols_a;"
+    "if (lane < head_dim) {"
+    "for (int input_column = tile; input_column < tile_end; ++input_column) {"
+    "uint word = (uint)q_packed[input_column * packed_cols + channel / 16];"
+    "uint code = (word >> (2 * (channel % 16))) & 3u;"
+    "float sign = code == 1u ? 1.0f : (code == 2u ? -1.0f : 0.0f);"
+    "q_sum += input_tile[input_column - tile] * sign;"
+    "word = (uint)k_packed[input_column * packed_cols + channel / 16];"
+    "code = (word >> (2 * (channel % 16))) & 3u;"
+    "sign = code == 1u ? 1.0f : (code == 2u ? -1.0f : 0.0f);"
+    "k_sum += input_tile[input_column - tile] * sign;"
+    "word = (uint)v_packed[input_column * packed_cols + channel / 16];"
+    "code = (word >> (2 * (channel % 16))) & 3u;"
+    "sign = code == 1u ? 1.0f : (code == 2u ? -1.0f : 0.0f);"
+    "v_sum += input_tile[input_column - tile] * sign;"
+    "}"
+    "}"
+    "}"
+    "if (lane < head_dim) {"
+    "q_vector[lane] = q_sum * q_scale + q_bias[channel];"
+    "k_vector[lane] = k_sum * k_scale + k_bias[channel];"
+    "v_vector[lane] = v_sum * v_scale + v_bias[channel];"
+    "}"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "if (lane < head_dim) {"
+    "int cache_offset = (head * max_seq + position) * head_dim + lane;"
+    "cache_k[cache_offset] = k_vector[lane];"
+    "cache_v[cache_offset] = v_vector[lane];"
+    "}"
+    "barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);"
+    "for (int token = lane; token <= position; token += 128) {"
+    "float score = 0.0f;"
+    "for (int dimension = 0; dimension < head_dim; ++dimension) {"
+    "int cache_offset = (head * max_seq + token) * head_dim + dimension;"
+    "score += q_vector[dimension] * cache_k[cache_offset];"
+    "}"
+    "scores[token] = score / sqrt((float)head_dim);"
+    "}"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "if (lane == 0) {"
+    "float maximum = -3.402823466e+38f;"
+    "for (int token = 0; token <= position; ++token) {"
+    "if (scores[token] > maximum) maximum = scores[token];"
+    "}"
+    "float denominator = 0.0f;"
+    "for (int token = 0; token <= position; ++token) {"
+    "scores[token] = exp(scores[token] - maximum);"
+    "denominator += scores[token];"
+    "}"
+    "for (int token = 0; token <= position; ++token) {"
+    "scores[token] /= denominator;"
+    "}"
+    "}"
+    "barrier(CLK_LOCAL_MEM_FENCE);"
+    "if (lane < head_dim) {"
+    "float context = 0.0f;"
+    "for (int token = 0; token <= position; ++token) {"
+    "int cache_offset = (head * max_seq + token) * head_dim + lane;"
+    "context += scores[token] * cache_v[cache_offset];"
+    "}"
+    "output[channel] = context;"
+    "}"
+    "}";
+
 static const char *ocean_tensor_gelu_kernel_source =
     "__kernel void ocean_tensor_gelu("
     "__global const float *input, __global float *output, "
@@ -1218,6 +1308,7 @@ typedef struct ocean_tensor_opencl_runtime {
     cl_kernel packed_qkv_kernel;
     cl_kernel slice_last_dim_kernel;
     cl_kernel packed_qkv_split_kernel;
+    cl_kernel packed_qkv_attention_kernel;
     cl_mem argmax_result;
 } ocean_tensor_opencl_runtime;
 
@@ -1256,6 +1347,7 @@ typedef enum ocean_tensor_opencl_kernel_key {
     OCEAN_TENSOR_OPENCL_KERNEL_PACKED_QKV_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_SLICE_LAST_DIM_FLOAT32,
     OCEAN_TENSOR_OPENCL_KERNEL_PACKED_QKV_SPLIT_FLOAT32,
+    OCEAN_TENSOR_OPENCL_KERNEL_PACKED_QKV_ATTENTION_FLOAT32,
 } ocean_tensor_opencl_kernel_key;
 
 static ocean_tensor_opencl_runtime ocean_tensor_opencl;
@@ -1391,6 +1483,10 @@ static void ocean_tensor_opencl_shutdown(void) {
         clReleaseKernel(ocean_tensor_opencl.packed_qkv_split_kernel);
         ocean_tensor_opencl.packed_qkv_split_kernel = NULL;
     }
+    if (ocean_tensor_opencl.packed_qkv_attention_kernel) {
+        clReleaseKernel(ocean_tensor_opencl.packed_qkv_attention_kernel);
+        ocean_tensor_opencl.packed_qkv_attention_kernel = NULL;
+    }
     if (ocean_tensor_opencl.argmax_result) {
         clReleaseMemObject(ocean_tensor_opencl.argmax_result);
         ocean_tensor_opencl.argmax_result = NULL;
@@ -1510,9 +1606,10 @@ static void ocean_tensor_opencl_init(void) {
         ocean_tensor_packed_qkv_kernel_source,
         ocean_tensor_slice_last_dim_kernel_source,
         ocean_tensor_packed_qkv_split_kernel_source,
+        ocean_tensor_packed_qkv_attention_kernel_source,
     };
     ocean_tensor_opencl.program = clCreateProgramWithSource(
-        ocean_tensor_opencl.context, 16, sources, NULL, &status
+        ocean_tensor_opencl.context, 17, sources, NULL, &status
     );
     ocean_tensor_opencl_check(status, "clCreateProgramWithSource");
     status = clBuildProgram(
@@ -1679,6 +1776,10 @@ static cl_kernel ocean_tensor_opencl_get_kernel(
         case OCEAN_TENSOR_OPENCL_KERNEL_PACKED_QKV_SPLIT_FLOAT32:
             slot = &ocean_tensor_opencl.packed_qkv_split_kernel;
             name = "ocean_tensor_packed_qkv_split";
+            break;
+        case OCEAN_TENSOR_OPENCL_KERNEL_PACKED_QKV_ATTENTION_FLOAT32:
+            slot = &ocean_tensor_opencl.packed_qkv_attention_kernel;
+            name = "ocean_tensor_packed_qkv_attention_decode";
             break;
     }
     if (!slot || !name) ocean_tensor_fail("invalid OpenCL Tensor kernel key");
@@ -6027,6 +6128,115 @@ static void ocean_tensor_opencl_packed_qkv_split(
     ocean_tensor_opencl_release_event(event);
 }
 
+static void ocean_tensor_opencl_packed_qkv_attention_decode(
+    const ocean_tensor_handle_t input,
+    const ocean_tensor_handle_t q_packed,
+    const ocean_tensor_handle_t q_bias,
+    const ocean_tensor_handle_t k_packed,
+    const ocean_tensor_handle_t k_bias,
+    const ocean_tensor_handle_t v_packed,
+    const ocean_tensor_handle_t v_bias,
+    const ocean_tensor_handle_t cache_k,
+    const ocean_tensor_handle_t cache_v,
+    const ocean_tensor_handle_t output,
+    int position,
+    int n_heads,
+    int head_dim,
+    double q_scale,
+    double k_scale,
+    double v_scale
+) {
+    if (output->size == 0) return;
+    cl_kernel kernel = ocean_tensor_opencl_get_kernel(
+        OCEAN_TENSOR_OPENCL_KERNEL_PACKED_QKV_ATTENTION_FLOAT32
+    );
+    size_t cols_a_size = input->shape[input->ndim - 1];
+    size_t packed_cols_size = q_packed->shape[1];
+    size_t max_seq_size = cache_k->shape[2];
+    if (cols_a_size > (size_t)INT32_MAX ||
+        packed_cols_size > (size_t)INT32_MAX ||
+        max_seq_size > 2048u) {
+        ocean_tensor_fail(
+            "fused attention dimensions are too large for OpenCL"
+        );
+    }
+    int cols_a = (int)cols_a_size;
+    int packed_cols = (int)packed_cols_size;
+    int max_seq = (int)max_seq_size;
+    float scales[] = {
+        (float)q_scale, (float)k_scale, (float)v_scale,
+    };
+    ocean_tensor_handle_t packed[] = {
+        q_packed, k_packed, v_packed,
+    };
+    ocean_tensor_handle_t biases[] = {
+        q_bias, k_bias, v_bias,
+    };
+    ocean_tensor_opencl_check(
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &input->gpu_data),
+        "clSetKernelArg"
+    );
+    for (int index = 0; index < 3; ++index) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(
+                kernel, (cl_uint)(1 + index), sizeof(cl_mem),
+                &packed[index]->gpu_data
+            ),
+            "clSetKernelArg"
+        );
+        ocean_tensor_opencl_check(
+            clSetKernelArg(
+                kernel, (cl_uint)(4 + index), sizeof(cl_mem),
+                &biases[index]->gpu_data
+            ),
+            "clSetKernelArg"
+        );
+    }
+    ocean_tensor_handle_t buffers[] = {cache_k, cache_v, output};
+    for (int index = 0; index < 3; ++index) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(
+                kernel, (cl_uint)(7 + index), sizeof(cl_mem),
+                &buffers[index]->gpu_data
+            ),
+            "clSetKernelArg"
+        );
+    }
+    int values[] = {
+        cols_a, packed_cols, max_seq, position, n_heads, head_dim,
+    };
+    for (int index = 0; index < 6; ++index) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(
+                kernel, (cl_uint)(10 + index), sizeof(int), &values[index]
+            ),
+            "clSetKernelArg"
+        );
+    }
+    for (int index = 0; index < 3; ++index) {
+        ocean_tensor_opencl_check(
+            clSetKernelArg(
+                kernel, (cl_uint)(16 + index), sizeof(float), &scales[index]
+            ),
+            "clSetKernelArg"
+        );
+    }
+    const size_t local_size = 128u;
+    size_t global_size = (size_t)n_heads * local_size;
+    cl_event event = NULL;
+    ocean_tensor_opencl_check(
+        clEnqueueNDRangeKernel(
+            ocean_tensor_opencl.queue, kernel, 1, NULL,
+            &global_size, &local_size, 0, NULL, &event
+        ),
+        "clEnqueueNDRangeKernel"
+    );
+    ocean_tensor_opencl_check(
+        clFlush(ocean_tensor_opencl.queue), "clFlush"
+    );
+    ocean_tensor_opencl_release_event(event);
+}
+
 static ocean_tensor_handle_t ocean_tensor_matmul_opencl_batched(
     ocean_tensor_handle_t left,
     ocean_tensor_handle_t right,
@@ -7682,6 +7892,112 @@ void ocean_tensor_packed_qkv_inference_into(
     ocean_tensor_fail(
         "GPU backend is unavailable: rebuild with OpenCL support"
     );
+#endif
+}
+
+ocean_tensor_handle_t ocean_tensor_packed_qkv_attention_decode(
+    ocean_tensor_handle_t input,
+    ocean_tensor_handle_t q_packed_weight,
+    double q_scale,
+    ocean_tensor_handle_t q_bias,
+    ocean_tensor_handle_t k_packed_weight,
+    double k_scale,
+    ocean_tensor_handle_t k_bias,
+    ocean_tensor_handle_t v_packed_weight,
+    double v_scale,
+    ocean_tensor_handle_t v_bias,
+    ocean_tensor_handle_t cache_k,
+    ocean_tensor_handle_t cache_v,
+    int position,
+    int n_heads,
+    int head_dim
+) {
+    ocean_tensor_handle_t tensors[] = {
+        input, q_packed_weight, q_bias, k_packed_weight, k_bias,
+        v_packed_weight, v_bias, cache_k, cache_v,
+    };
+    for (size_t index = 0; index < sizeof(tensors) / sizeof(tensors[0]); ++index) {
+        if (!tensors[index]) {
+            ocean_tensor_fail("fused attention received a null Tensor");
+        }
+    }
+    if (input->device != OCEAN_TENSOR_GPU ||
+        input->dtype != OCEAN_TENSOR_FLOAT32 || input->ndim != 3 ||
+        input->shape[0] != 1 || input->shape[1] != 1 ||
+        n_heads <= 0 || head_dim <= 0 || head_dim > 128 ||
+        position < 0 || cache_k->device != OCEAN_TENSOR_GPU ||
+        cache_v->device != OCEAN_TENSOR_GPU ||
+        cache_k->dtype != OCEAN_TENSOR_FLOAT32 ||
+        cache_v->dtype != OCEAN_TENSOR_FLOAT32 || cache_k->ndim != 4 ||
+        cache_v->ndim != 4 || cache_k->shape[0] != 1 ||
+        cache_v->shape[0] != 1 || cache_k->shape[1] != (size_t)n_heads ||
+        cache_v->shape[1] != (size_t)n_heads ||
+        cache_k->shape[3] != (size_t)head_dim ||
+        cache_v->shape[3] != (size_t)head_dim ||
+        position >= (int)cache_k->shape[2] ||
+        cache_v->shape[2] != cache_k->shape[2]) {
+        ocean_tensor_fail("fused attention decode shape/device mismatch");
+    }
+    size_t d_model = (size_t)n_heads * (size_t)head_dim;
+    if (input->shape[2] != d_model || q_packed_weight->dtype != OCEAN_TENSOR_INT32 ||
+        k_packed_weight->dtype != OCEAN_TENSOR_INT32 ||
+        v_packed_weight->dtype != OCEAN_TENSOR_INT32 ||
+        q_bias->dtype != OCEAN_TENSOR_FLOAT32 ||
+        k_bias->dtype != OCEAN_TENSOR_FLOAT32 ||
+        v_bias->dtype != OCEAN_TENSOR_FLOAT32 || q_bias->ndim != 2 ||
+        k_bias->ndim != 2 || v_bias->ndim != 2 || q_bias->shape[0] != 1 ||
+        k_bias->shape[0] != 1 || v_bias->shape[0] != 1 ||
+        q_bias->shape[1] != d_model || k_bias->shape[1] != d_model ||
+        v_bias->shape[1] != d_model ||
+        !(q_scale > 0.0) || !(k_scale > 0.0) || !(v_scale > 0.0)) {
+        ocean_tensor_fail("fused attention projection metadata mismatch");
+    }
+    if (q_packed_weight->device != OCEAN_TENSOR_GPU ||
+        k_packed_weight->device != OCEAN_TENSOR_GPU ||
+        v_packed_weight->device != OCEAN_TENSOR_GPU ||
+        q_bias->device != OCEAN_TENSOR_GPU || k_bias->device != OCEAN_TENSOR_GPU ||
+        v_bias->device != OCEAN_TENSOR_GPU) {
+        ocean_tensor_fail("fused attention requires GPU projection tensors");
+    }
+    size_t packed_cols = (d_model + 15u) / 16u;
+    ocean_tensor_handle_t packed[] = {
+        q_packed_weight, k_packed_weight, v_packed_weight,
+    };
+    for (int index = 0; index < 3; ++index) {
+        if (packed[index]->ndim != 2 || packed[index]->shape[0] != d_model ||
+            packed[index]->shape[1] != packed_cols ||
+            !ocean_tensor_is_contiguous(packed[index])) {
+            ocean_tensor_fail("fused attention packed weight mismatch");
+        }
+    }
+    if (!ocean_tensor_is_contiguous(input) ||
+        !ocean_tensor_is_contiguous(q_bias) ||
+        !ocean_tensor_is_contiguous(k_bias) ||
+        !ocean_tensor_is_contiguous(v_bias) ||
+        !ocean_tensor_is_contiguous(cache_k) ||
+        !ocean_tensor_is_contiguous(cache_v)) {
+        ocean_tensor_fail("fused attention requires contiguous GPU tensors");
+    }
+    size_t output_shape[3] = {1, 1, d_model};
+    ocean_tensor_handle_t output = ocean_tensor_alloc_uninitialized(
+        output_shape, 3, OCEAN_TENSOR_FLOAT32, OCEAN_TENSOR_GPU
+    );
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    ocean_tensor_opencl_packed_qkv_attention_decode(
+        input, q_packed_weight, q_bias,
+        k_packed_weight, k_bias,
+        v_packed_weight, v_bias,
+        cache_k, cache_v, output,
+        position, n_heads, head_dim,
+        q_scale, k_scale, v_scale
+    );
+    return output;
+#else
+    ocean_tensor_release(output);
+    ocean_tensor_fail(
+        "GPU backend is unavailable: rebuild with OpenCL support"
+    );
+    return NULL;
 #endif
 }
 

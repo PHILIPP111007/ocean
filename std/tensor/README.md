@@ -73,6 +73,7 @@ class Tensor:
     def ternary_pack(self, scale: float64, transpose: bool) -> Tensor[int32]
     def packed_qkv_inference(self, q_weight: &Tensor, q_scale: float64, q_bias: &Tensor, k_weight: &Tensor, k_scale: float64, k_bias: &Tensor, v_weight: &Tensor, v_scale: float64, v_bias: &Tensor, out_features: int) -> Tensor[float32]
     def packed_qkv_inference_into(self, q_weight: &Tensor, q_scale: float64, q_bias: &Tensor, k_weight: &Tensor, k_scale: float64, k_bias: &Tensor, v_weight: &Tensor, v_scale: float64, v_bias: &Tensor, q_output: &Tensor, k_output: &Tensor, v_output: &Tensor, out_features: int) -> None
+    def packed_qkv_attention_decode(self, q_weight: &Tensor, q_scale: float64, q_bias: &Tensor, k_weight: &Tensor, k_scale: float64, k_bias: &Tensor, v_weight: &Tensor, v_scale: float64, v_bias: &Tensor, cache_k: &Tensor, cache_v: &Tensor, position: int, n_heads: int, head_dim: int) -> Tensor[float32]
     def shape(self, axis: int) -> int
     def ndim() -> int
     def size() -> size_t
@@ -285,6 +286,12 @@ loading each input tile once, and writes directly into three preallocated
 buffer and three post-projection slice launches. The combined-returning
 `packed_qkv_inference()` remains available for callers that prefer a single
 Q/K/V tensor.
+
+For single-token GPU decode, `packed_qkv_attention_decode()` goes one step
+further: the OpenCL workgroup computes packed Q/K/V, writes the current KV-cache
+row, evaluates `QKᵀ`, causal softmax, and the weighted V reduction directly into
+the context Tensor. It is specialized for batch/sequence shape `[1, 1, D]` and
+head dimensions up to 128.
 
 The OpenCL runtime caches its context, queue, program, and kernels for the process and releases
 them through an exit handler. Individual GPU buffers are released with their owning `Tensor`

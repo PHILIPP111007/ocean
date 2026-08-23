@@ -1414,6 +1414,12 @@ Inference-only `TernaryLinear` дополнительно использует f
 сводятся к одному `ocean_tensor_packed_qkv_split` kernel; training path
 по-прежнему использует независимые проекции и autograd.
 
+Для single-token GPU decode cached attention дополнительно использует
+`ocean_tensor_packed_qkv_attention_decode`: один workgroup на attention head
+считает packed Q/K/V, записывает текущую строку KV-cache, выполняет `QKᵀ`,
+causal softmax и weighted-V reduction. Это убирает отдельные launches для
+reshape/permute, cache write/slice, score matmul, softmax и context matmul.
+
 ---
 
 # 38. GPU fallback semantics

@@ -248,7 +248,7 @@ class GPT2Attention(Module):
         return self.out_proj.forward(merged)
 
     def forward_cached(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], position: int) -> Tensor[float32]:
-        if Tensor.grad_enabled() == False and self.q_proj.inference_ready and self.k_proj.inference_ready and self.v_proj.inference_ready:
+        if input.device() == "gpu" and Tensor.grad_enabled() == False and self.q_proj.inference_ready and self.k_proj.inference_ready and self.v_proj.inference_ready:
             return self.forward_cached_fused(input, cache_k, cache_v, position)
         var batch_size: int = input.shape(0)
         var q_linear: Tensor[float32] = self.q_proj.forward(input)
@@ -300,29 +300,8 @@ class GPT2Attention(Module):
         return self.out_proj.forward(merged)
 
     def forward_cached_fused(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], position: int) -> Tensor[float32]:
-        var batch_size: int = input.shape(0)
-        var q_linear: Tensor[float32] = Tensor.empty(batch_size, 1, self.d_model, input.device())
-        var k_linear: Tensor[float32] = Tensor.empty(batch_size, 1, self.d_model, input.device())
-        var v_linear: Tensor[float32] = Tensor.empty(batch_size, 1, self.d_model, input.device())
-        input.packed_qkv_inference_into(self.q_proj.inference_packed_weight, self.q_proj.inference_scale, self.q_proj.bias.tensor(), self.k_proj.inference_packed_weight, self.k_proj.inference_scale, self.k_proj.bias.tensor(), self.v_proj.inference_packed_weight, self.v_proj.inference_scale, self.v_proj.bias.tensor(), q_linear, k_linear, v_linear, self.d_model)
-        var q_reshaped: Tensor[float32] = q_linear.reshape([batch_size, 1, self.n_heads, self.head_dim])
-        var k_reshaped: Tensor[float32] = k_linear.reshape([batch_size, 1, self.n_heads, self.head_dim])
-        var v_reshaped: Tensor[float32] = v_linear.reshape([batch_size, 1, self.n_heads, self.head_dim])
-        var q: Tensor[float32] = q_reshaped.permute([0, 2, 1, 3])
-        var k: Tensor[float32] = k_reshaped.permute([0, 2, 1, 3])
-        var v: Tensor[float32] = v_reshaped.permute([0, 2, 1, 3])
-        cache_k.cache_write(k, position)
-        cache_v.cache_write(v, position)
-        var keys: Tensor[float32] = cache_k.slice(2, 0, position + 1, 1)
-        var values: Tensor[float32] = cache_v.slice(2, 0, position + 1, 1)
-        var key_transposed: Tensor[float32] = keys.transpose_dims(-2, -1)
-        var scores: Tensor[float32] = q.matmul(key_transposed)
-        var scaled: Tensor[float32] = scores.div_scalar(sqrt(self.head_dim))
-        var weights: Tensor[float32] = scaled.softmax(-1)
-        var context: Tensor[float32] = weights.matmul(values)
-        var context_bthd: Tensor[float32] = context.permute([0, 2, 1, 3])
-        var merged: Tensor[float32] = context_bthd.reshape([batch_size, 1, self.d_model])
-        return self.out_proj.forward(merged)
+        var context: Tensor[float32] = input.packed_qkv_attention_decode(self.q_proj.inference_packed_weight, self.q_proj.inference_scale, self.q_proj.bias.tensor(), self.k_proj.inference_packed_weight, self.k_proj.inference_scale, self.k_proj.bias.tensor(), self.v_proj.inference_packed_weight, self.v_proj.inference_scale, self.v_proj.bias.tensor(), cache_k, cache_v, position, self.n_heads, self.head_dim)
+        return self.out_proj.forward(context)
 
     def prepare_inference(self) -> None:
         self.q_proj.prepare_inference()

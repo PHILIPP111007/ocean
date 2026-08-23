@@ -143,6 +143,11 @@ class Tensor:
         ocean_tensor_packed_qkv_inference_into(self.handle, q_weight.handle, q_scale, q_bias.handle, k_weight.handle, k_scale, k_bias.handle, v_weight.handle, v_scale, v_bias.handle, q_output.handle, k_output.handle, v_output.handle, out_features)
         return None
 
+    def packed_qkv_attention_decode(self, q_weight: &Tensor, q_scale: float64, q_bias: &Tensor, k_weight: &Tensor, k_scale: float64, k_bias: &Tensor, v_weight: &Tensor, v_scale: float64, v_bias: &Tensor, cache_k: &Tensor, cache_v: &Tensor, position: int, n_heads: int, head_dim: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_packed_qkv_attention_decode(self.handle, q_weight.handle, q_scale, q_bias.handle, k_weight.handle, k_scale, k_bias.handle, v_weight.handle, v_scale, v_bias.handle, cache_k.handle, cache_v.handle, position, n_heads, head_dim)
+        var value: Tensor = Tensor(handle)
+        return value
+
     def add(self, other: &Tensor) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_autograd_binary(self.handle, other.handle, 0)
         var value: Tensor = Tensor(handle)
