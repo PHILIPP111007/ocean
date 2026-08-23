@@ -91,3 +91,9 @@ tokens per second = 118.263486
 first generated token = 0.000000
 [ok] Ocean GPT2 inference benchmark
 ```
+
+Peak RSS:
+492,168 KB ≈ 481 MiB
+
+After freeing master weights:
+173,980 KB ≈ 170 MiB
