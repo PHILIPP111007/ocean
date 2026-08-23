@@ -76,10 +76,10 @@ model device = gpu
 backend device = NVIDIA GeForce RTX 5060 Laptop GPU
 GPT2 config = vocab 50257, context 1024, hidden 768, heads 12, ff 3072, layers 12
 prompt tokens = 16
-generated tokens = 20
-elapsed seconds = 0.274488
-milliseconds per token = 13.724408
-tokens per second = 72.862888
+generated tokens = 100
+elapsed seconds = 1.228396
+milliseconds per token = 12.283962
+tokens per second = 81.406960
 first generated token = 0.000000
 [ok] Ocean GPT2 inference benchmark
 ```

@@ -18,7 +18,7 @@ def main() -> int:
     # smoke profile.
     var config: GPT2Config = gpt2_small_config()
     var prompt_length: int = 16
-    var new_tokens: int = 20
+    var new_tokens: int = 100
     var total_length: int = prompt_length + new_tokens
 
     var prompt: Tensor[int64] = Tensor.zeros(1, prompt_length, "cpu")
