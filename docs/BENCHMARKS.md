@@ -69,6 +69,8 @@ Benchmark 1: ./matmul
 
 ## LLM GPT2
 
+OpenCL:
+
 ```bash
 ocean build examples/ML/gpt2_native_ternary_inference.oc \
   --cflag=-lOpenCL \
@@ -88,6 +90,29 @@ generated tokens = 100
 elapsed seconds = 0.845570
 milliseconds per token = 8.455695
 tokens per second = 118.263486
+first generated token = 0.000000
+[ok] Ocean GPT2 inference benchmark
+```
+
+CUDA:
+
+```bash
+ocean build ./examples/ML/gpt2_native_ternary_inference.oc \
+  --compiler nvcc \
+  --cflags "-O3 -DOCEAN_TENSOR_ENABLE_CUDA"
+```
+
+```bash
+(.venv) phil@phil-TUF-Gaming-F16-FX608JMI:~/GitHub/ocean$ ./examples/ML/gpt2_native_ternary_inference 
+mode = inference
+model device = gpu
+backend device = CUDA GPU (native kernels)
+GPT2 config = vocab 50257, context 1024, hidden 768, heads 12, ff 3072, layers 12
+prompt tokens = 16
+generated tokens = 100
+elapsed seconds = 0.605117
+milliseconds per token = 6.051169
+tokens per second = 165.257335
 first generated token = 0.000000
 [ok] Ocean GPT2 inference benchmark
 ```
