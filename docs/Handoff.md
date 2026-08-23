@@ -3205,6 +3205,9 @@ fused packed QKV + KV-cache attention decode
 KV-cache write/slice
 float32 argmax
 typed ND scalar assignment on CUDA uses identity-preserving CPU staging
+CUDA equal-shape elementwise operations use native kernels; broadcasted
+elementwise operations currently use correctness-first CPU staging and restore
+the CUDA device
 ```
 
 Это позволяет перенести основной autoregressive decode GPT-2 на CUDA: lookup

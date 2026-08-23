@@ -156,9 +156,20 @@ static ocean_tensor_handle_t ocean_tensor_cuda_binary(
     int operation
 ) {
     if (!ocean_tensor_cuda_same_shape(left, right)) {
-        ocean_tensor_fail(
-            "CUDA binary operations currently require matching shapes"
+        /* Preserve the public Tensor broadcasting contract. The native CUDA
+           elementwise kernel currently handles contiguous equal-shape data;
+           use the correctness-first CPU broadcast implementation for the
+           uncommon metadata/broadcast case and restore the CUDA device. */
+        ocean_tensor_handle_t left_cpu = ocean_tensor_to(left, "cpu");
+        ocean_tensor_handle_t right_cpu = ocean_tensor_to(right, "cpu");
+        ocean_tensor_handle_t cpu_result = ocean_tensor_binary_cpu(
+            left_cpu, right_cpu, operation
         );
+        ocean_tensor_handle_t result = ocean_tensor_to(cpu_result, "cuda");
+        ocean_tensor_release(left_cpu);
+        ocean_tensor_release(right_cpu);
+        ocean_tensor_release(cpu_result);
+        return result;
     }
     ocean_tensor_cuda_require_contiguous(
         left, "CUDA binary operation requires contiguous left Tensor"
