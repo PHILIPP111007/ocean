@@ -70,6 +70,14 @@ Benchmark 1: ./matmul
 ## LLM GPT2
 
 ```bash
+ocean build examples/ML/gpt2_native_ternary_inference.oc \
+  --cflag=-lOpenCL \
+  --cflag=-I"/usr/include/CL/" \
+  --cflag=-L"/usr/lib/x86_64-linux-gnu/libOpenCL.so" \
+  --cflag=-O3
+```
+
+```bash
 (.venv) phil@phil-TUF-Gaming-F16-FX608JMI:~/GitHub/ocean$ ./examples/ML/gpt2_native_ternary_inference 
 mode = inference
 model device = gpu
