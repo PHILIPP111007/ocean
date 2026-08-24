@@ -58,6 +58,23 @@ struct ocean_tensor_handle {
 #endif
 };
 
+struct ocean_paged_kv_cache {
+    size_t batches;
+    size_t heads;
+    size_t head_dim;
+    size_t page_size;
+    size_t length;
+    size_t page_count;
+    size_t page_capacity;
+    ocean_tensor_backend_kind device;
+    ocean_tensor_handle_t *key_pages;
+    ocean_tensor_handle_t *value_pages;
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    void *cuda_key_table;
+    void *cuda_value_table;
+#endif
+};
+
 #define OCEAN_TENSOR_CPU OCEAN_TENSOR_BACKEND_CPU
 #define OCEAN_TENSOR_GPU OCEAN_TENSOR_BACKEND_OPENCL
 
@@ -2361,6 +2378,325 @@ void ocean_tensor_cache_write(
 #else
     ocean_tensor_fail("GPU backend is unavailable: rebuild with OpenCL support");
 #endif
+}
+
+static const char *ocean_paged_kv_device_name(
+    ocean_tensor_backend_kind device
+) {
+    if (device == OCEAN_TENSOR_BACKEND_CPU) return "cpu";
+    if (device == OCEAN_TENSOR_BACKEND_CUDA) return "cuda";
+    ocean_tensor_fail("PagedKVCache currently supports CPU or CUDA only");
+    return "cpu";
+}
+
+static void ocean_paged_kv_reserve(
+    ocean_paged_kv_cache_handle_t cache,
+    size_t required
+) {
+    if (required <= cache->page_capacity) return;
+    size_t capacity = cache->page_capacity == 0 ? 4u : cache->page_capacity;
+    while (capacity < required) {
+        if (capacity > SIZE_MAX / 2u) ocean_tensor_fail("PagedKVCache has too many pages");
+        capacity *= 2u;
+    }
+    ocean_tensor_handle_t *keys = (ocean_tensor_handle_t *)calloc(capacity, sizeof(*keys));
+    ocean_tensor_handle_t *values = (ocean_tensor_handle_t *)calloc(capacity, sizeof(*values));
+    if (!keys || !values) {
+        free(keys);
+        free(values);
+        ocean_tensor_fail("out of memory growing PagedKVCache");
+    }
+    if (cache->page_count > 0) {
+        memcpy(keys, cache->key_pages, cache->page_count * sizeof(*keys));
+        memcpy(values, cache->value_pages, cache->page_count * sizeof(*values));
+    }
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    void *key_table = NULL;
+    void *value_table = NULL;
+    if (cache->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        if (capacity > (size_t)INT_MAX) {
+            free(keys);
+            free(values);
+            ocean_tensor_fail("PagedKVCache CUDA page count is too large");
+        }
+        key_table = ocean_cuda_page_table_create((int)capacity);
+        value_table = ocean_cuda_page_table_create((int)capacity);
+        for (size_t page = 0; page < cache->page_count; ++page) {
+            ocean_cuda_page_table_update(key_table, (int)page, cache->key_pages[page]->cuda_data);
+            ocean_cuda_page_table_update(value_table, (int)page, cache->value_pages[page]->cuda_data);
+        }
+    }
+#endif
+    free(cache->key_pages);
+    free(cache->value_pages);
+    cache->key_pages = keys;
+    cache->value_pages = values;
+    cache->page_capacity = capacity;
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (cache->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_cuda_page_table_release(cache->cuda_key_table);
+        ocean_cuda_page_table_release(cache->cuda_value_table);
+        cache->cuda_key_table = key_table;
+        cache->cuda_value_table = value_table;
+    }
+#endif
+}
+
+static void ocean_paged_kv_allocate_page(
+    ocean_paged_kv_cache_handle_t cache,
+    size_t page
+) {
+    ocean_paged_kv_reserve(cache, page + 1u);
+    if (cache->key_pages[page] != NULL) return;
+    size_t shape[4] = {cache->batches, cache->heads, cache->page_size, cache->head_dim};
+    const char *device = ocean_paged_kv_device_name(cache->device);
+    cache->key_pages[page] = ocean_tensor_zeros_nd(shape, 4, "float32", device);
+    cache->value_pages[page] = ocean_tensor_zeros_nd(shape, 4, "float32", device);
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (cache->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_cuda_page_table_update(cache->cuda_key_table, (int)page, cache->key_pages[page]->cuda_data);
+        ocean_cuda_page_table_update(cache->cuda_value_table, (int)page, cache->value_pages[page]->cuda_data);
+    }
+#endif
+    if (page >= cache->page_count) cache->page_count = page + 1u;
+}
+
+ocean_paged_kv_cache_handle_t ocean_paged_kv_cache_create(
+    int batches, int heads, int head_dim, int page_size, const char *device
+) {
+    if (batches <= 0 || heads <= 0 || head_dim <= 0 || page_size <= 0 || !device) {
+        ocean_tensor_fail("PagedKVCache dimensions and device must be valid");
+    }
+    ocean_tensor_backend_kind backend;
+    if (strcmp(device, "cpu") == 0) backend = OCEAN_TENSOR_BACKEND_CPU;
+    else if (strcmp(device, "gpu") == 0) backend = ocean_tensor_select_gpu_backend();
+    else if (strcmp(device, "cuda") == 0) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        backend = OCEAN_TENSOR_BACKEND_CUDA;
+#else
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+    }
+    else ocean_tensor_fail("PagedKVCache device must be cpu, gpu, or cuda");
+    if (backend != OCEAN_TENSOR_BACKEND_CPU && backend != OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_fail("PagedKVCache currently supports CPU or CUDA only");
+    }
+    ocean_paged_kv_cache_handle_t cache =
+        (ocean_paged_kv_cache_handle_t)calloc(1, sizeof(*cache));
+    if (!cache) ocean_tensor_fail("out of memory creating PagedKVCache");
+    cache->batches = (size_t)batches;
+    cache->heads = (size_t)heads;
+    cache->head_dim = (size_t)head_dim;
+    cache->page_size = (size_t)page_size;
+    cache->device = backend;
+    return cache;
+}
+
+void ocean_paged_kv_cache_release(ocean_paged_kv_cache_handle_t cache) {
+    if (!cache) return;
+    for (size_t page = 0; page < cache->page_count; ++page) {
+        ocean_tensor_release(cache->key_pages[page]);
+        ocean_tensor_release(cache->value_pages[page]);
+    }
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    ocean_cuda_page_table_release(cache->cuda_key_table);
+    ocean_cuda_page_table_release(cache->cuda_value_table);
+#endif
+    free(cache->key_pages);
+    free(cache->value_pages);
+    free(cache);
+}
+
+int ocean_paged_kv_cache_length(ocean_paged_kv_cache_handle_t cache) {
+    if (!cache || cache->length > (size_t)INT_MAX) ocean_tensor_fail("invalid PagedKVCache length");
+    return (int)cache->length;
+}
+
+int ocean_paged_kv_cache_page_size(ocean_paged_kv_cache_handle_t cache) {
+    if (!cache || cache->page_size > (size_t)INT_MAX) ocean_tensor_fail("invalid PagedKVCache page size");
+    return (int)cache->page_size;
+}
+
+void ocean_paged_kv_cache_write(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t value,
+    int position
+) {
+    if (!cache || !key || !value || position < 0 || key->dtype != OCEAN_TENSOR_FLOAT32 ||
+        value->dtype != OCEAN_TENSOR_FLOAT32 || key->ndim != 4 || value->ndim != 4 ||
+        key->shape[0] != cache->batches || key->shape[1] != cache->heads ||
+        value->shape[0] != cache->batches || value->shape[1] != cache->heads ||
+        key->shape[2] == 0 || key->shape[2] != value->shape[2] ||
+        key->shape[3] != cache->head_dim || value->shape[3] != cache->head_dim ||
+        key->device != cache->device || value->device != cache->device ||
+        !ocean_tensor_is_contiguous(key) || !ocean_tensor_is_contiguous(value)) {
+        ocean_tensor_fail("PagedKVCache.write metadata mismatch");
+    }
+    size_t sequence = key->shape[2];
+    size_t offset = (size_t)position;
+    if (offset > cache->length) {
+        ocean_tensor_fail("PagedKVCache.write cannot leave gaps in the cache");
+    }
+    size_t end = offset + sequence;
+    if (end < offset) ocean_tensor_fail("PagedKVCache.write position overflow");
+    size_t first_page = offset / cache->page_size;
+    size_t last_page = (end - 1u) / cache->page_size;
+    for (size_t page = first_page; page <= last_page; ++page) {
+        ocean_paged_kv_allocate_page(cache, page);
+        size_t page_start = page * cache->page_size;
+        size_t source_start = page_start > offset ? page_start - offset : 0;
+        size_t destination_start = offset > page_start ? offset - page_start : 0;
+        size_t count = cache->page_size - destination_start;
+        if (count > sequence - source_start) count = sequence - source_start;
+        ocean_tensor_handle_t key_slice = ocean_tensor_slice(key, 2, (int)source_start, (int)(source_start + count), 1);
+        ocean_tensor_handle_t value_slice = ocean_tensor_slice(value, 2, (int)source_start, (int)(source_start + count), 1);
+        ocean_tensor_handle_t key_contiguous = ocean_tensor_is_contiguous(key_slice) ? key_slice : ocean_tensor_contiguous(key_slice);
+        ocean_tensor_handle_t value_contiguous = ocean_tensor_is_contiguous(value_slice) ? value_slice : ocean_tensor_contiguous(value_slice);
+        ocean_tensor_cache_write(cache->key_pages[page], key_contiguous, (int)destination_start);
+        ocean_tensor_cache_write(cache->value_pages[page], value_contiguous, (int)destination_start);
+        if (key_contiguous != key_slice) ocean_tensor_release(key_contiguous);
+        if (value_contiguous != value_slice) ocean_tensor_release(value_contiguous);
+        ocean_tensor_release(key_slice);
+        ocean_tensor_release(value_slice);
+    }
+    if (end > cache->length) cache->length = end;
+}
+
+static ocean_tensor_handle_t ocean_paged_kv_materialize(
+    ocean_paged_kv_cache_handle_t cache, bool values
+) {
+    size_t shape[4] = {cache->batches, cache->heads, cache->length, cache->head_dim};
+    ocean_tensor_handle_t result = ocean_tensor_empty_nd(shape, 4, "float32", ocean_paged_kv_device_name(cache->device));
+    for (size_t page = 0; page < cache->page_count; ++page) {
+        size_t start = page * cache->page_size;
+        if (start >= cache->length) break;
+        size_t count = cache->length - start;
+        if (count > cache->page_size) count = cache->page_size;
+        ocean_tensor_handle_t source = values ? cache->value_pages[page] : cache->key_pages[page];
+        ocean_tensor_handle_t slice = ocean_tensor_slice(source, 2, 0, (int)count, 1);
+        ocean_tensor_handle_t contiguous = ocean_tensor_is_contiguous(slice) ? slice : ocean_tensor_contiguous(slice);
+        ocean_tensor_cache_write(result, contiguous, (int)start);
+        if (contiguous != slice) ocean_tensor_release(contiguous);
+        ocean_tensor_release(slice);
+    }
+    return result;
+}
+
+ocean_tensor_handle_t ocean_paged_kv_cache_materialize_key(ocean_paged_kv_cache_handle_t cache) {
+    if (!cache) ocean_tensor_fail("PagedKVCache.materialize_key on null cache");
+    return ocean_paged_kv_materialize(cache, false);
+}
+
+ocean_tensor_handle_t ocean_paged_kv_cache_materialize_value(ocean_paged_kv_cache_handle_t cache) {
+    if (!cache) ocean_tensor_fail("PagedKVCache.materialize_value on null cache");
+    return ocean_paged_kv_materialize(cache, true);
+}
+
+ocean_tensor_handle_t ocean_paged_kv_cache_sparse_attention_routed(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t query,
+    ocean_tensor_handle_t route,
+    int active_length,
+    int block_size,
+    double scale,
+    int query_start,
+    bool causal
+) {
+    if (!cache || !query || !route || query->dtype != OCEAN_TENSOR_FLOAT32 ||
+        route->dtype != OCEAN_TENSOR_INT32 || query->ndim != 4 || route->ndim != 3 ||
+        block_size <= 0 || (size_t)block_size != cache->page_size || active_length <= 0 ||
+        (size_t)active_length > cache->length || query_start < 0 ||
+        query->shape[0] != cache->batches || query->shape[1] != cache->heads ||
+        query->shape[3] != cache->head_dim || route->shape[0] != cache->batches ||
+        route->shape[1] != cache->heads || query->device != cache->device ||
+        !ocean_tensor_is_contiguous(query) || !ocean_tensor_is_contiguous(route)) {
+        ocean_tensor_fail("PagedKVCache routed attention metadata mismatch");
+    }
+    size_t query_length = query->shape[2];
+    if ((size_t)query_start + query_length > (size_t)active_length) ocean_tensor_fail("PagedKVCache query range is invalid");
+    if (route->shape[2] > (size_t)INT_MAX) ocean_tensor_fail("PagedKVCache route is too large");
+    int route_blocks = (int)route->shape[2];
+    float score_scale = scale == 0.0 ? 1.0f / sqrtf((float)cache->head_dim) : (float)scale;
+    if (!(score_scale > 0.0f) || !isfinite(score_scale)) ocean_tensor_fail("PagedKVCache attention scale must be positive");
+    ocean_tensor_handle_t result = ocean_tensor_alloc_uninitialized(query->shape, query->ndim, OCEAN_TENSOR_FLOAT32, query->device);
+    if (cache->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (query_length > (size_t)INT_MAX || route->shape[2] > 64 || cache->head_dim > 128 || cache->page_size > (size_t)INT_MAX) {
+            ocean_tensor_release(result);
+            ocean_tensor_fail("CUDA PagedKVCache attention metadata is unsupported");
+        }
+        ocean_cuda_sparse_attention_routed_paged(query->cuda_data, cache->cuda_key_table, cache->cuda_value_table, route->cuda_data, result->cuda_data, (int)cache->batches, (int)cache->heads, (int)query_length, active_length, (int)cache->head_dim, route_blocks, (int)cache->page_size, score_scale, query_start, causal ? 1 : 0);
+        return result;
+#else
+        ocean_tensor_release(result);
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+    }
+    if (cache->device != OCEAN_TENSOR_BACKEND_CPU) {
+        ocean_tensor_release(result);
+        ocean_tensor_fail("PagedKVCache attention supports CPU or CUDA only");
+    }
+    const float *query_data = (const float *)query->cpu_data;
+    const int32_t *route_data = (const int32_t *)route->cpu_data;
+    float *result_data = (float *)result->cpu_data;
+    size_t max_tokens = (size_t)route_blocks * cache->page_size;
+    float *scores = (float *)malloc(max_tokens * sizeof(float));
+    int32_t *pages = (int32_t *)malloc(max_tokens * sizeof(int32_t));
+    int32_t *locals = (int32_t *)malloc(max_tokens * sizeof(int32_t));
+    if (!scores || !pages || !locals) {
+        free(scores); free(pages); free(locals); ocean_tensor_release(result);
+        ocean_tensor_fail("out of memory in PagedKVCache attention");
+    }
+    for (size_t batch = 0; batch < cache->batches; ++batch) {
+        for (size_t head = 0; head < cache->heads; ++head) {
+            size_t route_base = (batch * cache->heads + head) * (size_t)route_blocks;
+            for (size_t query_index = 0; query_index < query_length; ++query_index) {
+                size_t query_base = ((batch * cache->heads + head) * query_length + query_index) * cache->head_dim;
+                int absolute_query = query_start + (int)query_index;
+                size_t selected = 0;
+                for (int route_index = 0; route_index < route_blocks; ++route_index) {
+                    int block = route_data[route_base + (size_t)route_index];
+                    if (block < 0 || (size_t)block >= cache->page_count) continue;
+                    size_t start = (size_t)block * cache->page_size;
+                    size_t end = start + cache->page_size;
+                    if (end > (size_t)active_length) end = (size_t)active_length;
+                    if (causal && end > (size_t)absolute_query + 1u) end = (size_t)absolute_query + 1u;
+                    if (start >= end) continue;
+                    const float *key_data = (const float *)cache->key_pages[block]->cpu_data;
+                    for (size_t token = start; token < end; ++token) {
+                        size_t local = token - start;
+                        size_t key_base = ((batch * cache->heads + head) * cache->page_size + local) * cache->head_dim;
+                        float score = 0.0f;
+                        for (size_t dimension = 0; dimension < cache->head_dim; ++dimension) score += query_data[query_base + dimension] * key_data[key_base + dimension];
+                        scores[selected] = score * score_scale;
+                        pages[selected] = block;
+                        locals[selected] = (int32_t)local;
+                        ++selected;
+                    }
+                }
+                if (selected == 0) {
+                    memset(result_data + query_base, 0, cache->head_dim * sizeof(float));
+                    continue;
+                }
+                float maximum = -INFINITY;
+                for (size_t index = 0; index < selected; ++index) if (scores[index] > maximum) maximum = scores[index];
+                float denominator = 0.0f;
+                for (size_t index = 0; index < selected; ++index) { scores[index] = expf(scores[index] - maximum); denominator += scores[index]; }
+                for (size_t dimension = 0; dimension < cache->head_dim; ++dimension) {
+                    float context = 0.0f;
+                    for (size_t index = 0; index < selected; ++index) {
+                        const float *value_data = (const float *)cache->value_pages[pages[index]]->cpu_data;
+                        size_t value_base = ((batch * cache->heads + head) * cache->page_size + (size_t)locals[index]) * cache->head_dim;
+                        context += (scores[index] / denominator) * value_data[value_base + dimension];
+                    }
+                    result_data[query_base + dimension] = context;
+                }
+            }
+        }
+    }
+    free(scores); free(pages); free(locals);
+    return result;
 }
 
 int ocean_tensor_argmax(ocean_tensor_handle_t tensor) {

@@ -422,3 +422,46 @@ class Tensor:
         ocean_tensor_release(self.handle)
         self.handle = None
         return None
+
+
+# A page-backed K/V store. Pages are allocated lazily and routed attention
+# reads them directly without materializing one contiguous cache.
+class PagedKVCache:
+    def __init__(self, handle: ocean_paged_kv_cache_handle_t):
+        self.handle = handle
+
+    @staticmethod
+    def create(batches: int, heads: int, head_dim: int, page_size: int, device: str) -> PagedKVCache:
+        var handle: ocean_paged_kv_cache_handle_t = ocean_paged_kv_cache_create(batches, heads, head_dim, page_size, device)
+        var result: PagedKVCache = PagedKVCache(handle)
+        return result
+
+    def length(self) -> int:
+        return ocean_paged_kv_cache_length(self.handle)
+
+    def page_size(self) -> int:
+        return ocean_paged_kv_cache_page_size(self.handle)
+
+    def write(self, key: &Tensor, value: &Tensor, position: int) -> None:
+        ocean_paged_kv_cache_write(self.handle, key.handle, value.handle, position)
+        return None
+
+    def materialize_key(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_paged_kv_cache_materialize_key(self.handle)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def materialize_value(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_paged_kv_cache_materialize_value(self.handle)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def sparse_attention(self, query: &Tensor, route: &Tensor, active_length: int, block_size: int, scale: float64, query_start: int, causal: bool) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_paged_kv_cache_sparse_attention_routed(self.handle, query.handle, route.handle, active_length, block_size, scale, query_start, causal)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def release(self) -> None:
+        ocean_paged_kv_cache_release(self.handle)
+        self.handle = None
+        return None

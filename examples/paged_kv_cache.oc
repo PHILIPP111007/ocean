@@ -1,0 +1,15 @@
+import <std/tensor/tensor.oc>
+
+
+def main() -> int:
+    var cache: PagedKVCache = PagedKVCache.create(1, 1, 2, 2, "cpu")
+    var key: Tensor[float32] = Tensor.zeros(1, 1, 4, 2, "cpu")
+    var value: Tensor[float32] = Tensor.zeros(1, 1, 4, 2, "cpu")
+    cache.write(key, value, 0)
+
+    print("cache length =", cache.length())
+    print("page size =", cache.page_size())
+
+    var materialized: Tensor[float32] = cache.materialize_key()
+    print("materialized size =", materialized.size())
+    return 0

@@ -121,6 +121,27 @@ each token does not allocate or copy temporary KV-cache and summary slices.
 The non-`active` methods remain available for ordinary tensors whose physical
 length is also the logical attention length.
 
+## Paged K/V cache
+
+`PagedKVCache` stores K/V tensors in lazily allocated pages instead of one
+preallocated contiguous cache:
+
+```text
+var cache: PagedKVCache = PagedKVCache.create(1, 12, 64, 128, "gpu")
+cache.write(key, value, 0)
+var output: Tensor[float32] = cache.sparse_attention(
+    query, route, cache.length(), 128, 0.0, query_start, true
+)
+```
+
+Pages have shape `[B, H, page_size, D]`. Writes are append/overwrite writes and
+must not leave gaps. `materialize_key()` and `materialize_value()` are explicit
+`O(active_length)` compatibility operations; routed attention reads page storage
+directly. The CPU reference is covered by a regression test, while the CUDA
+kernel requires validation in an environment with `nvcc` and a CUDA device.
+The GPT-2 model is not switched to this API yet: its summaries and hierarchy
+must first become page-native so migration does not duplicate the K/V memory.
+
 ## NumPy `.npy` files
 
 `Tensor.load_npy(path, device)` and `tensor.save_npy(path)` provide a

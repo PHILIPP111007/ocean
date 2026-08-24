@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 typedef struct ocean_tensor_handle *ocean_tensor_handle_t;
+typedef struct ocean_paged_kv_cache *ocean_paged_kv_cache_handle_t;
 
 
 
@@ -78,6 +79,38 @@ void ocean_tensor_cache_write(
     ocean_tensor_handle_t cache,
     ocean_tensor_handle_t value,
     int position
+);
+ocean_paged_kv_cache_handle_t ocean_paged_kv_cache_create(
+    int batches,
+    int heads,
+    int head_dim,
+    int page_size,
+    const char *device
+);
+void ocean_paged_kv_cache_release(ocean_paged_kv_cache_handle_t cache);
+int ocean_paged_kv_cache_length(ocean_paged_kv_cache_handle_t cache);
+int ocean_paged_kv_cache_page_size(ocean_paged_kv_cache_handle_t cache);
+void ocean_paged_kv_cache_write(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t value,
+    int position
+);
+ocean_tensor_handle_t ocean_paged_kv_cache_materialize_key(
+    ocean_paged_kv_cache_handle_t cache
+);
+ocean_tensor_handle_t ocean_paged_kv_cache_materialize_value(
+    ocean_paged_kv_cache_handle_t cache
+);
+ocean_tensor_handle_t ocean_paged_kv_cache_sparse_attention_routed(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t query,
+    ocean_tensor_handle_t route,
+    int active_length,
+    int block_size,
+    double scale,
+    int query_start,
+    bool causal
 );
 int ocean_tensor_argmax(ocean_tensor_handle_t tensor);
 ocean_tensor_handle_t ocean_tensor_to(ocean_tensor_handle_t tensor, const char *device);

@@ -1706,6 +1706,118 @@ __global__ void ocean_cuda_sparse_routed_attention_kernel(
     }
 }
 
+__global__ void ocean_cuda_sparse_routed_attention_paged_kernel(
+    const float *query,
+    const float * const *key_pages,
+    const float * const *value_pages,
+    const int32_t *route,
+    float *output,
+    int batches,
+    int heads,
+    int query_length,
+    int active_length,
+    int head_dim,
+    int route_blocks,
+    int page_size,
+    float scale,
+    int query_start,
+    int causal
+) {
+    extern __shared__ unsigned char storage[];
+    float *q_vector = (float *)storage;
+    int max_tokens = route_blocks * page_size;
+    float *scores = q_vector + head_dim;
+    float *context = scores + max_tokens;
+    int *selected_count = (int *)(context + head_dim);
+    size_t group = (size_t)blockIdx.x;
+    size_t total = (size_t)batches * (size_t)heads *
+        (size_t)query_length;
+    if (group >= total) return;
+    int query_index = (int)(group % (size_t)query_length);
+    size_t head_group = group / (size_t)query_length;
+    int head = (int)(head_group % (size_t)heads);
+    int batch = (int)(head_group / (size_t)heads);
+    int lane = (int)threadIdx.x;
+    int absolute_query = query_start + query_index;
+    size_t query_base = ((size_t)batch * (size_t)heads + (size_t)head) *
+        (size_t)query_length * (size_t)head_dim +
+        (size_t)query_index * (size_t)head_dim;
+    if (lane < head_dim) q_vector[lane] = query[query_base + (size_t)lane];
+    __syncthreads();
+    if (lane == 0) {
+        int chosen = 0;
+        size_t route_base = ((size_t)batch * (size_t)heads + (size_t)head) *
+            (size_t)route_blocks;
+        for (int route_index = 0; route_index < route_blocks; ++route_index) {
+            int page = route[route_base + (size_t)route_index];
+            if (page < 0) continue;
+            int start = page * page_size;
+            int end = start + page_size;
+            if (end > active_length) end = active_length;
+            if (causal && end > absolute_query + 1) end = absolute_query + 1;
+            if (start < 0 || start >= end) continue;
+            const float *key_page = key_pages[page];
+            for (int token = start; token < end && chosen < max_tokens; ++token) {
+                int local = token - start;
+                size_t key_base = ((size_t)batch * (size_t)heads +
+                    (size_t)head) * (size_t)page_size * (size_t)head_dim +
+                    (size_t)local * (size_t)head_dim;
+                float score = 0.0f;
+                for (int dimension = 0; dimension < head_dim; ++dimension) {
+                    score += q_vector[dimension] *
+                        key_page[key_base + (size_t)dimension];
+                }
+                scores[chosen++] = score * scale;
+            }
+        }
+        float maximum = -INFINITY;
+        for (int index = 0; index < chosen; ++index) {
+            if (scores[index] > maximum) maximum = scores[index];
+        }
+        float denominator = 0.0f;
+        for (int index = 0; index < chosen; ++index) {
+            scores[index] = expf(scores[index] - maximum);
+            denominator += scores[index];
+        }
+        if (denominator > 0.0f) {
+            for (int index = 0; index < chosen; ++index) {
+                scores[index] /= denominator;
+            }
+        }
+        *selected_count = chosen;
+    }
+    __syncthreads();
+    if (lane < head_dim) context[lane] = 0.0f;
+    __syncthreads();
+    if (lane < head_dim) {
+        int selected = 0;
+        size_t route_base = ((size_t)batch * (size_t)heads + (size_t)head) *
+            (size_t)route_blocks;
+        for (int route_index = 0; route_index < route_blocks; ++route_index) {
+            int page = route[route_base + (size_t)route_index];
+            if (page < 0) continue;
+            int start = page * page_size;
+            int end = start + page_size;
+            if (end > active_length) end = active_length;
+            if (causal && end > absolute_query + 1) end = absolute_query + 1;
+            if (start < 0 || start >= end) continue;
+            const float *value_page = value_pages[page];
+            for (int token = start; token < end && selected < *selected_count; ++token) {
+                int local = token - start;
+                size_t value_base = ((size_t)batch * (size_t)heads +
+                    (size_t)head) * (size_t)page_size * (size_t)head_dim +
+                    (size_t)local * (size_t)head_dim;
+                context[lane] += scores[selected] *
+                    value_page[value_base + (size_t)lane];
+                ++selected;
+            }
+        }
+    }
+    if (lane < head_dim) {
+        output[query_base + (size_t)lane] = context[lane];
+    }
+}
+
 __global__ void ocean_cuda_embedding_kernel(
     const float *weight, const int64_t *indices, float *output,
     int index_count, int vocab, int dim
@@ -2235,6 +2347,70 @@ void ocean_cuda_sparse_attention_routed(
         route_blocks, block_size, scale, query_start, causal
     );
     ocean_cuda_check_launch("routed sparse attention kernel");
+}
+
+void *ocean_cuda_page_table_create(int capacity) {
+    if (capacity <= 0) return NULL;
+    void *table = NULL;
+    ocean_cuda_check(cudaMalloc(&table, (size_t)capacity * sizeof(void *)),
+        "cudaMalloc page table");
+    ocean_cuda_check(cudaMemset(table, 0, (size_t)capacity * sizeof(void *)),
+        "cudaMemset page table");
+    return table;
+}
+
+void ocean_cuda_page_table_update(
+    void *table,
+    int index,
+    const void *page
+) {
+    if (!table || index < 0) return;
+    ocean_cuda_check(
+        cudaMemcpy(
+            (unsigned char *)table + (size_t)index * sizeof(void *),
+            &page, sizeof(void *), cudaMemcpyHostToDevice
+        ),
+        "cudaMemcpy page table entry"
+    );
+}
+
+void ocean_cuda_page_table_release(void *table) {
+    if (table != NULL) ocean_cuda_check(cudaFree(table), "cudaFree page table");
+}
+
+void ocean_cuda_sparse_attention_routed_paged(
+    const void *query,
+    const void *key_pages,
+    const void *value_pages,
+    const void *route,
+    void *output,
+    int batches,
+    int heads,
+    int query_length,
+    int active_length,
+    int head_dim,
+    int route_blocks,
+    int page_size,
+    float scale,
+    int query_start,
+    int causal
+) {
+    size_t total = (size_t)batches * (size_t)heads * (size_t)query_length;
+    if (total == 0) return;
+    size_t shared_bytes = (size_t)head_dim * sizeof(float) +
+        (size_t)route_blocks * (size_t)page_size * sizeof(float) +
+        (size_t)head_dim * sizeof(float) + sizeof(int);
+    ocean_cuda_sparse_routed_attention_paged_kernel<<<
+        (int)total, 128, shared_bytes
+    >>>(
+        (const float *)query,
+        (const float * const *)key_pages,
+        (const float * const *)value_pages,
+        (const int32_t *)route, (float *)output,
+        batches, heads, query_length, active_length, head_dim, route_blocks,
+        page_size, scale, query_start, causal
+    );
+    ocean_cuda_check_launch("paged routed sparse attention kernel");
 }
 
 void ocean_cuda_embedding_forward(const void *weight, const void *indices, void *output, int index_count, int vocab, int dim) {

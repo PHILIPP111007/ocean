@@ -226,6 +226,30 @@ void ocean_cuda_cache_slice(
     int width,
     int start
 );
+void *ocean_cuda_page_table_create(int capacity);
+void ocean_cuda_page_table_update(
+    void *table,
+    int index,
+    const void *page
+);
+void ocean_cuda_page_table_release(void *table);
+void ocean_cuda_sparse_attention_routed_paged(
+    const void *query,
+    const void *key_pages,
+    const void *value_pages,
+    const void *route,
+    void *output,
+    int batches,
+    int heads,
+    int query_length,
+    int active_length,
+    int head_dim,
+    int route_blocks,
+    int page_size,
+    float scale,
+    int query_start,
+    int causal
+);
 void ocean_cuda_sparse_build_summaries(
     const void *key,
     void *summaries,

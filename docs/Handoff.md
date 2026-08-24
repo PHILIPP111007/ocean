@@ -3688,6 +3688,48 @@ sequence parallelism, memory-mapped/offloaded storage, distributed KV/summaries
 
 ---
 
+# 80.2 PagedKVCache v0.1
+
+Добавлен отдельный page-backed API для K/V-cache:
+
+```text
+PagedKVCache.create(batches, heads, head_dim, page_size, device)
+cache.write(key, value, position)
+cache.length()
+cache.page_size()
+cache.materialize_key()
+cache.materialize_value()
+cache.sparse_attention(query, route, active_length, block_size, scale, query_start, causal)
+```
+
+Каждая страница хранится как Tensor формы `[B, H, page_size, D]` и выделяется
+лениво при первом `write()`. Запись должна быть непрерывной: разрешены append и
+перезапись уже существующего префикса, но нельзя оставлять пропуски между
+позициями. `materialize_*()` — явная compatibility-операция `O(active_length)`,
+а paged routed attention читает страницы напрямую и не собирает contiguous K/V.
+
+CPU reference выполняет exact softmax по токенам из переданных route-блоков.
+Для CUDA добавлены device page tables и kernel, который использует те же страницы
+без промежуточной материализации. В текущем окружении `nvcc` отсутствует, поэтому
+CUDA compilation и numerical agreement на NVIDIA ещё требуют проверки в CUDA
+checkout. OpenCL для этого API намеренно не используется: его page-pointer ABI
+отличается от CUDA и будет добавлен отдельным backend-проектированием.
+
+Важно: GPT-2 пока продолжает использовать существующий contiguous KV-cache.
+Простая замена только K/V на `PagedKVCache` с сохранением старых summaries и
+hierarchy создала бы две копии данных. Следующий этап — перенести summaries и
+hierarchical index на page-native storage, после чего переключить GPT-2 на один
+PagedKVCache и измерить memory/prefill/decode отдельно.
+
+## 80.2.1 Regression status
+
+Добавлены CPU ABI/integration regression и пример
+`examples/paged_kv_cache.oc`. Проверяются page size, logical length,
+cross-page materialization и численное совпадение paged attention с dense
+reference на том же route.
+
+---
+
 # 81. Ближайший порядок работ
 
 ```text
@@ -3702,6 +3744,8 @@ P7  hierarchical summary index + incremental leaf-to-root updates -> реали�
 P8  переиспользовать CUDA inference workspace и распараллелить serial selector
 P9  сравнить refresh interval 25/50/100 и semantic/random block budgets
 P10 после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
+P11 page-native summaries/hierarchy и миграция GPT2 с contiguous KV-cache на PagedKVCache
+P12 CUDA hardware validation для PagedKVCache и memory/throughput benchmark
 ```
 
 Backend/server vertical остаётся равноправной частью проекта: long-context ML
