@@ -89,6 +89,7 @@ def main() -> int:
     var dense_next: int = dense_logits.argmax()
     var sparse_next: int = sparse_logits.argmax()
     var max_logit_difference: float64 = max_abs_difference(dense_logits, sparse_logits, config.vocab_size)
+    var scaled_logit_difference: float64 = max_logit_difference * 1000000.0
 
     model.set_sparse_prefill_threshold(1000000)
     var dense_generated: Tensor[int64] = model.generate_greedy_kv(prompt_gpu, new_tokens, positions_gpu)
@@ -106,7 +107,7 @@ def main() -> int:
     print("sparse path used sparse =", sparse_path_used_sparse)
     print("prefill argmax match =", dense_next == sparse_next)
     print("max prefill logit abs diff =", max_logit_difference)
-    print("scaled prefill logit diff =", max_logit_difference * 1000000.0)
+    print("scaled prefill logit diff =", scaled_logit_difference)
     print("generated token agreement =", matching_tokens, "/", new_tokens)
     print("[ok] Ocean long-context quality comparison")
     return 0

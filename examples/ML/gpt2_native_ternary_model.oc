@@ -170,6 +170,34 @@ class GPT2KVCache:
         self.s11: Tensor[float32] = Tensor.zeros(1, n_heads, summary_blocks, head_dim, device)
         self.s12: Tensor[float32] = Tensor.zeros(1, n_heads, summary_blocks, head_dim, device)
 
+        # Sticky semantic routes: five cosine-selected blocks plus one
+        # deterministic exploration block. A route is refreshed every 50
+        # decoded tokens and is built from the latest 100 cached keys.
+        self.r1: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r2: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r3: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r4: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r5: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r6: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r7: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r8: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r9: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r10: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r11: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.r12: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        self.route_age1: int = 50
+        self.route_age2: int = 50
+        self.route_age3: int = 50
+        self.route_age4: int = 50
+        self.route_age5: int = 50
+        self.route_age6: int = 50
+        self.route_age7: int = 50
+        self.route_age8: int = 50
+        self.route_age9: int = 50
+        self.route_age10: int = 50
+        self.route_age11: int = 50
+        self.route_age12: int = 50
+
     def prepare_sparse(self, active_length: int, n_layers: int) -> None:
         if n_layers > 0:
             self.s1 = self.k1.sparse_attention_build_summaries_active(active_length, 64)
@@ -301,9 +329,9 @@ class GPT2Attention(Module):
         var merged: Tensor[float32] = context_bthd.reshape([batch_size, sequence_length, self.d_model])
         return self.out_proj.forward(merged)
 
-    def forward_cached(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], summary: &Tensor[float32], position: int) -> Tensor[float32]:
+    def forward_cached(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], summary: &Tensor[float32], route: &Tensor[int32], refresh_route: bool, position: int) -> Tensor[float32]:
         if input.device() == "gpu" and input.sparse_attention_cuda_available() and Tensor.grad_enabled() == False and self.q_proj.inference_ready and self.k_proj.inference_ready and self.v_proj.inference_ready:
-            return self.forward_cached_sparse(input, cache_k, cache_v, summary, position)
+            return self.forward_cached_sparse(input, cache_k, cache_v, summary, route, refresh_route, position)
         var batch_size: int = input.shape(0)
         var q_linear: Tensor[float32] = self.q_proj.forward(input)
         var k_linear: Tensor[float32] = self.k_proj.forward(input)
@@ -373,7 +401,18 @@ class GPT2Attention(Module):
         cache_k.cache_write(k, 0)
         cache_v.cache_write(v, 0)
         var summary: Tensor[float32] = cache_k.sparse_attention_build_summaries_active(sequence_length, self.sparse_block_size)
-        var context: Tensor[float32] = q.sparse_attention_blocked_cached_active(cache_k, cache_v, summary, sequence_length, self.sparse_top_k, self.sparse_top_blocks, self.sparse_block_size, 1.0 / sqrt(self.head_dim), 0, True)
+        var context: Tensor[float32] = Tensor.empty(batch_size, self.n_heads, sequence_length, self.head_dim, input.device())
+        var chunk_start: int = 0
+        while chunk_start < sequence_length:
+            var chunk_end: int = chunk_start + 50
+            if chunk_end > sequence_length:
+                chunk_end = sequence_length
+            var route: Tensor[int32] = cache_k.sparse_attention_build_route_active(summary, chunk_end, 100, self.sparse_top_blocks, self.sparse_block_size, chunk_start + self.n_heads + self.d_model)
+            var query_chunk: Tensor[float32] = q.slice(2, chunk_start, chunk_end, 1)
+            var context_chunk: Tensor[float32] = query_chunk.sparse_attention_blocked_cached_routed(cache_k, cache_v, route, sequence_length, self.sparse_block_size, 1.0 / sqrt(self.head_dim), chunk_start, True)
+            var context_view: Tensor[float32] = context.slice(2, chunk_start, chunk_end, 1)
+            context_view.copy_into(context_chunk)
+            chunk_start = chunk_end
         var context_bthd: Tensor[float32] = context.permute([0, 2, 1, 3])
         var merged: Tensor[float32] = context_bthd.reshape([batch_size, sequence_length, self.d_model])
         return self.out_proj.forward(merged)
@@ -385,7 +424,7 @@ class GPT2Attention(Module):
     def prefill_sparse_used(self) -> bool:
         return self.last_prefill_sparse
 
-    def forward_cached_sparse(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], summary: &Tensor[float32], position: int) -> Tensor[float32]:
+    def forward_cached_sparse(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], summary: &Tensor[float32], route: &Tensor[int32], refresh_route: bool, position: int) -> Tensor[float32]:
         var batch_size: int = input.shape(0)
         var q_linear: Tensor[float32] = Tensor.empty(batch_size, 1, self.d_model, input.device())
         var k_linear: Tensor[float32] = Tensor.empty(batch_size, 1, self.d_model, input.device())
@@ -401,7 +440,9 @@ class GPT2Attention(Module):
         cache_v.cache_write(v, position)
         var active_length: int = position + 1
         summary.sparse_attention_update_summary_active(cache_k, active_length, position, self.sparse_block_size)
-        var context: Tensor[float32] = q.sparse_attention_blocked_cached_active(cache_k, cache_v, summary, active_length, self.sparse_top_k, self.sparse_top_blocks, self.sparse_block_size, 1.0 / sqrt(self.head_dim), position, True)
+        if refresh_route:
+            cache_k.sparse_attention_update_route_active(summary, route, active_length, 100, self.sparse_top_blocks, self.sparse_block_size, position + self.n_heads + self.d_model)
+        var context: Tensor[float32] = q.sparse_attention_blocked_cached_routed(cache_k, cache_v, route, active_length, self.sparse_block_size, 1.0 / sqrt(self.head_dim), position, True)
         var context_bthd: Tensor[float32] = context.permute([0, 2, 1, 3])
         var merged: Tensor[float32] = context_bthd.reshape([batch_size, 1, self.d_model])
         return self.out_proj.forward(merged)
@@ -486,9 +527,9 @@ class GPT2Block(Module):
         var feed_forward: Tensor[float32] = self.mlp.forward(normalized2)
         return residual.add(feed_forward)
 
-    def forward_cached(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], summary: &Tensor[float32], position: int) -> Tensor[float32]:
+    def forward_cached(self, input: &Tensor[float32], cache_k: &Tensor[float32], cache_v: &Tensor[float32], summary: &Tensor[float32], route: &Tensor[int32], refresh_route: bool, position: int) -> Tensor[float32]:
         var normalized: Tensor[float32] = self.ln_1.forward(input)
-        var attention_output: Tensor[float32] = self.attn.forward_cached(normalized, cache_k, cache_v, summary, position)
+        var attention_output: Tensor[float32] = self.attn.forward_cached(normalized, cache_k, cache_v, summary, route, refresh_route, position)
         var residual: Tensor[float32] = input.add(attention_output)
         var normalized2: Tensor[float32] = self.ln_2.forward(residual)
         var feed_forward: Tensor[float32] = self.mlp.forward(normalized2)
@@ -726,40 +767,100 @@ class GPT2Ternary(Module):
     def new_kv_cache(self, device: str) -> GPT2KVCache:
         return GPT2KVCache(self.n_heads, self.max_seq_len, self.d_model // self.n_heads, device)
 
-    def forward_cached_hidden(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &GPT2KVCache, position: int) -> Tensor[float32]:
+    def forward_cached_hidden(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &mut GPT2KVCache, position: int) -> Tensor[float32]:
         var token_hidden: Tensor[float32] = self.token_embedding.forward(tokens)
         var position_hidden: Tensor[float32] = self.position_embedding.forward(positions)
         var hidden: Tensor[float32] = token_hidden.add(position_hidden)
 
         if self.n_layers > 0:
-            hidden = self.block1.forward_cached(hidden, cache.k1, cache.v1, cache.s1, position)
+            var refresh1: bool = cache.route_age1 >= 50
+            hidden = self.block1.forward_cached(hidden, cache.k1, cache.v1, cache.s1, cache.r1, refresh1, position)
+            if refresh1:
+                cache.route_age1 = 0
+            else:
+                cache.route_age1 = cache.route_age1 + 1
         if self.n_layers > 1:
-            hidden = self.block2.forward_cached(hidden, cache.k2, cache.v2, cache.s2, position)
+            var refresh2: bool = cache.route_age2 >= 50
+            hidden = self.block2.forward_cached(hidden, cache.k2, cache.v2, cache.s2, cache.r2, refresh2, position)
+            if refresh2:
+                cache.route_age2 = 0
+            else:
+                cache.route_age2 = cache.route_age2 + 1
         if self.n_layers > 2:
-            hidden = self.block3.forward_cached(hidden, cache.k3, cache.v3, cache.s3, position)
+            var refresh3: bool = cache.route_age3 >= 50
+            hidden = self.block3.forward_cached(hidden, cache.k3, cache.v3, cache.s3, cache.r3, refresh3, position)
+            if refresh3:
+                cache.route_age3 = 0
+            else:
+                cache.route_age3 = cache.route_age3 + 1
         if self.n_layers > 3:
-            hidden = self.block4.forward_cached(hidden, cache.k4, cache.v4, cache.s4, position)
+            var refresh4: bool = cache.route_age4 >= 50
+            hidden = self.block4.forward_cached(hidden, cache.k4, cache.v4, cache.s4, cache.r4, refresh4, position)
+            if refresh4:
+                cache.route_age4 = 0
+            else:
+                cache.route_age4 = cache.route_age4 + 1
         if self.n_layers > 4:
-            hidden = self.block5.forward_cached(hidden, cache.k5, cache.v5, cache.s5, position)
+            var refresh5: bool = cache.route_age5 >= 50
+            hidden = self.block5.forward_cached(hidden, cache.k5, cache.v5, cache.s5, cache.r5, refresh5, position)
+            if refresh5:
+                cache.route_age5 = 0
+            else:
+                cache.route_age5 = cache.route_age5 + 1
         if self.n_layers > 5:
-            hidden = self.block6.forward_cached(hidden, cache.k6, cache.v6, cache.s6, position)
+            var refresh6: bool = cache.route_age6 >= 50
+            hidden = self.block6.forward_cached(hidden, cache.k6, cache.v6, cache.s6, cache.r6, refresh6, position)
+            if refresh6:
+                cache.route_age6 = 0
+            else:
+                cache.route_age6 = cache.route_age6 + 1
         if self.n_layers > 6:
-            hidden = self.block7.forward_cached(hidden, cache.k7, cache.v7, cache.s7, position)
+            var refresh7: bool = cache.route_age7 >= 50
+            hidden = self.block7.forward_cached(hidden, cache.k7, cache.v7, cache.s7, cache.r7, refresh7, position)
+            if refresh7:
+                cache.route_age7 = 0
+            else:
+                cache.route_age7 = cache.route_age7 + 1
         if self.n_layers > 7:
-            hidden = self.block8.forward_cached(hidden, cache.k8, cache.v8, cache.s8, position)
+            var refresh8: bool = cache.route_age8 >= 50
+            hidden = self.block8.forward_cached(hidden, cache.k8, cache.v8, cache.s8, cache.r8, refresh8, position)
+            if refresh8:
+                cache.route_age8 = 0
+            else:
+                cache.route_age8 = cache.route_age8 + 1
         if self.n_layers > 8:
-            hidden = self.block9.forward_cached(hidden, cache.k9, cache.v9, cache.s9, position)
+            var refresh9: bool = cache.route_age9 >= 50
+            hidden = self.block9.forward_cached(hidden, cache.k9, cache.v9, cache.s9, cache.r9, refresh9, position)
+            if refresh9:
+                cache.route_age9 = 0
+            else:
+                cache.route_age9 = cache.route_age9 + 1
         if self.n_layers > 9:
-            hidden = self.block10.forward_cached(hidden, cache.k10, cache.v10, cache.s10, position)
+            var refresh10: bool = cache.route_age10 >= 50
+            hidden = self.block10.forward_cached(hidden, cache.k10, cache.v10, cache.s10, cache.r10, refresh10, position)
+            if refresh10:
+                cache.route_age10 = 0
+            else:
+                cache.route_age10 = cache.route_age10 + 1
         if self.n_layers > 10:
-            hidden = self.block11.forward_cached(hidden, cache.k11, cache.v11, cache.s11, position)
+            var refresh11: bool = cache.route_age11 >= 50
+            hidden = self.block11.forward_cached(hidden, cache.k11, cache.v11, cache.s11, cache.r11, refresh11, position)
+            if refresh11:
+                cache.route_age11 = 0
+            else:
+                cache.route_age11 = cache.route_age11 + 1
         if self.n_layers > 11:
-            hidden = self.block12.forward_cached(hidden, cache.k12, cache.v12, cache.s12, position)
+            var refresh12: bool = cache.route_age12 >= 50
+            hidden = self.block12.forward_cached(hidden, cache.k12, cache.v12, cache.s12, cache.r12, refresh12, position)
+            if refresh12:
+                cache.route_age12 = 0
+            else:
+                cache.route_age12 = cache.route_age12 + 1
 
         var normalized: Tensor[float32] = self.ln_f.forward(hidden)
         return normalized
 
-    def forward_cached(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &GPT2KVCache, position: int) -> Tensor[float32]:
+    def forward_cached(self, tokens: &Tensor[int64], positions: &Tensor[int64], cache: &mut GPT2KVCache, position: int) -> Tensor[float32]:
         var normalized: Tensor[float32] = self.forward_cached_hidden(tokens, positions, cache, position)
         var lm_weight: Tensor[float32] = self.tied_lm_weight()
         return normalized.matmul(lm_weight)

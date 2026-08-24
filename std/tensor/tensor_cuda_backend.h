@@ -15,6 +15,15 @@ typedef struct ocean_cuda_broadcast_desc {
     size_t right_strides[OCEAN_CUDA_MAX_BROADCAST_RANK];
 } ocean_cuda_broadcast_desc;
 
+typedef struct ocean_cuda_strided_copy_desc {
+    int ndim;
+    size_t shape[OCEAN_CUDA_MAX_BROADCAST_RANK];
+    size_t source_strides[OCEAN_CUDA_MAX_BROADCAST_RANK];
+    size_t destination_strides[OCEAN_CUDA_MAX_BROADCAST_RANK];
+    size_t item_size;
+    size_t total;
+} ocean_cuda_strided_copy_desc;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -25,6 +34,11 @@ void ocean_cuda_memcpy_h2d(void *device_data, const void *host_data, size_t byte
 void ocean_cuda_memcpy_d2h(void *host_data, const void *device_data, size_t bytes);
 void ocean_cuda_memcpy_d2d(void *destination, const void *source, size_t bytes);
 void ocean_cuda_zero(void *device_data, size_t bytes);
+void ocean_cuda_copy_strided(
+    const void *source,
+    void *destination,
+    const ocean_cuda_strided_copy_desc *descriptor
+);
 void ocean_cuda_fill_f32(void *device_data, float value, size_t size);
 void ocean_cuda_fill_i32(void *device_data, int value, size_t size);
 void ocean_cuda_set_f32(void *device_data, size_t index, float value);
@@ -233,6 +247,39 @@ void ocean_cuda_sparse_update_summary(
     int head_dim,
     int block_size,
     int position
+);
+void ocean_cuda_sparse_build_route(
+    const void *key,
+    const void *summaries,
+    void *route,
+    int batches,
+    int heads,
+    int key_length,
+    int summary_blocks,
+    int active_length,
+    int head_dim,
+    int summary_window,
+    int semantic_blocks,
+    int block_size,
+    unsigned int random_seed
+);
+void ocean_cuda_sparse_attention_routed(
+    const void *query,
+    const void *key,
+    const void *value,
+    const void *route,
+    void *output,
+    int batches,
+    int heads,
+    int query_length,
+    int key_length,
+    int active_length,
+    int head_dim,
+    int route_blocks,
+    int block_size,
+    float scale,
+    int query_start,
+    int causal
 );
 void ocean_cuda_sparse_attention(
     const void *query,

@@ -145,6 +145,29 @@ int main(void) {
         );
     }
 
+    ocean_tensor_handle_t route =
+        ocean_tensor_sparse_attention_build_route_active(
+            key, summaries, 4, 4, 1, 2, 17
+        );
+    if (ocean_tensor_shape(route, 2) != 2) {
+        fprintf(stderr, "unexpected sparse route width\n");
+        return 1;
+    }
+    ocean_tensor_handle_t routed =
+        ocean_tensor_sparse_attention_blocked_cached_routed(
+            query, key, value, route, 4, 2, 1.0, 0, false
+        );
+    ocean_tensor_handle_t full = ocean_tensor_sparse_attention(
+        query, key, value, 4, 1.0, 0, false
+    );
+    for (size_t i = 0; i < 4; ++i) {
+        check_close(
+            ocean_tensor_get_flat_f32(routed, i),
+            ocean_tensor_get_flat_f32(full, i),
+            "routed attention with complete route"
+        );
+    }
+
     ocean_tensor_handle_t causal = ocean_tensor_sparse_attention(
         query, key, value, 4, 1.0, 0, true
     );
@@ -162,6 +185,9 @@ int main(void) {
     );
 
     ocean_tensor_release(causal);
+    ocean_tensor_release(full);
+    ocean_tensor_release(routed);
+    ocean_tensor_release(route);
     ocean_tensor_release(active_cached);
     ocean_tensor_release(active_reference);
     ocean_tensor_release(active_summaries);

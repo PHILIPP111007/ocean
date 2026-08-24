@@ -3542,6 +3542,48 @@ decode. Это ещё не означает прирост tokens/sec: на ко
 split/slice и serial selector может быть выше dense fused kernel. Нужны CUDA
 benchmark и numerical comparison с прежним dense path.
 
+## 80.1.4 Chunked sticky semantic routing v0.4
+
+Для следующего эксперимента добавлен отдельный explicit-route API. Он отделяет
+выбор блоков от самого attention:
+
+```c
+route = ocean_tensor_sparse_attention_build_route_active(
+    key_cache, summaries, active_length,
+    summary_window=100, semantic_blocks=5,
+    block_size=64, random_seed
+);
+output = ocean_tensor_sparse_attention_blocked_cached_routed(
+    query, key_cache, value_cache, route,
+    active_length, block_size, scale,
+    query_start, causal
+);
+```
+
+Route строит mean-вектор последних 100 доступных K-токенов, сравнивает его с
+block summaries по cosine similarity, сохраняет 5 лучших блоков и добавляет
+один deterministic pseudo-random exploration block. Routed attention выполняет
+полный softmax только внутри выбранных блоков.
+
+GPT-2 prefill переиспользует один route для 50 query-токенов и затем строит
+следующий route. Autoregressive decode хранит route в `GPT2KVCache`, обновляет
+его после каждых 50 токенов и использует summary последних 100 K-токенов.
+Таким образом, параметры алгоритма разделены явно:
+
+```text
+summary_window   = 100
+route_refresh    = 50
+semantic_blocks  = 5
+random_blocks    = 1
+block_size       = 64
+```
+
+Добавлены CPU reference paths и regression test для explicit route. Native CUDA
+route-builder и routed-attention kernels добавлены, но их аппаратную компиляцию
+нужно выполнить в окружении с `nvcc`; локальный checkout CUDA не проверяет.
+Следующая обязательная проверка — сравнить chunked route с dense path на разных
+prompt’ах и отдельно измерить routing, routed attention и end-to-end prefill.
+
 В текущем окружении `nvcc` отсутствует, поэтому `.cu` kernels не прошли
 аппаратную компиляцию здесь. CPU host/runtime и Ocean frontend проверены;
 CUDA validation нужно выполнить в окружении с NVIDIA toolkit.
@@ -3620,7 +3662,8 @@ P4  SparseKVCache/block summaries                   -> summaries + cached API + 
 P5  интегрировать SparseAttention в GPT2 KV-cache и перенести routing/gather на CUDA -> реализовано, CUDA hardware validation pending
 P6  измерить active-length decode на prompt 1K/4K/16K и сравнить с dense KV-cache
 P7  переиспользовать CUDA inference workspace и распараллелить serial selector
-P8  после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
+P8  сравнить refresh interval 25/50/100 и semantic/random block budgets
+P9  после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
 ```
 
 Backend/server vertical остаётся равноправной частью проекта: long-context ML
