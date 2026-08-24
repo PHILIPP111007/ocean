@@ -26,14 +26,15 @@ summary window W       = 100 recent tokens
 route refresh interval = 50 decoded tokens
 block size S           = 64 tokens
 semantic blocks        = 5
+mandatory local blocks = 2 latest blocks
 exploration blocks     = 1
-route width            = 6 blocks
-maximum selected keys  = 6 * 64 = 384 tokens
+route width            = 2 + 5 + 1 = 8 blocks
+maximum selected keys  = 8 * 64 = 512 tokens
 ```
 
 The parameters are configurable in the Tensor/runtime API, although the
 current GPT-2 model uses the values above. If the active context is shorter
-than 384 tokens, the effective number of selected tokens is smaller.
+than 512 tokens, the effective number of selected tokens is smaller.
 
 ## Data structures
 
@@ -43,7 +44,7 @@ For every Transformer layer, Ocean stores:
 K cache       [batch, heads, context, head_dim]
 V cache       [batch, heads, context, head_dim]
 block summary [batch, heads, summary_blocks, head_dim]
-route         [batch, heads, 6]
+route         [batch, heads, 8]
 ```
 
 The summary of block `j` is the mean of the key vectors in that block:
@@ -86,17 +87,27 @@ score(j) = dot(recent, s_j)
 
 Only blocks whose tokens are visible in the active prefix are considered.
 
-### 3. Select five semantic blocks
+### 3. Add mandatory local blocks
 
-The five blocks with the highest scores are placed into the route. Ties are
-resolved deterministically by preferring the lower block index. The selected
-block IDs are stored rather than copying their keys or values.
+The route always includes the latest two visible blocks. These blocks are
+excluded from semantic selection, so they cannot be replaced by a low-scoring
+distant block. Near the beginning of a sequence, fewer than two blocks may be
+available.
 
-### 4. Add an exploration block
+This protects short-range syntax, recent entities, and the immediate causal
+neighborhood of the query.
+
+### 4. Select five semantic blocks
+
+The five non-local blocks with the highest scores are placed into the route.
+Ties are resolved deterministically by preferring the lower block index. The
+selected block IDs are stored rather than copying their keys or values.
+
+### 5. Add an exploration block
 
 One additional block is selected using a deterministic pseudo-random sequence.
-The implementation attempts to avoid duplicating a semantic block. This keeps
-the route from becoming permanently locked to the same five regions.
+The implementation attempts to avoid duplicating a local or semantic block.
+This keeps the route from becoming permanently locked to the same regions.
 
 The exploration choice is deterministic for reproducibility; it is not a
 cryptographically random or nondeterministic sample.
@@ -104,7 +115,9 @@ cryptographically random or nondeterministic sample.
 The resulting route has the form:
 
 ```text
-[semantic_block_0,
+[local_block_0,
+ local_block_1,
+ semantic_block_0,
  semantic_block_1,
  semantic_block_2,
  semantic_block_3,
@@ -219,7 +232,7 @@ The exact attention over selected blocks is:
 O(K * D)
 ```
 
-With fixed `M = 6` and `S = 64`, `K` is bounded by 384, so the attention
+With fixed `M = 8` and `S = 64`, `K` is bounded by 512, so the attention
 kernel itself is effectively `O(D)` with respect to context length `N`.
 
 ### Route refresh cost
@@ -312,12 +325,12 @@ The important consequence is:
 
 ## Expected reduction at a 9000-token context
 
-With six routed blocks of 64 tokens:
+With two local, five semantic, and one exploration block:
 
 ```text
-maximum routed tokens = 384
+maximum routed tokens = 512
 dense candidate tokens = 9000
-attention reduction     ≈ 9000 / 384 ≈ 23.4x
+attention reduction     ≈ 9000 / 512 ≈ 17.6x
 ```
 
 This is a reduction for the QK and value-aggregation loops, not an end-to-end
@@ -417,11 +430,13 @@ recent-key summary
         ↓
 cosine similarity against block summaries
         ↓
+two mandatory local blocks
+        ↓
 top-5 semantic blocks
         ↓
 one exploration block
         ↓
-exact causal attention over at most 384 tokens
+exact causal attention over at most 512 tokens
 ```
 
 Its main computational benefit is that the attention kernel processes a fixed

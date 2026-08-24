@@ -4934,17 +4934,6 @@ void ocean_tensor_sparse_attention_update_summary_active(
     if (contiguous_key != key) ocean_tensor_release(contiguous_key);
 }
 
-static bool ocean_tensor_sparse_route_contains(
-    const int32_t *route,
-    size_t count,
-    int32_t block
-) {
-    for (size_t index = 0; index < count; ++index) {
-        if (route[index] == block) return true;
-    }
-    return false;
-}
-
 static void ocean_tensor_sparse_route_cpu(
     ocean_tensor_handle_t route,
     ocean_tensor_handle_t key,
@@ -4952,6 +4941,7 @@ static void ocean_tensor_sparse_route_cpu(
     int active_length,
     int summary_window,
     int semantic_blocks,
+    int local_blocks,
     int block_size,
     int random_seed
 ) {
@@ -4968,7 +4958,8 @@ static void ocean_tensor_sparse_route_cpu(
     size_t key_length = key->shape[2];
     size_t head_dim = key->shape[3];
     size_t summary_blocks = summaries->shape[2];
-    size_t route_width = (size_t)semantic_blocks + 1u;
+    size_t route_width = (size_t)local_blocks +
+        (size_t)semantic_blocks + 1u;
     int end = active_length;
     if (end > (int)key_length) end = (int)key_length;
     int start = end - summary_window;
@@ -4977,6 +4968,9 @@ static void ocean_tensor_sparse_route_cpu(
     size_t block_count = ((size_t)active_length + (size_t)block_size - 1u) /
         (size_t)block_size;
     if (block_count > summary_blocks) block_count = summary_blocks;
+    size_t local_count = (size_t)local_blocks;
+    if (local_count > block_count) local_count = block_count;
+    size_t local_start = block_count - local_count;
 
     for (size_t batch_index = 0; batch_index < batch; ++batch_index) {
         for (size_t head = 0; head < heads; ++head) {
@@ -4986,6 +4980,10 @@ static void ocean_tensor_sparse_route_cpu(
                 route_data[route_base + index] = -1;
             }
             if (recent_count <= 0 || block_count == 0) continue;
+            for (size_t index = 0; index < local_count; ++index) {
+                route_data[route_base + index] =
+                    (int32_t)(local_start + index);
+            }
             float *recent = (float *)calloc(head_dim, sizeof(float));
             float *selected_scores = (float *)malloc(
                 (size_t)semantic_blocks * sizeof(float)
@@ -5018,6 +5016,7 @@ static void ocean_tensor_sparse_route_cpu(
             recent_norm = sqrtf(recent_norm);
             size_t selected_count = 0;
             for (size_t block = 0; block < block_count; ++block) {
+                if (block >= local_start) continue;
                 size_t summary_base =
                     ((batch_index * heads + head) * summary_blocks + block)
                     * head_dim;
@@ -5060,21 +5059,31 @@ static void ocean_tensor_sparse_route_cpu(
                 }
             }
             for (size_t index = 0; index < selected_count; ++index) {
-                route_data[route_base + index] = selected_blocks[index];
+                route_data[route_base + local_count + index] =
+                    selected_blocks[index];
             }
             uint32_t state = (uint32_t)random_seed ^
                 (uint32_t)((batch_index * heads + head) * 747796405u +
                 2891336453u);
             state = state * 1664525u + 1013904223u;
             int32_t random_block = (int32_t)(state % (uint32_t)block_count);
+            bool duplicate = false;
             for (size_t attempt = 0; attempt < block_count; ++attempt) {
-                if (!ocean_tensor_sparse_route_contains(
-                    selected_blocks, selected_count, random_block
-                )) break;
+                duplicate = false;
+                for (size_t index = 0;
+                     index < local_count + selected_count; ++index) {
+                    if (route_data[route_base + index] == random_block) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!duplicate) break;
                 state = state * 1664525u + 1013904223u;
                 random_block = (int32_t)(state % (uint32_t)block_count);
             }
-            route_data[route_base + (size_t)semantic_blocks] = random_block;
+            if (duplicate) random_block = -1;
+            route_data[route_base + (size_t)local_blocks +
+                (size_t)semantic_blocks] = random_block;
             free(recent);
             free(selected_scores);
             free(selected_blocks);
@@ -5090,13 +5099,14 @@ ocean_tensor_handle_t ocean_tensor_sparse_attention_build_route_active(
     int active_length,
     int summary_window,
     int semantic_blocks,
+    int local_blocks,
     int block_size,
     int random_seed
 ) {
     if (!key || !summaries || key->dtype != OCEAN_TENSOR_FLOAT32 ||
         summaries->dtype != OCEAN_TENSOR_FLOAT32 || key->ndim != 4 ||
         summaries->ndim != 4 || active_length <= 0 || summary_window <= 0 ||
-        semantic_blocks <= 0 || block_size <= 0) {
+        semantic_blocks <= 0 || local_blocks < 0 || block_size <= 0) {
         ocean_tensor_fail("Sparse route requires valid float32 key and summaries");
     }
     size_t block_count = ((size_t)active_length + (size_t)block_size - 1u) /
@@ -5109,14 +5119,15 @@ ocean_tensor_handle_t ocean_tensor_sparse_attention_build_route_active(
         ocean_tensor_fail("Sparse route metadata mismatch");
     }
     size_t route_shape[3] = {
-        key->shape[0], key->shape[1], (size_t)semantic_blocks + 1u
+        key->shape[0], key->shape[1], (size_t)local_blocks +
+            (size_t)semantic_blocks + 1u
     };
     ocean_tensor_handle_t route = ocean_tensor_alloc_uninitialized(
         route_shape, 3, OCEAN_TENSOR_INT32, key->device
     );
     ocean_tensor_sparse_attention_update_route_active(
         route, key, summaries, active_length, summary_window,
-        semantic_blocks, block_size, random_seed
+        semantic_blocks, local_blocks, block_size, random_seed
     );
     return route;
 }
@@ -5128,6 +5139,7 @@ void ocean_tensor_sparse_attention_update_route_active(
     int active_length,
     int summary_window,
     int semantic_blocks,
+    int local_blocks,
     int block_size,
     int random_seed
 ) {
@@ -5135,6 +5147,7 @@ void ocean_tensor_sparse_attention_update_route_active(
         key->dtype != OCEAN_TENSOR_FLOAT32 || summaries->dtype != OCEAN_TENSOR_FLOAT32 ||
         route->ndim != 3 || key->ndim != 4 || summaries->ndim != 4 ||
         active_length <= 0 || summary_window <= 0 || semantic_blocks <= 0 ||
+        local_blocks < 0 ||
         block_size <= 0) {
         ocean_tensor_fail("Sparse route update requires valid Tensor metadata");
     }
@@ -5142,7 +5155,8 @@ void ocean_tensor_sparse_attention_update_route_active(
         (size_t)block_size;
     if (active_length > (int)key->shape[2] ||
         route->shape[0] != key->shape[0] || route->shape[1] != key->shape[1] ||
-        route->shape[2] != (size_t)semantic_blocks + 1u ||
+        route->shape[2] != (size_t)local_blocks +
+            (size_t)semantic_blocks + 1u ||
         summaries->shape[0] != key->shape[0] ||
         summaries->shape[1] != key->shape[1] ||
         summaries->shape[2] < block_count ||
@@ -5163,7 +5177,8 @@ void ocean_tensor_sparse_attention_update_route_active(
             key->cuda_data, summaries->cuda_data, route->cuda_data,
             (int)key->shape[0], (int)key->shape[1], (int)key->shape[2],
             (int)summaries->shape[2], active_length, (int)key->shape[3],
-            summary_window, semantic_blocks, block_size, (unsigned int)random_seed
+            summary_window, semantic_blocks, local_blocks, block_size,
+            (unsigned int)random_seed
         );
         return;
 #else
@@ -5175,7 +5190,7 @@ void ocean_tensor_sparse_attention_update_route_active(
     }
     ocean_tensor_sparse_route_cpu(
         route, key, summaries, active_length, summary_window,
-        semantic_blocks, block_size, random_seed
+        semantic_blocks, local_blocks, block_size, random_seed
     );
 }
 

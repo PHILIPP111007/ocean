@@ -1122,6 +1122,7 @@ __global__ void ocean_cuda_sparse_route_kernel(
     int head_dim,
     int summary_window,
     int semantic_blocks,
+    int local_blocks,
     int block_size,
     unsigned int random_seed
 ) {
@@ -1133,9 +1134,11 @@ __global__ void ocean_cuda_sparse_route_kernel(
     size_t total = (size_t)batches * (size_t)heads;
     if (group >= total) return;
     int lane = (int)threadIdx.x;
-    size_t route_base = group * (size_t)(semantic_blocks + 1);
+    size_t route_width = (size_t)local_blocks +
+        (size_t)semantic_blocks + 1u;
+    size_t route_base = group * route_width;
     if (lane == 0) {
-        for (int index = 0; index < semantic_blocks + 1; ++index) {
+        for (size_t index = 0; index < route_width; ++index) {
             route[route_base + (size_t)index] = -1;
         }
         int end = active_length;
@@ -1162,8 +1165,15 @@ __global__ void ocean_cuda_sparse_route_kernel(
         query_norm = sqrtf(query_norm);
         int block_count = (active_length + block_size - 1) / block_size;
         if (block_count > summary_blocks) block_count = summary_blocks;
+        int local_count = local_blocks;
+        if (local_count > block_count) local_count = block_count;
+        int local_start = block_count - local_count;
+        for (int index = 0; index < local_count; ++index) {
+            route[route_base + (size_t)index] = local_start + index;
+        }
         int selected_count = 0;
         for (int block = 0; block < block_count; ++block) {
+            if (block >= local_start) continue;
             size_t summary_base =
                 (group * (size_t)summary_blocks + (size_t)block) *
                 (size_t)head_dim;
@@ -1207,26 +1217,31 @@ __global__ void ocean_cuda_sparse_route_kernel(
             }
         }
         for (int index = 0; index < selected_count; ++index) {
-            route[route_base + (size_t)index] = selected_blocks[index];
+            route[route_base + (size_t)local_blocks + (size_t)index] =
+                selected_blocks[index];
         }
         if (block_count > 0) {
             unsigned int state = random_seed ^
                 ((unsigned int)group * 747796405u + 2891336453u);
             state = state * 1664525u + 1013904223u;
             int random_block = (int)(state % (unsigned int)block_count);
-            bool duplicate = true;
-            for (int attempt = 0; attempt < block_count && duplicate; ++attempt) {
+            bool duplicate = false;
+            for (int attempt = 0; attempt < block_count; ++attempt) {
                 duplicate = false;
-                for (int index = 0; index < selected_count; ++index) {
-                    if (selected_blocks[index] == random_block) {
+                for (int index = 0; index < local_blocks + selected_count;
+                     ++index) {
+                    if (route[route_base + (size_t)index] == random_block) {
                         duplicate = true;
-                        state = state * 1664525u + 1013904223u;
-                        random_block = (int)(state % (unsigned int)block_count);
                         break;
                     }
                 }
+                if (!duplicate) break;
+                state = state * 1664525u + 1013904223u;
+                random_block = (int)(state % (unsigned int)block_count);
             }
-            route[route_base + (size_t)semantic_blocks] = random_block;
+            if (duplicate) random_block = -1;
+            route[route_base + (size_t)local_blocks +
+                (size_t)semantic_blocks] = random_block;
         }
     }
 }
@@ -1734,17 +1749,18 @@ void ocean_cuda_sparse_build_route(
     int head_dim,
     int summary_window,
     int semantic_blocks,
+    int local_blocks,
     int block_size,
     unsigned int random_seed
 ) {
     if (batches <= 0 || heads <= 0 || head_dim <= 0 ||
-        semantic_blocks <= 0 || block_size <= 0) return;
+        semantic_blocks <= 0 || local_blocks < 0 || block_size <= 0) return;
     size_t shared_bytes = (size_t)head_dim * sizeof(float) +
         (size_t)semantic_blocks * (sizeof(float) + sizeof(int));
     ocean_cuda_sparse_route_kernel<<<batches * heads, 128, shared_bytes>>>(
         (const float *)key, (const float *)summaries, (int32_t *)route,
         batches, heads, key_length, summary_blocks, active_length, head_dim,
-        summary_window, semantic_blocks, block_size, random_seed
+        summary_window, semantic_blocks, local_blocks, block_size, random_seed
     );
     ocean_cuda_check_launch("sparse route kernel");
 }

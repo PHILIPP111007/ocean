@@ -390,6 +390,7 @@ ocean_tensor_handle_t ocean_tensor_sparse_attention_build_route_active(
     int active_length,
     int summary_window,
     int semantic_blocks,
+    int local_blocks,
     int block_size,
     int random_seed
 );
@@ -400,6 +401,7 @@ void ocean_tensor_sparse_attention_update_route_active(
     int active_length,
     int summary_window,
     int semantic_blocks,
+    int local_blocks,
     int block_size,
     int random_seed
 );

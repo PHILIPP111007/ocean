@@ -260,6 +260,7 @@ void ocean_cuda_sparse_build_route(
     int head_dim,
     int summary_window,
     int semantic_blocks,
+    int local_blocks,
     int block_size,
     unsigned int random_seed
 );

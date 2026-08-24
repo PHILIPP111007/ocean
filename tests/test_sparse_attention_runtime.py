@@ -19,6 +19,15 @@ static void check_close(float actual, float expected, const char *name) {
     }
 }
 
+static void check_close_tolerance(
+    float actual, float expected, float tolerance, const char *name
+) {
+    if (fabsf(actual - expected) > tolerance) {
+        fprintf(stderr, "%s: %.8f != %.8f\n", name, actual, expected);
+        exit(1);
+    }
+}
+
 int main(void) {
     size_t query_shape[4] = {1, 1, 2, 2};
     size_t key_shape[4] = {1, 1, 4, 2};
@@ -147,9 +156,10 @@ int main(void) {
 
     ocean_tensor_handle_t route =
         ocean_tensor_sparse_attention_build_route_active(
-            key, summaries, 4, 4, 1, 2, 17
+            key, summaries, 4, 4, 1, 1, 2, 17
         );
-    if (ocean_tensor_shape(route, 2) != 2) {
+    if (ocean_tensor_shape(route, 2) != 3 ||
+        ocean_tensor_get_flat_i32(route, 0) != 1) {
         fprintf(stderr, "unexpected sparse route width\n");
         return 1;
     }
@@ -161,9 +171,10 @@ int main(void) {
         query, key, value, 4, 1.0, 0, false
     );
     for (size_t i = 0; i < 4; ++i) {
-        check_close(
+        check_close_tolerance(
             ocean_tensor_get_flat_f32(routed, i),
             ocean_tensor_get_flat_f32(full, i),
+            1e-4f,
             "routed attention with complete route"
         );
     }

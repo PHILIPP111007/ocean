@@ -3550,7 +3550,7 @@ benchmark и numerical comparison с прежним dense path.
 ```c
 route = ocean_tensor_sparse_attention_build_route_active(
     key_cache, summaries, active_length,
-    summary_window=100, semantic_blocks=5,
+    summary_window=100, semantic_blocks=5, local_blocks=2,
     block_size=64, random_seed
 );
 output = ocean_tensor_sparse_attention_blocked_cached_routed(
@@ -3562,8 +3562,9 @@ output = ocean_tensor_sparse_attention_blocked_cached_routed(
 
 Route строит mean-вектор последних 100 доступных K-токенов, сравнивает его с
 block summaries по cosine similarity, сохраняет 5 лучших блоков и добавляет
-один deterministic pseudo-random exploration block. Routed attention выполняет
-полный softmax только внутри выбранных блоков.
+два обязательных последних блока и один deterministic pseudo-random exploration
+block. Routed attention выполняет полный softmax только внутри выбранных
+блоков.
 
 GPT-2 prefill переиспользует один route для 50 query-токенов и затем строит
 следующий route. Autoregressive decode хранит route в `GPT2KVCache`, обновляет
@@ -3574,6 +3575,7 @@ GPT-2 prefill переиспользует один route для 50 query-ток
 summary_window   = 100
 route_refresh    = 50
 semantic_blocks  = 5
+local_blocks     = 2
 random_blocks    = 1
 block_size       = 64
 ```

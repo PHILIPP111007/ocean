@@ -170,21 +170,21 @@ class GPT2KVCache:
         self.s11: Tensor[float32] = Tensor.zeros(1, n_heads, summary_blocks, head_dim, device)
         self.s12: Tensor[float32] = Tensor.zeros(1, n_heads, summary_blocks, head_dim, device)
 
-        # Sticky semantic routes: five cosine-selected blocks plus one
-        # deterministic exploration block. A route is refreshed every 50
-        # decoded tokens and is built from the latest 100 cached keys.
-        self.r1: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r2: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r3: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r4: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r5: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r6: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r7: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r8: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r9: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r10: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r11: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
-        self.r12: Tensor[int32] = Tensor.zeros(1, n_heads, 6, device)
+        # Sticky routes keep two latest blocks local, add five cosine-selected
+        # semantic blocks, and add one deterministic exploration block. A
+        # route is refreshed every 50 decoded tokens from the latest 100 keys.
+        self.r1: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r2: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r3: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r4: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r5: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r6: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r7: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r8: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r9: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r10: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r11: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
+        self.r12: Tensor[int32] = Tensor.zeros(1, n_heads, 8, device)
         self.route_age1: int = 50
         self.route_age2: int = 50
         self.route_age3: int = 50
@@ -240,9 +240,10 @@ class GPT2Attention(Module):
         self.v_proj: TernaryLinear = TernaryLinear(d_model, d_model)
         self.out_proj: TernaryLinear = TernaryLinear(d_model, d_model)
         self.sparse_top_k: int = 128
-        # Sticky routing uses five semantic blocks plus one exploration block.
-        # GPT2KVCache allocates this route width as 5 + 1 = 6.
+        # GPT2KVCache allocates this route width as 2 local + 5 semantic +
+        # 1 exploration = 8.
         self.sparse_top_blocks: int = 5
+        self.sparse_local_blocks: int = 2
         self.sparse_block_size: int = 64
         self.sparse_prefill_threshold: int = 256
         self.last_prefill_sparse: bool = False
@@ -409,7 +410,7 @@ class GPT2Attention(Module):
             var chunk_end: int = chunk_start + 50
             if chunk_end > sequence_length:
                 chunk_end = sequence_length
-            var route: Tensor[int32] = cache_k.sparse_attention_build_route_active(summary, chunk_end, 100, self.sparse_top_blocks, self.sparse_block_size, chunk_start + self.n_heads + self.d_model)
+            var route: Tensor[int32] = cache_k.sparse_attention_build_route_active(summary, chunk_end, 100, self.sparse_top_blocks, self.sparse_local_blocks, self.sparse_block_size, chunk_start + self.n_heads + self.d_model)
             var query_chunk: Tensor[float32] = q.slice(2, chunk_start, chunk_end, 1)
             var context_chunk: Tensor[float32] = query_chunk.sparse_attention_blocked_cached_routed(cache_k, cache_v, route, sequence_length, self.sparse_block_size, 1.0 / sqrt(self.head_dim), chunk_start, True)
             var context_view: Tensor[float32] = context.slice(2, chunk_start, chunk_end, 1)
@@ -443,7 +444,7 @@ class GPT2Attention(Module):
         var active_length: int = position + 1
         summary.sparse_attention_update_summary_active(cache_k, active_length, position, self.sparse_block_size)
         if refresh_route:
-            cache_k.sparse_attention_update_route_active(summary, route, active_length, 100, self.sparse_top_blocks, self.sparse_block_size, position + self.n_heads + self.d_model)
+            cache_k.sparse_attention_update_route_active(summary, route, active_length, 100, self.sparse_top_blocks, self.sparse_local_blocks, self.sparse_block_size, position + self.n_heads + self.d_model)
         var context: Tensor[float32] = q.sparse_attention_blocked_cached_routed(cache_k, cache_v, route, active_length, self.sparse_block_size, 1.0 / sqrt(self.head_dim), position, True)
         var context_bthd: Tensor[float32] = context.permute([0, 2, 1, 3])
         var merged: Tensor[float32] = context_bthd.reshape([batch_size, 1, self.d_model])

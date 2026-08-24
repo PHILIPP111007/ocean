@@ -321,12 +321,12 @@ sparse_attention_update_route_active
 sparse_attention_blocked_cached_routed
 ```
 
-The route contains five cosine-selected key blocks plus one deterministic
-exploration block. GPT-2 uses a 100-token summary window and reuses the route
-for 50 query tokens before refreshing it. The routed attention path computes
-full attention inside the selected blocks only. CPU reference support and
-native CUDA kernels are present; the CUDA path still requires hardware
-validation with `nvcc`.
+The route contains two mandatory latest key blocks, five cosine-selected key
+blocks, and one deterministic exploration block. GPT-2 uses a 100-token summary
+window and reuses the route for 50 query tokens before refreshing it. The routed
+attention path computes full attention inside the selected blocks only. CPU
+reference support and native CUDA kernels are present; the CUDA path still
+requires hardware validation with `nvcc`.
 
 The OpenCL runtime caches its context, queue, program, and kernels for the process and releases
 them through an exit handler. Individual GPU buffers are released with their owning `Tensor`
