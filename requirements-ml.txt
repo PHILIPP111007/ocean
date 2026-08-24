@@ -1,0 +1,5 @@
+# Optional dependencies for examples/ML/gpt2_pytorch_poc.py.
+# Keep these separate from the compiler's small core dependency set.
+torch>=2.4
+transformers>=4.40
+safetensors>=0.4
