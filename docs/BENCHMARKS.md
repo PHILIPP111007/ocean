@@ -122,12 +122,12 @@ first generated token = 0.000000
 mode = inference
 model device = gpu
 backend device = CUDA GPU (native kernels)
-GPT2 config = vocab 50257, context 1024, hidden 768, heads 12, ff 3072, layers 12
-prompt tokens = 1000
-generated tokens = 100
-elapsed seconds = 0.553278
-milliseconds per token = 5.532777
-tokens per second = 180.741056
+GPT2 config = vocab 50257, context 10000, hidden 768, heads 12, ff 3072, layers 12
+prompt tokens = 9000
+generated tokens = 1000
+elapsed seconds = 42.691036
+milliseconds per token = 42.691036
+tokens per second = 23.424121
 first generated token = 0.000000
 [ok] Ocean GPT2 inference benchmark
 ```
