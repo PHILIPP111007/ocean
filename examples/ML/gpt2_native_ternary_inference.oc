@@ -55,7 +55,7 @@ def main() -> int:
     print("mode = inference")
     print("model device =", model_device)
     print("backend device =", model_device_info)
-    print("GPT2 config = vocab 50257, context 1024, hidden 768, heads 12, ff 3072, layers 12")
+    print("GPT2 config = vocab", config.vocab_size, "context", config.max_seq_len, "hidden", config.d_model, "heads", config.n_heads, "ff", config.d_ff, "layers", config.n_layers)
     print("prompt tokens =", prompt_length)
     print("generated tokens =", new_tokens)
     print("elapsed seconds =", elapsed)
