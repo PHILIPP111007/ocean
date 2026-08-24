@@ -415,6 +415,10 @@ class Tensor:
     def device_info(self) -> str:
         return ocean_tensor_device_info(self.handle)
 
+    def synchronize(self) -> None:
+        ocean_tensor_synchronize(self.handle)
+        return None
+
     def sparse_attention_cuda_available(self) -> bool:
         return ocean_tensor_sparse_attention_cuda_available(self.handle)
 

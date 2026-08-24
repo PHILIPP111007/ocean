@@ -151,6 +151,8 @@ CUDA hierarchical route refresh reads its recent keys directly from the page
 table instead of materializing the full K tensor. Paged routed attention uses
 warp-parallel score construction and a block-wide softmax; the old CPU path is
 unchanged.
+`Tensor.synchronize()` is available for accurate host-side timing of asynchronous
+GPU work. The GPT-2 inference example reports prefill and decode phases separately.
 
 ## NumPy `.npy` files
 

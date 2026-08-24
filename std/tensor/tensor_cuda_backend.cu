@@ -77,6 +77,10 @@ void ocean_cuda_zero(void *device_data, size_t bytes) {
     ocean_cuda_check(cudaMemset(device_data, 0, bytes), "cudaMemset");
 }
 
+void ocean_cuda_synchronize(void) {
+    ocean_cuda_check(cudaDeviceSynchronize(), "cudaDeviceSynchronize");
+}
+
 template <typename T>
 __device__ T ocean_cuda_apply_binary(T left, T right, int operation) {
     if (operation == 0) return left + right;

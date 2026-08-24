@@ -8325,6 +8325,27 @@ char *ocean_tensor_device(ocean_tensor_handle_t tensor) {
     return result;
 }
 
+void ocean_tensor_synchronize(ocean_tensor_handle_t tensor) {
+    if (!tensor) ocean_tensor_fail("synchronize() does not accept a null Tensor");
+    if (tensor->device == OCEAN_TENSOR_CPU) return;
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (tensor->device == OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_cuda_synchronize();
+        return;
+    }
+#endif
+#ifdef OCEAN_TENSOR_ENABLE_OPENCL
+    if (tensor->device == OCEAN_TENSOR_BACKEND_OPENCL &&
+        ocean_tensor_opencl_initialized) {
+        ocean_tensor_opencl_check(
+            clFinish(ocean_tensor_opencl.queue), "clFinish"
+        );
+        return;
+    }
+#endif
+    ocean_tensor_fail("synchronize() backend is unavailable");
+}
+
 char *ocean_tensor_device_info(ocean_tensor_handle_t tensor) {
     if (!tensor) ocean_tensor_fail("device_info() does not accept a null Tensor");
 #ifdef OCEAN_TENSOR_ENABLE_OPENCL

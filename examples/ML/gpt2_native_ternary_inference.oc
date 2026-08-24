@@ -33,14 +33,49 @@ def main() -> int:
     var prompt_gpu: Tensor[int64] = prompt.to("gpu")
     var positions_gpu: Tensor[int64] = positions.to("gpu")
 
-    # One unmeasured token removes one-time OpenCL program compilation from
-    # the reported steady-state generation latency. KV cache is populated by
-    # the prompt prefill and reused for every generated token.
+    # One unmeasured token removes one-time backend initialization and weight
+    # packing from the reported steady-state timings.
     var warmup: Tensor[int64] = model.generate_greedy_kv(prompt_gpu, 1, positions_gpu)
+    warmup.release()
 
-    var start: float64 = Time.monotonic()
-    var generated: Tensor[int64] = model.generate_greedy_kv(prompt_gpu, new_tokens, positions_gpu)
-    var elapsed: float64 = Time.monotonic() - start
+    Tensor.set_grad_enabled(False)
+    model.eval()
+    model.freeze_for_inference()
+
+    # Prefill and decode are deliberately measured as separate phases. The
+    # explicit synchronize() calls are required because CUDA kernel launches
+    # are asynchronous with respect to the host clock.
+    var cache: GPT2KVCache = model.new_kv_cache("gpu")
+    var prompt_positions: Tensor[int64] = positions_gpu.slice(1, 0, prompt_length, 1)
+    prompt_gpu.synchronize()
+    var prefill_start: float64 = Time.monotonic()
+    var prompt_hidden: Tensor[float32] = model.forward_prefill_hidden(prompt_gpu, prompt_positions, cache)
+    var prompt_last: Tensor[float32] = prompt_hidden.slice(1, prompt_length - 1, prompt_length, 1)
+    var prompt_logits: Tensor[float32] = model.packed_logits_from_hidden(prompt_last)
+    var next_token: int = model.greedy_from_logits(prompt_logits)
+    prompt_logits.synchronize()
+    var prefill_elapsed: float64 = Time.monotonic() - prefill_start
+
+    var first_generated_token: float64 = next_token
+    var next_input: Tensor[int64] = Tensor.zeros(1, 1, "gpu")
+    var next_position: Tensor[int64] = Tensor.zeros(1, 1, "gpu")
+    var decode_tokens: int = new_tokens - 1
+    if decode_tokens < 0:
+        decode_tokens = 0
+    var decode_start: float64 = Time.monotonic()
+    var step: int = 0
+    while step < decode_tokens:
+        var output_position: int = prompt_length + step
+        next_input[0, 0] = next_token
+        next_position[0, 0] = output_position
+        var next_hidden: Tensor[float32] = model.forward_cached_hidden(next_input, next_position, cache, output_position)
+        var next_logits: Tensor[float32] = model.packed_logits_from_hidden(next_hidden)
+        next_token = model.greedy_from_logits(next_logits)
+        step = step + 1
+    next_input.synchronize()
+    var decode_elapsed: float64 = Time.monotonic() - decode_start
+
+    var elapsed: float64 = prefill_elapsed + decode_elapsed
 
     var tokens_per_second: float64 = 0.0
     var milliseconds_per_token: float64 = 0.0
@@ -48,7 +83,18 @@ def main() -> int:
         tokens_per_second = new_tokens / elapsed
         milliseconds_per_token = elapsed * 1000.0 / new_tokens
 
-    var first_generated_token: float64 = generated.get(0, prompt_length)
+    var prefill_tokens_per_second: float64 = 0.0
+    var prefill_milliseconds_per_token: float64 = 0.0
+    if prefill_elapsed > 0.0:
+        prefill_tokens_per_second = prompt_length / prefill_elapsed
+        prefill_milliseconds_per_token = prefill_elapsed * 1000.0 / prompt_length
+
+    var decode_tokens_per_second: float64 = 0.0
+    var decode_milliseconds_per_token: float64 = 0.0
+    if decode_tokens > 0 and decode_elapsed > 0.0:
+        decode_tokens_per_second = decode_tokens / decode_elapsed
+        decode_milliseconds_per_token = decode_elapsed * 1000.0 / decode_tokens
+
     var token_embedding_weight: Tensor[float32] = model.token_embedding.weight.tensor()
     var model_device: str = token_embedding_weight.device()
     var model_device_info: str = token_embedding_weight.device_info()
@@ -61,6 +107,13 @@ def main() -> int:
     print("elapsed seconds =", elapsed)
     print("milliseconds per token =", milliseconds_per_token)
     print("tokens per second =", tokens_per_second)
+    print("prefill elapsed seconds =", prefill_elapsed)
+    print("prefill milliseconds per token =", prefill_milliseconds_per_token)
+    print("prefill tokens per second =", prefill_tokens_per_second)
+    print("decode tokens =", decode_tokens)
+    print("decode elapsed seconds =", decode_elapsed)
+    print("decode milliseconds per token =", decode_milliseconds_per_token)
+    print("decode tokens per second =", decode_tokens_per_second)
     print("first generated token =", first_generated_token)
     print("[ok] Ocean GPT2 inference benchmark")
     return 0

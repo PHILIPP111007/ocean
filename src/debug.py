@@ -242,6 +242,7 @@ class Validator:
                             "ocean_tensor_size",
                             "ocean_tensor_device",
                             "ocean_tensor_device_info",
+                            "ocean_tensor_synchronize",
                             "ocean_tensor_sparse_attention_cuda_available",
                             "ocean_tensor_release",
                             "ocean_tensor_reshape_3d",

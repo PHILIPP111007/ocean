@@ -34,6 +34,7 @@ void ocean_cuda_memcpy_h2d(void *device_data, const void *host_data, size_t byte
 void ocean_cuda_memcpy_d2h(void *host_data, const void *device_data, size_t bytes);
 void ocean_cuda_memcpy_d2d(void *destination, const void *source, size_t bytes);
 void ocean_cuda_zero(void *device_data, size_t bytes);
+void ocean_cuda_synchronize(void);
 void ocean_cuda_copy_strided(
     const void *source,
     void *destination,

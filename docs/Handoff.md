@@ -3727,14 +3727,17 @@ page table и больше не материализует весь contiguous K
 а softmax выполняется block-wide вместо последовательного вычисления на lane 0.
 Обе оптимизации требуют CUDA runtime для численного и throughput benchmark.
 
+В inference example добавлен раздельный benchmark prefill/decode. Метод
+`Tensor.synchronize()` дожидается завершения backend queue перед чтением host
+clock, поэтому вывод показывает отдельные latency и tok/s для обеих фаз.
+
 GPT-2 теперь использует один `PagedKVCache` на слой: отдельные contiguous
 `cache_k`/`cache_v` больше не выделяются. Summaries строятся и обновляются из
-страниц, а hierarchy хранится отдельно как компактный индекс. Для совместимости
-с текущим hierarchical selector route refresh пока временно материализует K в
-один transient Tensor; этот буфер освобождается сразу после построения route и
-не является второй persistent KV-cache. Dense CPU fallback также может явно
-материализовать K/V. Следующий performance milestone — убрать transient
-materialization из selector и читать recent window напрямую из page table.
+страниц, а hierarchy хранится отдельно как компактный индекс. CUDA hierarchical
+route refresh читает recent window напрямую из page table; contiguous K временно
+материализуется только в CPU compatibility fallback. `Tensor.synchronize()`
+предоставляет backend-neutral API для точного host-side timing asynchronous GPU
+работы.
 
 ## 80.2.1 Regression status
 
