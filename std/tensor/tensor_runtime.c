@@ -3891,8 +3891,11 @@ ocean_tensor_handle_t ocean_tensor_layer_norm(
             for (size_t a = 0; a < axis_size; ++a) {
                 size_t index = (o * axis_size + a) * inner + in;
                 double value = ocean_tensor_get_flat_f32(cpu, index);
+                long double normalized =
+                    ((long double)value - (long double)mean_value) *
+                    (long double)inverse_std;
                 ocean_tensor_write_scalar(
-                    result, index, (value - mean_value) * inverse_std
+                    result, index, normalized
                 );
             }
         }
