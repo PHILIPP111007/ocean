@@ -240,7 +240,9 @@ class GPT2Attention(Module):
         self.v_proj: TernaryLinear = TernaryLinear(d_model, d_model)
         self.out_proj: TernaryLinear = TernaryLinear(d_model, d_model)
         self.sparse_top_k: int = 128
-        self.sparse_top_blocks: int = 8
+        # Sticky routing uses five semantic blocks plus one exploration block.
+        # GPT2KVCache allocates this route width as 5 + 1 = 6.
+        self.sparse_top_blocks: int = 5
         self.sparse_block_size: int = 64
         self.sparse_prefill_threshold: int = 256
         self.last_prefill_sparse: bool = False
