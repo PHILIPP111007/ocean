@@ -208,6 +208,20 @@ void ocean_cuda_cache_write(
     int width,
     int position
 );
+void ocean_cuda_paged_kv_write(
+    void *key_page,
+    void *value_page,
+    const void *key,
+    const void *value,
+    int batches,
+    int heads,
+    int page_size,
+    int head_dim,
+    int source_sequence,
+    int source_start,
+    int destination_start,
+    int count
+);
 void ocean_cuda_permute_swap12_f32(
     const void *input,
     void *output,

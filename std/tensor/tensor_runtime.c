@@ -2562,6 +2562,31 @@ void ocean_paged_kv_cache_write(
         size_t destination_start = offset > page_start ? offset - page_start : 0;
         size_t count = cache->page_size - destination_start;
         if (count > sequence - source_start) count = sequence - source_start;
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (cache->device == OCEAN_TENSOR_BACKEND_CUDA) {
+            if (cache->batches > (size_t)INT_MAX || cache->heads > (size_t)INT_MAX ||
+                cache->page_size > (size_t)INT_MAX || cache->head_dim > (size_t)INT_MAX ||
+                sequence > (size_t)INT_MAX || source_start > (size_t)INT_MAX ||
+                destination_start > (size_t)INT_MAX || count > (size_t)INT_MAX) {
+                ocean_tensor_fail("CUDA PagedKVCache write metadata is too large");
+            }
+            ocean_cuda_paged_kv_write(
+                cache->key_pages[page]->cuda_data,
+                cache->value_pages[page]->cuda_data,
+                key->cuda_data,
+                value->cuda_data,
+                (int)cache->batches,
+                (int)cache->heads,
+                (int)cache->page_size,
+                (int)cache->head_dim,
+                (int)sequence,
+                (int)source_start,
+                (int)destination_start,
+                (int)count
+            );
+            continue;
+        }
+#endif
         ocean_tensor_handle_t key_slice = ocean_tensor_slice(key, 2, (int)source_start, (int)(source_start + count), 1);
         ocean_tensor_handle_t value_slice = ocean_tensor_slice(value, 2, (int)source_start, (int)(source_start + count), 1);
         ocean_tensor_handle_t key_contiguous = ocean_tensor_is_contiguous(key_slice) ? key_slice : ocean_tensor_contiguous(key_slice);

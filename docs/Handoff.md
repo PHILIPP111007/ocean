@@ -3715,6 +3715,12 @@ CUDA compilation и numerical agreement на NVIDIA ещё требуют про
 checkout. OpenCL для этого API намеренно не используется: его page-pointer ABI
 отличается от CUDA и будет добавлен отдельным backend-проектированием.
 
+Для записи K/V добавлен fused CUDA append kernel: он одновременно копирует K и V
+из contiguous source Tensor непосредственно в целевую страницу, без промежуточных
+`slice`-тензоров и без двух отдельных cache-write операций. Для single-token
+decode это один kernel launch на запись, а CPU и non-CUDA paths сохраняют прежнюю
+reference-реализацию.
+
 GPT-2 теперь использует один `PagedKVCache` на слой: отдельные contiguous
 `cache_k`/`cache_v` больше не выделяются. Summaries строятся и обновляются из
 страниц, а hierarchy хранится отдельно как компактный индекс. Для совместимости
@@ -3749,7 +3755,8 @@ P9  сравнить refresh interval 25/50/100 и semantic/random block budgets
 P10 после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
 P11 page-native summaries/hierarchy и миграция GPT2 с contiguous KV-cache на PagedKVCache -> реализовано, route selector ещё materialize-ит transient K
 P12 убрать transient K materialization из hierarchical selector
-P13 CUDA hardware validation для PagedKVCache и memory/throughput benchmark
+P13 измерить fused paged K/V append на CUDA и сравнить с прежним slice/cache-write path
+P14 CUDA hardware validation для PagedKVCache и memory/throughput benchmark
 ```
 
 Backend/server vertical остаётся равноправной частью проекта: long-context ML

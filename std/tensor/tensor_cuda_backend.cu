@@ -775,6 +775,44 @@ __global__ void ocean_cuda_cache_write_kernel(
     cache[destination] = value[linear];
 }
 
+__global__ void ocean_cuda_paged_kv_write_kernel(
+    float *key_page,
+    float *value_page,
+    const float *key,
+    const float *value,
+    int batches,
+    int heads,
+    int page_size,
+    int head_dim,
+    int source_sequence,
+    int source_start,
+    int destination_start,
+    int count
+) {
+    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)batches * (size_t)heads * (size_t)count *
+        (size_t)head_dim;
+    if (linear >= total) return;
+    size_t token_width = (size_t)count * (size_t)head_dim;
+    size_t group_span = (size_t)heads * token_width;
+    size_t batch = linear / group_span;
+    size_t remainder = linear % group_span;
+    size_t head = remainder / token_width;
+    remainder %= token_width;
+    size_t token = remainder / (size_t)head_dim;
+    size_t dimension = remainder % (size_t)head_dim;
+    size_t source_group = (batch * (size_t)heads + head) *
+        (size_t)source_sequence * (size_t)head_dim;
+    size_t destination_group = (batch * (size_t)heads + head) *
+        (size_t)page_size * (size_t)head_dim;
+    size_t source_index = source_group +
+        ((size_t)source_start + token) * (size_t)head_dim + dimension;
+    size_t destination_index = destination_group +
+        ((size_t)destination_start + token) * (size_t)head_dim + dimension;
+    key_page[destination_index] = key[source_index];
+    value_page[destination_index] = value[source_index];
+}
+
 __global__ void ocean_cuda_permute_swap12_f32_kernel(
     const float *input,
     float *output,
@@ -2125,6 +2163,32 @@ void ocean_cuda_cache_write(void *cache, const void *value, int batches, int hea
         value_sequence, width, position
     );
     ocean_cuda_check_launch("cache write kernel");
+}
+
+void ocean_cuda_paged_kv_write(
+    void *key_page,
+    void *value_page,
+    const void *key,
+    const void *value,
+    int batches,
+    int heads,
+    int page_size,
+    int head_dim,
+    int source_sequence,
+    int source_start,
+    int destination_start,
+    int count
+) {
+    size_t total = (size_t)batches * (size_t)heads * (size_t)count *
+        (size_t)head_dim;
+    if (total == 0) return;
+    ocean_cuda_paged_kv_write_kernel<<<ocean_cuda_blocks(total), 256>>>(
+        (float *)key_page, (float *)value_page,
+        (const float *)key, (const float *)value,
+        batches, heads, page_size, head_dim, source_sequence,
+        source_start, destination_start, count
+    );
+    ocean_cuda_check_launch("paged K/V append kernel");
 }
 
 void ocean_cuda_permute_swap12_f32(
