@@ -66,6 +66,7 @@ struct ocean_paged_kv_cache {
     size_t length;
     size_t page_count;
     size_t page_capacity;
+    size_t summary_capacity;
     ocean_tensor_backend_kind device;
     ocean_tensor_handle_t *key_pages;
     ocean_tensor_handle_t *value_pages;
@@ -2461,10 +2462,12 @@ static void ocean_paged_kv_allocate_page(
     if (page >= cache->page_count) cache->page_count = page + 1u;
 }
 
-ocean_paged_kv_cache_handle_t ocean_paged_kv_cache_create(
-    int batches, int heads, int head_dim, int page_size, const char *device
+ocean_paged_kv_cache_handle_t ocean_paged_kv_cache_create_with_capacity(
+    int batches, int heads, int head_dim, int page_size, int max_seq_len,
+    const char *device
 ) {
-    if (batches <= 0 || heads <= 0 || head_dim <= 0 || page_size <= 0 || !device) {
+    if (batches <= 0 || heads <= 0 || head_dim <= 0 || page_size <= 0 ||
+        max_seq_len < 0 || !device) {
         ocean_tensor_fail("PagedKVCache dimensions and device must be valid");
     }
     ocean_tensor_backend_kind backend;
@@ -2488,8 +2491,18 @@ ocean_paged_kv_cache_handle_t ocean_paged_kv_cache_create(
     cache->heads = (size_t)heads;
     cache->head_dim = (size_t)head_dim;
     cache->page_size = (size_t)page_size;
+    cache->summary_capacity = max_seq_len == 0 ? 0u :
+        ((size_t)max_seq_len + (size_t)page_size - 1u) / (size_t)page_size;
     cache->device = backend;
     return cache;
+}
+
+ocean_paged_kv_cache_handle_t ocean_paged_kv_cache_create(
+    int batches, int heads, int head_dim, int page_size, const char *device
+) {
+    return ocean_paged_kv_cache_create_with_capacity(
+        batches, heads, head_dim, page_size, 0, device
+    );
 }
 
 void ocean_paged_kv_cache_release(ocean_paged_kv_cache_handle_t cache) {
@@ -2697,6 +2710,204 @@ ocean_tensor_handle_t ocean_paged_kv_cache_sparse_attention_routed(
     }
     free(scores); free(pages); free(locals);
     return result;
+}
+
+ocean_tensor_handle_t ocean_paged_kv_cache_build_summaries(
+    ocean_paged_kv_cache_handle_t cache,
+    int active_length,
+    int block_size
+) {
+    if (!cache || active_length <= 0 || block_size <= 0 ||
+        (size_t)block_size != cache->page_size ||
+        (size_t)active_length > cache->length) {
+        ocean_tensor_fail("PagedKVCache summary metadata mismatch");
+    }
+    size_t block_count = ((size_t)active_length + cache->page_size - 1u) /
+        cache->page_size;
+    if (block_count == 0 || block_count > cache->page_count) {
+        ocean_tensor_fail("PagedKVCache summary page range is invalid");
+    }
+    size_t summary_blocks = cache->summary_capacity > block_count
+        ? cache->summary_capacity : block_count;
+    size_t shape[4] = {cache->batches, cache->heads, summary_blocks, cache->head_dim};
+    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+        shape, 4, OCEAN_TENSOR_FLOAT32, cache->device
+    );
+    if (cache->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (cache->batches > (size_t)INT_MAX || cache->heads > (size_t)INT_MAX ||
+            summary_blocks > (size_t)INT_MAX || cache->page_size > (size_t)INT_MAX ||
+            (size_t)active_length > (size_t)INT_MAX || cache->head_dim > 128) {
+            ocean_tensor_release(result);
+            ocean_tensor_fail("CUDA PagedKVCache summary metadata is unsupported");
+        }
+        for (size_t page = 0; page < block_count; ++page) {
+            ocean_cuda_sparse_build_paged_summary(
+                cache->cuda_key_table, result->cuda_data,
+                (int)cache->batches, (int)cache->heads, (int)summary_blocks,
+                (int)cache->page_size, active_length, (int)cache->head_dim,
+                (int)page
+            );
+        }
+        return result;
+#else
+        ocean_tensor_release(result);
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+    }
+    if (cache->device != OCEAN_TENSOR_BACKEND_CPU) {
+        ocean_tensor_release(result);
+        ocean_tensor_fail("PagedKVCache summaries support CPU or CUDA only");
+    }
+    float *destination = (float *)result->cpu_data;
+    for (size_t page = 0; page < block_count; ++page) {
+        size_t count = cache->page_size;
+        size_t remaining = (size_t)active_length - page * cache->page_size;
+        if (count > remaining) count = remaining;
+        const float *source = (const float *)cache->key_pages[page]->cpu_data;
+        size_t group_size = cache->page_size * cache->head_dim;
+        size_t summary_base = page * cache->head_dim;
+        for (size_t group = 0; group < cache->batches * cache->heads; ++group) {
+            size_t source_base = group * group_size;
+            size_t destination_base = group * summary_blocks * cache->head_dim +
+                summary_base;
+            for (size_t token = 0; token < count; ++token) {
+                for (size_t dimension = 0; dimension < cache->head_dim; ++dimension) {
+                    destination[destination_base + dimension] +=
+                        source[source_base + token * cache->head_dim + dimension] /
+                        (float)count;
+                }
+            }
+        }
+    }
+    return result;
+}
+
+void ocean_paged_kv_cache_update_summary(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int position,
+    int block_size
+) {
+    if (!cache || !summaries || active_length <= 0 || position < 0 ||
+        position >= active_length || block_size <= 0 ||
+        (size_t)block_size != cache->page_size ||
+        (size_t)active_length > cache->length ||
+        summaries->dtype != OCEAN_TENSOR_FLOAT32 || summaries->ndim != 4 ||
+        summaries->device != cache->device || !ocean_tensor_is_contiguous(summaries) ||
+        summaries->shape[0] != cache->batches || summaries->shape[1] != cache->heads ||
+        summaries->shape[3] != cache->head_dim) {
+        ocean_tensor_fail("PagedKVCache summary update metadata mismatch");
+    }
+    size_t block = (size_t)position / cache->page_size;
+    size_t block_count = ((size_t)active_length + cache->page_size - 1u) /
+        cache->page_size;
+    if (block >= block_count || block >= summaries->shape[2] || block >= cache->page_count) {
+        ocean_tensor_fail("PagedKVCache summary update range is invalid");
+    }
+    size_t count = cache->page_size;
+    size_t remaining = (size_t)active_length - block * cache->page_size;
+    if (count > remaining) count = remaining;
+    if (cache->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (cache->batches > (size_t)INT_MAX || cache->heads > (size_t)INT_MAX ||
+            summaries->shape[2] > (size_t)INT_MAX || cache->page_size > (size_t)INT_MAX ||
+            (size_t)active_length > (size_t)INT_MAX || cache->head_dim > 128) {
+            ocean_tensor_fail("CUDA PagedKVCache summary update is unsupported");
+        }
+        ocean_cuda_sparse_build_paged_summary(
+            cache->cuda_key_table, summaries->cuda_data,
+            (int)cache->batches, (int)cache->heads, (int)summaries->shape[2],
+            (int)cache->page_size, active_length, (int)cache->head_dim, (int)block
+        );
+        return;
+#else
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+    }
+    if (cache->device != OCEAN_TENSOR_BACKEND_CPU) {
+        ocean_tensor_fail("PagedKVCache summary updates support CPU or CUDA only");
+    }
+    float *destination = (float *)summaries->cpu_data;
+    const float *source = (const float *)cache->key_pages[block]->cpu_data;
+    size_t group_size = cache->page_size * cache->head_dim;
+    for (size_t group = 0; group < cache->batches * cache->heads; ++group) {
+        size_t source_base = group * group_size;
+        size_t destination_base = group * summaries->shape[2] * cache->head_dim +
+            block * cache->head_dim;
+        memset(destination + destination_base, 0, cache->head_dim * sizeof(float));
+        for (size_t token = 0; token < count; ++token) {
+            for (size_t dimension = 0; dimension < cache->head_dim; ++dimension) {
+                destination[destination_base + dimension] +=
+                    source[source_base + token * cache->head_dim + dimension] /
+                    (float)count;
+            }
+        }
+    }
+}
+
+ocean_tensor_handle_t ocean_paged_kv_cache_build_hierarchy(
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int block_size
+) {
+    return ocean_tensor_sparse_attention_build_hierarchy_active(
+        summaries, active_length, block_size
+    );
+}
+
+void ocean_paged_kv_cache_update_hierarchy(
+    ocean_tensor_handle_t hierarchy,
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int position,
+    int block_size
+) {
+    ocean_tensor_sparse_attention_update_hierarchy_active(
+        hierarchy, summaries, active_length, position, block_size
+    );
+}
+
+ocean_tensor_handle_t ocean_paged_kv_cache_build_route_hierarchical(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t hierarchy,
+    int active_length,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    int random_seed
+) {
+    if (!cache) ocean_tensor_fail("PagedKVCache route on null cache");
+    ocean_tensor_handle_t key = ocean_paged_kv_cache_materialize_key(cache);
+    ocean_tensor_handle_t route =
+        ocean_tensor_sparse_attention_build_route_hierarchical_active(
+            key, hierarchy, active_length, summary_window, semantic_blocks,
+            local_blocks, block_size, random_seed
+        );
+    ocean_tensor_release(key);
+    return route;
+}
+
+void ocean_paged_kv_cache_update_route_hierarchical(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t route,
+    ocean_tensor_handle_t hierarchy,
+    int active_length,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    int random_seed
+) {
+    if (!cache) ocean_tensor_fail("PagedKVCache route update on null cache");
+    ocean_tensor_handle_t key = ocean_paged_kv_cache_materialize_key(cache);
+    ocean_tensor_sparse_attention_update_route_hierarchical_active(
+        route, key, hierarchy, active_length, summary_window, semantic_blocks,
+        local_blocks, block_size, random_seed
+    );
+    ocean_tensor_release(key);
 }
 
 int ocean_tensor_argmax(ocean_tensor_handle_t tensor) {

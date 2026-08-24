@@ -58,6 +58,29 @@ int main(void) {
         close_to(ocean_tensor_get_flat_f32(materialized_value, i), value_data[i], "value");
     }
 
+    ocean_tensor_handle_t summaries = ocean_paged_kv_cache_build_summaries(
+        cache, 4, 2
+    );
+    ocean_tensor_handle_t dense_summaries =
+        ocean_tensor_sparse_attention_build_summaries_active(
+            materialized_key, 4, 2
+        );
+    for (size_t i = 0; i < 4; ++i) {
+        close_to(ocean_tensor_get_flat_f32(summaries, i),
+            ocean_tensor_get_flat_f32(dense_summaries, i), "summary");
+    }
+    ocean_tensor_handle_t hierarchy = ocean_paged_kv_cache_build_hierarchy(
+        summaries, 4, 2
+    );
+    ocean_tensor_handle_t dense_hierarchy =
+        ocean_tensor_sparse_attention_build_hierarchy_active(
+            dense_summaries, 4, 2
+        );
+    for (size_t i = 0; i < 8; ++i) {
+        close_to(ocean_tensor_get_flat_f32(hierarchy, i),
+            ocean_tensor_get_flat_f32(dense_hierarchy, i), "hierarchy");
+    }
+
     size_t query_shape[4] = {1, 1, 2, 2};
     ocean_tensor_handle_t query = ocean_tensor_zeros_nd(
         query_shape, 4, "float32", "cpu"
@@ -81,6 +104,10 @@ int main(void) {
             ocean_tensor_get_flat_f32(dense, i), "paged attention");
     }
 
+    ocean_tensor_release(dense_hierarchy);
+    ocean_tensor_release(hierarchy);
+    ocean_tensor_release(dense_summaries);
+    ocean_tensor_release(summaries);
     ocean_tensor_release(dense);
     ocean_tensor_release(paged);
     ocean_tensor_release(route);

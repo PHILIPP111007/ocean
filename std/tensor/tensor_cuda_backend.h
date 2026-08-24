@@ -250,6 +250,17 @@ void ocean_cuda_sparse_attention_routed_paged(
     int query_start,
     int causal
 );
+void ocean_cuda_sparse_build_paged_summary(
+    const void *key_pages,
+    void *summaries,
+    int batches,
+    int heads,
+    int page_count,
+    int page_size,
+    int active_length,
+    int head_dim,
+    int page_index
+);
 void ocean_cuda_sparse_build_summaries(
     const void *key,
     void *summaries,

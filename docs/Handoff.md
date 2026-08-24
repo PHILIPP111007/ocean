@@ -3715,11 +3715,14 @@ CUDA compilation и numerical agreement на NVIDIA ещё требуют про
 checkout. OpenCL для этого API намеренно не используется: его page-pointer ABI
 отличается от CUDA и будет добавлен отдельным backend-проектированием.
 
-Важно: GPT-2 пока продолжает использовать существующий contiguous KV-cache.
-Простая замена только K/V на `PagedKVCache` с сохранением старых summaries и
-hierarchy создала бы две копии данных. Следующий этап — перенести summaries и
-hierarchical index на page-native storage, после чего переключить GPT-2 на один
-PagedKVCache и измерить memory/prefill/decode отдельно.
+GPT-2 теперь использует один `PagedKVCache` на слой: отдельные contiguous
+`cache_k`/`cache_v` больше не выделяются. Summaries строятся и обновляются из
+страниц, а hierarchy хранится отдельно как компактный индекс. Для совместимости
+с текущим hierarchical selector route refresh пока временно материализует K в
+один transient Tensor; этот буфер освобождается сразу после построения route и
+не является второй persistent KV-cache. Dense CPU fallback также может явно
+материализовать K/V. Следующий performance milestone — убрать transient
+materialization из selector и читать recent window напрямую из page table.
 
 ## 80.2.1 Regression status
 
@@ -3744,8 +3747,9 @@ P7  hierarchical summary index + incremental leaf-to-root updates -> реали�
 P8  переиспользовать CUDA inference workspace и распараллелить serial selector
 P9  сравнить refresh interval 25/50/100 и semantic/random block budgets
 P10 после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
-P11 page-native summaries/hierarchy и миграция GPT2 с contiguous KV-cache на PagedKVCache
-P12 CUDA hardware validation для PagedKVCache и memory/throughput benchmark
+P11 page-native summaries/hierarchy и миграция GPT2 с contiguous KV-cache на PagedKVCache -> реализовано, route selector ещё materialize-ит transient K
+P12 убрать transient K materialization из hierarchical selector
+P13 CUDA hardware validation для PagedKVCache и memory/throughput benchmark
 ```
 
 Backend/server vertical остаётся равноправной частью проекта: long-context ML

@@ -139,8 +139,11 @@ must not leave gaps. `materialize_key()` and `materialize_value()` are explicit
 `O(active_length)` compatibility operations; routed attention reads page storage
 directly. The CPU reference is covered by a regression test, while the CUDA
 kernel requires validation in an environment with `nvcc` and a CUDA device.
-The GPT-2 model is not switched to this API yet: its summaries and hierarchy
-must first become page-native so migration does not duplicate the K/V memory.
+GPT-2 now uses one `PagedKVCache` per layer and builds summaries from page
+storage, so it no longer keeps a second persistent contiguous K/V cache. The
+current hierarchical route refresh still creates a temporary contiguous K
+Tensor for the existing selector and releases it immediately; removing that
+transient selector copy is the next optimization step.
 
 ## NumPy `.npy` files
 

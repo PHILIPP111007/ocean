@@ -87,6 +87,14 @@ ocean_paged_kv_cache_handle_t ocean_paged_kv_cache_create(
     int page_size,
     const char *device
 );
+ocean_paged_kv_cache_handle_t ocean_paged_kv_cache_create_with_capacity(
+    int batches,
+    int heads,
+    int head_dim,
+    int page_size,
+    int max_seq_len,
+    const char *device
+);
 void ocean_paged_kv_cache_release(ocean_paged_kv_cache_handle_t cache);
 int ocean_paged_kv_cache_length(ocean_paged_kv_cache_handle_t cache);
 int ocean_paged_kv_cache_page_size(ocean_paged_kv_cache_handle_t cache);
@@ -111,6 +119,51 @@ ocean_tensor_handle_t ocean_paged_kv_cache_sparse_attention_routed(
     double scale,
     int query_start,
     bool causal
+);
+ocean_tensor_handle_t ocean_paged_kv_cache_build_summaries(
+    ocean_paged_kv_cache_handle_t cache,
+    int active_length,
+    int block_size
+);
+void ocean_paged_kv_cache_update_summary(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int position,
+    int block_size
+);
+ocean_tensor_handle_t ocean_paged_kv_cache_build_hierarchy(
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int block_size
+);
+void ocean_paged_kv_cache_update_hierarchy(
+    ocean_tensor_handle_t hierarchy,
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int position,
+    int block_size
+);
+ocean_tensor_handle_t ocean_paged_kv_cache_build_route_hierarchical(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t hierarchy,
+    int active_length,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    int random_seed
+);
+void ocean_paged_kv_cache_update_route_hierarchical(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t route,
+    ocean_tensor_handle_t hierarchy,
+    int active_length,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    int random_seed
 );
 int ocean_tensor_argmax(ocean_tensor_handle_t tensor);
 ocean_tensor_handle_t ocean_tensor_to(ocean_tensor_handle_t tensor, const char *device);

@@ -436,6 +436,12 @@ class PagedKVCache:
         var result: PagedKVCache = PagedKVCache(handle)
         return result
 
+    @staticmethod
+    def create_with_capacity(batches: int, heads: int, head_dim: int, page_size: int, max_seq_len: int, device: str) -> PagedKVCache:
+        var handle: ocean_paged_kv_cache_handle_t = ocean_paged_kv_cache_create_with_capacity(batches, heads, head_dim, page_size, max_seq_len, device)
+        var result: PagedKVCache = PagedKVCache(handle)
+        return result
+
     def length(self) -> int:
         return ocean_paged_kv_cache_length(self.handle)
 
@@ -460,6 +466,33 @@ class PagedKVCache:
         var handle: ocean_tensor_handle_t = ocean_paged_kv_cache_sparse_attention_routed(self.handle, query.handle, route.handle, active_length, block_size, scale, query_start, causal)
         var result: Tensor = Tensor(handle)
         return result
+
+    def build_summaries(self, active_length: int, block_size: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_paged_kv_cache_build_summaries(self.handle, active_length, block_size)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def update_summary(self, summaries: &Tensor, active_length: int, position: int, block_size: int) -> None:
+        ocean_paged_kv_cache_update_summary(self.handle, summaries.handle, active_length, position, block_size)
+        return None
+
+    def build_hierarchy(self, summaries: &Tensor, active_length: int, block_size: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_paged_kv_cache_build_hierarchy(summaries.handle, active_length, block_size)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def update_hierarchy(self, hierarchy: &Tensor, summaries: &Tensor, active_length: int, position: int, block_size: int) -> None:
+        ocean_paged_kv_cache_update_hierarchy(hierarchy.handle, summaries.handle, active_length, position, block_size)
+        return None
+
+    def build_route_hierarchical(self, hierarchy: &Tensor, active_length: int, summary_window: int, semantic_blocks: int, local_blocks: int, block_size: int, random_seed: int) -> Tensor[int32]:
+        var handle: ocean_tensor_handle_t = ocean_paged_kv_cache_build_route_hierarchical(self.handle, hierarchy.handle, active_length, summary_window, semantic_blocks, local_blocks, block_size, random_seed)
+        var result: Tensor[int32] = Tensor(handle)
+        return result
+
+    def update_route_hierarchical(self, route: Tensor[int32], hierarchy: &Tensor, active_length: int, summary_window: int, semantic_blocks: int, local_blocks: int, block_size: int, random_seed: int) -> None:
+        ocean_paged_kv_cache_update_route_hierarchical(self.handle, route.handle, hierarchy.handle, active_length, summary_window, semantic_blocks, local_blocks, block_size, random_seed)
+        return None
 
     def release(self) -> None:
         ocean_paged_kv_cache_release(self.handle)

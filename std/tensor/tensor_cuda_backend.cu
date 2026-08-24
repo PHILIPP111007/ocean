@@ -1706,6 +1706,43 @@ __global__ void ocean_cuda_sparse_routed_attention_kernel(
     }
 }
 
+__global__ void ocean_cuda_sparse_build_paged_summary_kernel(
+    const float * const *key_pages,
+    float *summaries,
+    int batches,
+    int heads,
+    int page_count,
+    int page_size,
+    int active_length,
+    int head_dim,
+    int page_index
+) {
+    size_t group = (size_t)blockIdx.x;
+    size_t total = (size_t)batches * (size_t)heads;
+    int lane = (int)threadIdx.x;
+    if (group >= total || page_index < 0 || page_index >= page_count ||
+        lane >= head_dim) return;
+    int start = page_index * page_size;
+    int end = start + page_size;
+    if (end > active_length) end = active_length;
+    int count = end - start;
+    size_t summary_base = (group * (size_t)page_count +
+        (size_t)page_index) * (size_t)head_dim;
+    if (count <= 0) {
+        summaries[summary_base + (size_t)lane] = 0.0f;
+        return;
+    }
+    const float *page = key_pages[page_index];
+    size_t page_base = group * (size_t)page_size * (size_t)head_dim;
+    float sum = 0.0f;
+    for (int token = start; token < end; ++token) {
+        int local = token - start;
+        sum += page[page_base + (size_t)local * (size_t)head_dim +
+            (size_t)lane];
+    }
+    summaries[summary_base + (size_t)lane] = sum / (float)count;
+}
+
 __global__ void ocean_cuda_sparse_routed_attention_paged_kernel(
     const float *query,
     const float * const *key_pages,
@@ -2376,6 +2413,29 @@ void ocean_cuda_page_table_update(
 
 void ocean_cuda_page_table_release(void *table) {
     if (table != NULL) ocean_cuda_check(cudaFree(table), "cudaFree page table");
+}
+
+void ocean_cuda_sparse_build_paged_summary(
+    const void *key_pages,
+    void *summaries,
+    int batches,
+    int heads,
+    int page_count,
+    int page_size,
+    int active_length,
+    int head_dim,
+    int page_index
+) {
+    size_t total = (size_t)batches * (size_t)heads;
+    if (total == 0) return;
+    ocean_cuda_sparse_build_paged_summary_kernel<<<
+        (int)total, 128
+    >>>(
+        (const float * const *)key_pages, (float *)summaries,
+        batches, heads, page_count, page_size, active_length, head_dim,
+        page_index
+    );
+    ocean_cuda_check_launch("paged sparse summary kernel");
 }
 
 void ocean_cuda_sparse_attention_routed_paged(
