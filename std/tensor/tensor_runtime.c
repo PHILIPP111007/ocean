@@ -2601,6 +2601,99 @@ void ocean_paged_kv_cache_write(
     if (end > cache->length) cache->length = end;
 }
 
+void ocean_paged_kv_cache_packed_qkv_append(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t input,
+    ocean_tensor_handle_t q_packed_weight,
+    double q_scale,
+    ocean_tensor_handle_t q_bias,
+    ocean_tensor_handle_t k_packed_weight,
+    double k_scale,
+    ocean_tensor_handle_t k_bias,
+    ocean_tensor_handle_t v_packed_weight,
+    double v_scale,
+    ocean_tensor_handle_t v_bias,
+    ocean_tensor_handle_t q_output,
+    int position,
+    int out_features
+) {
+    if (!cache || !input || !q_packed_weight || !q_bias ||
+        !k_packed_weight || !k_bias || !v_packed_weight || !v_bias ||
+        !q_output || cache->device != OCEAN_TENSOR_BACKEND_CUDA) {
+        ocean_tensor_fail("paged packed QKV append requires CUDA tensors");
+    }
+    if (position < 0 || (size_t)position > cache->length || out_features <= 0 ||
+        input->dtype != OCEAN_TENSOR_FLOAT32 || input->ndim != 3 ||
+        input->shape[0] != cache->batches || input->shape[1] != 1 ||
+        input->shape[2] == 0 || q_output->dtype != OCEAN_TENSOR_FLOAT32 ||
+        q_output->ndim != 4 || q_output->shape[0] != cache->batches ||
+        q_output->shape[1] != cache->heads || q_output->shape[2] != 1 ||
+        q_output->shape[3] != cache->head_dim ||
+        input->shape[2] != (size_t)out_features ||
+        (size_t)out_features != cache->heads * cache->head_dim ||
+        q_packed_weight->dtype != OCEAN_TENSOR_INT32 ||
+        k_packed_weight->dtype != OCEAN_TENSOR_INT32 ||
+        v_packed_weight->dtype != OCEAN_TENSOR_INT32 ||
+        q_packed_weight->ndim != 2 || k_packed_weight->ndim != 2 ||
+        v_packed_weight->ndim != 2 ||
+        q_packed_weight->shape[0] != input->shape[2] ||
+        k_packed_weight->shape[0] != input->shape[2] ||
+        v_packed_weight->shape[0] != input->shape[2] ||
+        q_packed_weight->shape[1] != (size_t)((out_features + 15) / 16) ||
+        k_packed_weight->shape[1] != q_packed_weight->shape[1] ||
+        v_packed_weight->shape[1] != q_packed_weight->shape[1] ||
+        q_bias->dtype != OCEAN_TENSOR_FLOAT32 ||
+        k_bias->dtype != OCEAN_TENSOR_FLOAT32 ||
+        v_bias->dtype != OCEAN_TENSOR_FLOAT32 ||
+        q_bias->size < (size_t)out_features ||
+        k_bias->size < (size_t)out_features ||
+        v_bias->size < (size_t)out_features ||
+        input->device != cache->device || q_output->device != cache->device ||
+        q_packed_weight->device != cache->device ||
+        k_packed_weight->device != cache->device ||
+        v_packed_weight->device != cache->device ||
+        q_bias->device != cache->device || k_bias->device != cache->device ||
+        v_bias->device != cache->device ||
+        !ocean_tensor_is_contiguous(input) ||
+        !ocean_tensor_is_contiguous(q_output) ||
+        !ocean_tensor_is_contiguous(q_packed_weight) ||
+        !ocean_tensor_is_contiguous(k_packed_weight) ||
+        !ocean_tensor_is_contiguous(v_packed_weight) ||
+        !ocean_tensor_is_contiguous(q_bias) ||
+        !ocean_tensor_is_contiguous(k_bias) ||
+        !ocean_tensor_is_contiguous(v_bias)) {
+        ocean_tensor_fail("paged packed QKV append metadata mismatch");
+    }
+    if (!isfinite(q_scale) || !isfinite(k_scale) || !isfinite(v_scale) ||
+        cache->batches > (size_t)INT_MAX || cache->heads > (size_t)INT_MAX ||
+        cache->head_dim > (size_t)INT_MAX || cache->page_size > (size_t)INT_MAX ||
+        input->shape[2] > (size_t)INT_MAX || out_features > INT_MAX) {
+        ocean_tensor_fail("paged packed QKV append metadata is too large");
+    }
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    size_t page = (size_t)position / cache->page_size;
+    ocean_paged_kv_allocate_page(cache, page);
+    ocean_cuda_packed_qkv_paged_append(
+        input->cuda_data,
+        q_packed_weight->cuda_data, q_bias->cuda_data,
+        k_packed_weight->cuda_data, k_bias->cuda_data,
+        v_packed_weight->cuda_data, v_bias->cuda_data,
+        q_output->cuda_data,
+        cache->key_pages[page]->cuda_data,
+        cache->value_pages[page]->cuda_data,
+        (int)cache->batches, (int)input->shape[2], out_features,
+        (int)q_packed_weight->shape[1], (int)cache->heads,
+        (int)cache->head_dim, (int)cache->page_size,
+        position % (int)cache->page_size,
+        (float)q_scale, (float)k_scale, (float)v_scale
+    );
+    if ((size_t)position + 1u > cache->length) cache->length = (size_t)position + 1u;
+    return;
+#else
+    ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+}
+
 static ocean_tensor_handle_t ocean_paged_kv_materialize(
     ocean_paged_kv_cache_handle_t cache, bool values
 ) {

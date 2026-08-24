@@ -153,6 +153,8 @@ warp-parallel score construction and a block-wide softmax; the old CPU path is
 unchanged.
 `Tensor.synchronize()` is available for accurate host-side timing of asynchronous
 GPU work. The GPT-2 inference example reports prefill and decode phases separately.
+The CUDA decode path also fuses packed QKV projection with direct K/V page append;
+Q is produced directly in `[B, H, 1, D]` layout.
 
 ## NumPy `.npy` files
 

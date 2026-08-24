@@ -223,6 +223,29 @@ void ocean_cuda_paged_kv_write(
     int destination_start,
     int count
 );
+void ocean_cuda_packed_qkv_paged_append(
+    const void *input,
+    const void *q_packed,
+    const void *q_bias,
+    const void *k_packed,
+    const void *k_bias,
+    const void *v_packed,
+    const void *v_bias,
+    void *q_output,
+    void *key_page,
+    void *value_page,
+    int batches,
+    int cols_a,
+    int cols_b,
+    int packed_cols,
+    int heads,
+    int head_dim,
+    int page_size,
+    int destination,
+    float q_scale,
+    float k_scale,
+    float v_scale
+);
 void ocean_cuda_permute_swap12_f32(
     const void *input,
     void *output,

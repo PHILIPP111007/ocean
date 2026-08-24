@@ -156,6 +156,7 @@ class Validator:
                             "ocean_paged_kv_cache_length",
                             "ocean_paged_kv_cache_page_size",
                             "ocean_paged_kv_cache_write",
+                            "ocean_paged_kv_cache_packed_qkv_append",
                             "ocean_paged_kv_cache_materialize_key",
                             "ocean_paged_kv_cache_materialize_value",
             "ocean_paged_kv_cache_sparse_attention_routed",

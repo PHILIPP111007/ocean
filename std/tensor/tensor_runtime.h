@@ -104,6 +104,22 @@ void ocean_paged_kv_cache_write(
     ocean_tensor_handle_t value,
     int position
 );
+void ocean_paged_kv_cache_packed_qkv_append(
+    ocean_paged_kv_cache_handle_t cache,
+    ocean_tensor_handle_t input,
+    ocean_tensor_handle_t q_packed_weight,
+    double q_scale,
+    ocean_tensor_handle_t q_bias,
+    ocean_tensor_handle_t k_packed_weight,
+    double k_scale,
+    ocean_tensor_handle_t k_bias,
+    ocean_tensor_handle_t v_packed_weight,
+    double v_scale,
+    ocean_tensor_handle_t v_bias,
+    ocean_tensor_handle_t q_output,
+    int position,
+    int out_features
+);
 ocean_tensor_handle_t ocean_paged_kv_cache_materialize_key(
     ocean_paged_kv_cache_handle_t cache
 );

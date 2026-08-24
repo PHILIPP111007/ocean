@@ -759,6 +759,64 @@ __global__ void ocean_cuda_packed_qkv_split_kernel(
     }
 }
 
+__global__ void ocean_cuda_packed_qkv_paged_append_kernel(
+    const float *input,
+    const int32_t *q_packed, const float *q_bias,
+    const int32_t *k_packed, const float *k_bias,
+    const int32_t *v_packed, const float *v_bias,
+    float *q_output, float *key_page, float *value_page,
+    int batches, int cols_a, int cols_b, int packed_cols,
+    int heads, int head_dim, int page_size, int destination,
+    float q_scale, float k_scale, float v_scale
+) {
+    __shared__ float input_tile[128];
+    int lane = (int)threadIdx.x;
+    int groups_per_row = (cols_b + 127) / 128;
+    int group = (int)blockIdx.x;
+    int row = group / groups_per_row;
+    int column = (group % groups_per_row) * 128 + lane;
+    if (row >= batches) return;
+    float q_sum = 0.0f;
+    float k_sum = 0.0f;
+    float v_sum = 0.0f;
+    for (int tile = 0; tile < cols_a; tile += 128) {
+        int input_index = tile + lane;
+        input_tile[lane] = input_index < cols_a
+            ? input[row * cols_a + input_index] : 0.0f;
+        __syncthreads();
+        int tile_end = tile + 128;
+        if (tile_end > cols_a) tile_end = cols_a;
+        if (column < cols_b) {
+            for (int k = tile; k < tile_end; ++k) {
+                float value = input_tile[k - tile];
+                q_sum += value * ocean_cuda_ternary_value(
+                    q_packed, k, column, packed_cols
+                );
+                k_sum += value * ocean_cuda_ternary_value(
+                    k_packed, k, column, packed_cols
+                );
+                v_sum += value * ocean_cuda_ternary_value(
+                    v_packed, k, column, packed_cols
+                );
+            }
+        }
+        __syncthreads();
+    }
+    if (column < cols_b) {
+        float q_value = q_sum * q_scale + q_bias[column];
+        float k_value = k_sum * k_scale + k_bias[column];
+        float v_value = v_sum * v_scale + v_bias[column];
+        q_output[(size_t)row * (size_t)cols_b + (size_t)column] = q_value;
+        int head = column / head_dim;
+        int dimension = column - head * head_dim;
+        size_t page_base = ((size_t)row * (size_t)heads + (size_t)head) *
+            (size_t)page_size * (size_t)head_dim +
+            (size_t)destination * (size_t)head_dim + (size_t)dimension;
+        key_page[page_base] = k_value;
+        value_page[page_base] = v_value;
+    }
+}
+
 __global__ void ocean_cuda_cache_write_kernel(
     float *cache, const float *value, int batches, int heads, int sequence,
     int value_sequence, int width, int position
@@ -2303,6 +2361,50 @@ void ocean_cuda_packed_qkv_split(const void *input, const void *q_packed, const 
         rows, cols_a, cols_b, packed_cols, q_scale, k_scale, v_scale
     );
     ocean_cuda_check_launch("split packed QKV kernel");
+}
+
+void ocean_cuda_packed_qkv_paged_append(
+    const void *input,
+    const void *q_packed,
+    const void *q_bias,
+    const void *k_packed,
+    const void *k_bias,
+    const void *v_packed,
+    const void *v_bias,
+    void *q_output,
+    void *key_page,
+    void *value_page,
+    int batches,
+    int cols_a,
+    int cols_b,
+    int packed_cols,
+    int heads,
+    int head_dim,
+    int page_size,
+    int destination,
+    float q_scale,
+    float k_scale,
+    float v_scale
+) {
+    size_t size = (size_t)batches * (size_t)cols_b;
+    if (size == 0) return;
+    if (heads <= 0 || head_dim <= 0 || page_size <= 0 ||
+        destination < 0 || destination >= page_size ||
+        cols_b != heads * head_dim) {
+        ocean_tensor_fail("invalid CUDA paged QKV append dimensions");
+    }
+    ocean_cuda_packed_qkv_paged_append_kernel<<<
+        ocean_cuda_packed_blocks(batches, cols_b), 128
+    >>>(
+        (const float *)input,
+        (const int32_t *)q_packed, (const float *)q_bias,
+        (const int32_t *)k_packed, (const float *)k_bias,
+        (const int32_t *)v_packed, (const float *)v_bias,
+        (float *)q_output, (float *)key_page, (float *)value_page,
+        batches, cols_a, cols_b, packed_cols, heads, head_dim, page_size,
+        destination, q_scale, k_scale, v_scale
+    );
+    ocean_cuda_check_launch("paged packed QKV append kernel");
 }
 
 void ocean_cuda_packed_qkv_attention_decode(const void *input, const void *q_packed, const void *q_bias, const void *k_packed, const void *k_bias, const void *v_packed, const void *v_bias, void *cache_k, void *cache_v, void *output, int cols_a, int packed_cols, int max_seq, int position, int n_heads, int head_dim, float q_scale, float k_scale, float v_scale) {

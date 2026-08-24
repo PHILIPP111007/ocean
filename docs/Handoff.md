@@ -3731,6 +3731,12 @@ page table и больше не материализует весь contiguous K
 `Tensor.synchronize()` дожидается завершения backend queue перед чтением host
 clock, поэтому вывод показывает отдельные latency и tok/s для обеих фаз.
 
+В steady-state CUDA decode добавлен fused QKV append: один kernel вычисляет
+тернарные Q/K/V projections, записывает K/V прямо в текущую page и выдаёт Q уже
+в layout `[B, H, 1, D]`. Это убирает временные Q/K/V tensors и отдельный
+`cache.write()` kernel из каждого decode шага. Summary/hierarchy обновляются
+после append, поэтому route остаётся корректным.
+
 GPT-2 теперь использует один `PagedKVCache` на слой: отдельные contiguous
 `cache_k`/`cache_v` больше не выделяются. Summaries строятся и обновляются из
 страниц, а hierarchy хранится отдельно как компактный индекс. CUDA hierarchical

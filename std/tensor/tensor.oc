@@ -456,6 +456,10 @@ class PagedKVCache:
         ocean_paged_kv_cache_write(self.handle, key.handle, value.handle, position)
         return None
 
+    def packed_qkv_append(self, input: &Tensor, q_weight: &Tensor, q_scale: float64, q_bias: &Tensor, k_weight: &Tensor, k_scale: float64, k_bias: &Tensor, v_weight: &Tensor, v_scale: float64, v_bias: &Tensor, q_output: &Tensor, position: int, out_features: int) -> None:
+        ocean_paged_kv_cache_packed_qkv_append(self.handle, input.handle, q_weight.handle, q_scale, q_bias.handle, k_weight.handle, k_scale, k_bias.handle, v_weight.handle, v_scale, v_bias.handle, q_output.handle, position, out_features)
+        return None
+
     def materialize_key(self) -> Tensor:
         var handle: ocean_tensor_handle_t = ocean_paged_kv_cache_materialize_key(self.handle)
         var result: Tensor = Tensor(handle)

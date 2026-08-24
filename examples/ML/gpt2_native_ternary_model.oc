@@ -448,17 +448,12 @@ class GPT2Attention(Module):
 
     def forward_cached_sparse(self, input: &Tensor[float32], cache: &PagedKVCache, summary: &Tensor[float32], hierarchy: &Tensor[float32], route: &Tensor[int32], refresh_route: bool, position: int) -> Tensor[float32]:
         var batch_size: int = input.shape(0)
-        var q_linear: Tensor[float32] = Tensor.empty(batch_size, 1, self.d_model, input.device())
-        var k_linear: Tensor[float32] = Tensor.empty(batch_size, 1, self.d_model, input.device())
-        var v_linear: Tensor[float32] = Tensor.empty(batch_size, 1, self.d_model, input.device())
-        input.packed_qkv_inference_into(self.q_proj.inference_packed_weight, self.q_proj.inference_scale, self.q_proj.bias.tensor(), self.k_proj.inference_packed_weight, self.k_proj.inference_scale, self.k_proj.bias.tensor(), self.v_proj.inference_packed_weight, self.v_proj.inference_scale, self.v_proj.bias.tensor(), q_linear, k_linear, v_linear, self.d_model)
-        var q_reshaped: Tensor[float32] = q_linear.reshape([batch_size, 1, self.n_heads, self.head_dim])
-        var k_reshaped: Tensor[float32] = k_linear.reshape([batch_size, 1, self.n_heads, self.head_dim])
-        var v_reshaped: Tensor[float32] = v_linear.reshape([batch_size, 1, self.n_heads, self.head_dim])
-        var q: Tensor[float32] = q_reshaped.permute([0, 2, 1, 3])
-        var k: Tensor[float32] = k_reshaped.permute([0, 2, 1, 3])
-        var v: Tensor[float32] = v_reshaped.permute([0, 2, 1, 3])
-        cache.write(k, v, position)
+        # CUDA fusion computes Q/K/V in one launch, writes K/V directly into
+        # the target page, and returns Q in [B, H, 1, D] layout. This removes
+        # three temporary projection tensors and the separate cache-write
+        # kernel from the steady-state decode path.
+        var q: Tensor[float32] = Tensor.empty(batch_size, self.n_heads, 1, self.head_dim, input.device())
+        cache.packed_qkv_append(input, self.q_proj.inference_packed_weight, self.q_proj.inference_scale, self.q_proj.bias.tensor(), self.k_proj.inference_packed_weight, self.k_proj.inference_scale, self.k_proj.bias.tensor(), self.v_proj.inference_packed_weight, self.v_proj.inference_scale, self.v_proj.bias.tensor(), q, position, self.d_model)
         var active_length: int = position + 1
         cache.update_summary(summary, active_length, position, self.sparse_block_size)
         cache.update_hierarchy(hierarchy, summary, active_length, position, self.sparse_block_size)
