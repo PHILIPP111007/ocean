@@ -92,6 +92,13 @@ milliseconds per token = 8.455695
 tokens per second = 118.263486
 first generated token = 0.000000
 [ok] Ocean GPT2 inference benchmark
+
+
+Peak RSS:
+492,168 KB ≈ 481 MiB
+
+After freeing master weights:
+173,980 KB ≈ 170 MiB
 ```
 
 CUDA:
@@ -122,18 +129,19 @@ first generated token = 0.000000
 mode = inference
 model device = gpu
 backend device = CUDA GPU (native kernels)
-GPT2 config = vocab 50257, context 10000, hidden 768, heads 12, ff 3072, layers 12
-prompt tokens = 9000
-generated tokens = 1000
-elapsed seconds = 19.033448
-milliseconds per token = 19.033448
-tokens per second = 52.539088
+GPT2 config = vocab 50257 context 22000 hidden 768 heads 12 ff 3072 layers 12
+prompt tokens = 19000
+generated tokens = 2000
+elapsed seconds = 28.679541
+milliseconds per token = 14.339771
+tokens per second = 69.736122
+prefill elapsed seconds = 8.607352
+prefill milliseconds per token = 0.453019
+prefill tokens per second = 2207.415165
+decode tokens = 1999
+decode elapsed seconds = 20.072189
+decode milliseconds per token = 10.041115
+decode tokens per second = 99.590532
 first generated token = 0.000000
 [ok] Ocean GPT2 inference benchmark
 ```
-
-Peak RSS:
-492,168 KB ≈ 481 MiB
-
-After freeing master weights:
-173,980 KB ≈ 170 MiB
