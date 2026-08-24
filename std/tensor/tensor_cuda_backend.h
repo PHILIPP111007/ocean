@@ -248,6 +248,27 @@ void ocean_cuda_sparse_update_summary(
     int block_size,
     int position
 );
+void ocean_cuda_sparse_build_hierarchy(
+    const void *summaries,
+    void *hierarchy,
+    int batches,
+    int heads,
+    int summary_blocks,
+    int valid_blocks,
+    int head_dim,
+    int leaf_count
+);
+void ocean_cuda_sparse_update_hierarchy(
+    const void *summaries,
+    void *hierarchy,
+    int batches,
+    int heads,
+    int summary_blocks,
+    int valid_blocks,
+    int head_dim,
+    int leaf_count,
+    int block
+);
 void ocean_cuda_sparse_build_route(
     const void *key,
     const void *summaries,
@@ -256,6 +277,23 @@ void ocean_cuda_sparse_build_route(
     int heads,
     int key_length,
     int summary_blocks,
+    int active_length,
+    int head_dim,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    unsigned int random_seed
+);
+void ocean_cuda_sparse_build_hierarchical_route(
+    const void *key,
+    const void *hierarchy,
+    void *route,
+    int batches,
+    int heads,
+    int key_length,
+    int tree_nodes,
+    int leaf_count,
     int active_length,
     int head_dim,
     int summary_window,

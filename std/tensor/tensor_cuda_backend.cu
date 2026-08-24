@@ -899,6 +899,353 @@ __global__ void ocean_cuda_sparse_update_summary_kernel(
     summaries[summary_offset] = sum / (float)(end - start);
 }
 
+__device__ static void ocean_cuda_sparse_tree_range(
+    int node,
+    int leaf_count,
+    int *start,
+    int *span
+) {
+    int first = 1;
+    int current_span = leaf_count;
+    while (node >= first * 2) {
+        first *= 2;
+        current_span /= 2;
+    }
+    *start = (node - first) * current_span;
+    *span = current_span;
+}
+
+__global__ void ocean_cuda_sparse_hierarchy_leaves_kernel(
+    const float *summaries,
+    float *hierarchy,
+    int batches,
+    int heads,
+    int summary_blocks,
+    int head_dim,
+    int leaf_count
+) {
+    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)batches * (size_t)heads *
+        (size_t)leaf_count * (size_t)head_dim;
+    if (linear >= total) return;
+    int dimension = (int)(linear % (size_t)head_dim);
+    size_t leaf_linear = linear / (size_t)head_dim;
+    int leaf = (int)(leaf_linear % (size_t)leaf_count);
+    size_t group = leaf_linear / (size_t)leaf_count;
+    size_t destination = (group * (size_t)(leaf_count * 2) +
+        (size_t)leaf_count + (size_t)leaf) * (size_t)head_dim +
+        (size_t)dimension;
+    if (leaf < summary_blocks) {
+        size_t source = (group * (size_t)summary_blocks + (size_t)leaf) *
+            (size_t)head_dim + (size_t)dimension;
+        hierarchy[destination] = summaries[source];
+    } else {
+        hierarchy[destination] = 0.0f;
+    }
+}
+
+__global__ void ocean_cuda_sparse_hierarchy_level_kernel(
+    float *hierarchy,
+    int batches,
+    int heads,
+    int valid_blocks,
+    int head_dim,
+    int leaf_count,
+    int level
+) {
+    size_t linear = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)batches * (size_t)heads * (size_t)level *
+        (size_t)head_dim;
+    if (linear >= total) return;
+    int dimension = (int)(linear % (size_t)head_dim);
+    size_t node_linear = linear / (size_t)head_dim;
+    int node = level + (int)(node_linear % (size_t)level);
+    size_t group = node_linear / (size_t)level;
+    int start = 0;
+    int span = 0;
+    ocean_cuda_sparse_tree_range(node, leaf_count, &start, &span);
+    int left_start = 0;
+    int left_span = 0;
+    int right_start = 0;
+    int right_span = 0;
+    ocean_cuda_sparse_tree_range(node * 2, leaf_count, &left_start, &left_span);
+    ocean_cuda_sparse_tree_range(node * 2 + 1, leaf_count, &right_start, &right_span);
+    int left_count = valid_blocks - left_start;
+    if (left_count < 0) left_count = 0;
+    if (left_count > left_span) left_count = left_span;
+    int right_count = valid_blocks - right_start;
+    if (right_count < 0) right_count = 0;
+    if (right_count > right_span) right_count = right_span;
+    size_t tree_stride = (size_t)(leaf_count * 2) * (size_t)head_dim;
+    size_t base = group * tree_stride;
+    float value = 0.0f;
+    int count = left_count + right_count;
+    if (count > 0) {
+        if (left_count > 0) {
+            value += hierarchy[base + (size_t)(node * 2) * (size_t)head_dim +
+                (size_t)dimension] * (float)left_count;
+        }
+        if (right_count > 0) {
+            value += hierarchy[base + (size_t)(node * 2 + 1) * (size_t)head_dim +
+                (size_t)dimension] * (float)right_count;
+        }
+        value /= (float)count;
+    }
+    hierarchy[base + (size_t)node * (size_t)head_dim + (size_t)dimension] = value;
+}
+
+__global__ void ocean_cuda_sparse_update_hierarchy_kernel(
+    const float *summaries,
+    float *hierarchy,
+    int batches,
+    int heads,
+    int summary_blocks,
+    int valid_blocks,
+    int head_dim,
+    int leaf_count,
+    int block
+) {
+    int lane = (int)threadIdx.x;
+    int group = (int)blockIdx.x;
+    if (group >= batches * heads || lane >= head_dim || block < 0 ||
+        block >= valid_blocks || block >= summary_blocks) return;
+    size_t tree_stride = (size_t)(leaf_count * 2) * (size_t)head_dim;
+    size_t group_base = (size_t)group * tree_stride;
+    size_t summary_base = ((size_t)group * (size_t)summary_blocks +
+        (size_t)block) * (size_t)head_dim;
+    size_t leaf_base = group_base + (size_t)(leaf_count + block) *
+        (size_t)head_dim;
+    hierarchy[leaf_base + (size_t)lane] = summaries[summary_base + (size_t)lane];
+    int node = (leaf_count + block) / 2;
+    while (node > 0) {
+        int left_start = 0;
+        int left_span = 0;
+        int right_start = 0;
+        int right_span = 0;
+        ocean_cuda_sparse_tree_range(node * 2, leaf_count,
+            &left_start, &left_span);
+        ocean_cuda_sparse_tree_range(node * 2 + 1, leaf_count,
+            &right_start, &right_span);
+        int left_count = valid_blocks - left_start;
+        if (left_count < 0) left_count = 0;
+        if (left_count > left_span) left_count = left_span;
+        int right_count = valid_blocks - right_start;
+        if (right_count < 0) right_count = 0;
+        if (right_count > right_span) right_count = right_span;
+        int count = left_count + right_count;
+        float value = 0.0f;
+        if (count > 0) {
+            if (left_count > 0) {
+                value += hierarchy[group_base + (size_t)(node * 2) *
+                    (size_t)head_dim + (size_t)lane] * (float)left_count;
+            }
+            if (right_count > 0) {
+                value += hierarchy[group_base + (size_t)(node * 2 + 1) *
+                    (size_t)head_dim + (size_t)lane] * (float)right_count;
+            }
+            value /= (float)count;
+        }
+        hierarchy[group_base + (size_t)node * (size_t)head_dim +
+            (size_t)lane] = value;
+        node /= 2;
+    }
+}
+
+__device__ static bool ocean_cuda_sparse_tree_precedes(
+    float score, int index, float other_score, int other_index
+) {
+    return ocean_cuda_sparse_precedes(score, index, other_score, other_index);
+}
+
+__global__ void ocean_cuda_sparse_hierarchical_route_kernel(
+    const float *key,
+    const float *hierarchy,
+    int32_t *route,
+    int batches,
+    int heads,
+    int key_length,
+    int tree_nodes,
+    int leaf_count,
+    int active_length,
+    int head_dim,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    unsigned int random_seed,
+    int beam_width
+) {
+    extern __shared__ unsigned char storage[];
+    float *recent = (float *)storage;
+    float *candidate_scores = recent + head_dim;
+    int *candidate_nodes = (int *)(candidate_scores + beam_width * 2);
+    float *selected_scores = (float *)(candidate_nodes + beam_width * 2);
+    int *selected_blocks = (int *)(selected_scores + semantic_blocks);
+    size_t group = (size_t)blockIdx.x;
+    if (group >= (size_t)batches * (size_t)heads || threadIdx.x != 0) return;
+
+    size_t route_width = (size_t)local_blocks + (size_t)semantic_blocks + 1u;
+    size_t route_base = group * route_width;
+    for (size_t index = 0; index < route_width; ++index) {
+        route[route_base + index] = -1;
+    }
+    int end = active_length;
+    if (end > key_length) end = key_length;
+    int start = end - summary_window;
+    if (start < 0) start = 0;
+    int count = end - start;
+    if (count <= 0) return;
+    int batch = (int)(group / (size_t)heads);
+    int head = (int)(group % (size_t)heads);
+    const float *key_group = key +
+        (((size_t)batch * (size_t)heads + (size_t)head) *
+            (size_t)key_length * (size_t)head_dim);
+    float query_norm = 0.0f;
+    for (int dimension = 0; dimension < head_dim; ++dimension) {
+        float sum = 0.0f;
+        for (int token = start; token < end; ++token) {
+            sum += key_group[(size_t)token * (size_t)head_dim +
+                (size_t)dimension];
+        }
+        recent[dimension] = sum / (float)count;
+        query_norm += recent[dimension] * recent[dimension];
+    }
+    query_norm = sqrtf(query_norm);
+    int block_count = (active_length + block_size - 1) / block_size;
+    if (block_count > tree_nodes / 2) block_count = tree_nodes / 2;
+    int local_count = local_blocks;
+    if (local_count > block_count) local_count = block_count;
+    int local_start = block_count - local_count;
+    for (int index = 0; index < local_count; ++index) {
+        route[route_base + (size_t)index] = local_start + index;
+    }
+
+    int depth = 0;
+    for (int span = leaf_count; span > 1; span /= 2) ++depth;
+    int candidate_count = 1;
+    candidate_nodes[0] = 1;
+    candidate_scores[0] = 0.0f;
+    size_t tree_stride = (size_t)tree_nodes * (size_t)head_dim;
+    for (int level = 0; level < depth; ++level) {
+        int next_count = 0;
+        for (int candidate = 0; candidate < candidate_count; ++candidate) {
+            int parent = candidate_nodes[candidate];
+            for (int branch = 0; branch < 2; ++branch) {
+                int node = parent * 2 + branch;
+                if (node <= 0 || node >= leaf_count * 2) continue;
+                int node_start = 0;
+                int node_span = 0;
+                ocean_cuda_sparse_tree_range(node, leaf_count,
+                    &node_start, &node_span);
+                if (node_start >= block_count) continue;
+                size_t summary_base = group * tree_stride +
+                    (size_t)node * (size_t)head_dim;
+                float dot = 0.0f;
+                float node_norm = 0.0f;
+                for (int dimension = 0; dimension < head_dim; ++dimension) {
+                    float value = hierarchy[summary_base + (size_t)dimension];
+                    dot += recent[dimension] * value;
+                    node_norm += value * value;
+                }
+                float score = dot / (query_norm * sqrtf(node_norm) + 1.0e-8f);
+                int insert = next_count;
+                if (insert > beam_width) insert = beam_width;
+                if (next_count < beam_width) {
+                    while (insert > 0 && ocean_cuda_sparse_tree_precedes(
+                        score, node, candidate_scores[beam_width + insert - 1],
+                        candidate_nodes[beam_width + insert - 1])) {
+                        candidate_scores[beam_width + insert] =
+                            candidate_scores[beam_width + insert - 1];
+                        candidate_nodes[beam_width + insert] =
+                            candidate_nodes[beam_width + insert - 1];
+                        --insert;
+                    }
+                    candidate_scores[beam_width + insert] = score;
+                    candidate_nodes[beam_width + insert] = node;
+                    ++next_count;
+                } else if (ocean_cuda_sparse_tree_precedes(
+                    score, node, candidate_scores[beam_width + beam_width - 1],
+                    candidate_nodes[beam_width + beam_width - 1])) {
+                    insert = beam_width - 1;
+                    while (insert > 0 && ocean_cuda_sparse_tree_precedes(
+                        score, node, candidate_scores[beam_width + insert - 1],
+                        candidate_nodes[beam_width + insert - 1])) {
+                        candidate_scores[beam_width + insert] =
+                            candidate_scores[beam_width + insert - 1];
+                        candidate_nodes[beam_width + insert] =
+                            candidate_nodes[beam_width + insert - 1];
+                        --insert;
+                    }
+                    candidate_scores[beam_width + insert] = score;
+                    candidate_nodes[beam_width + insert] = node;
+                }
+            }
+        }
+        candidate_count = next_count;
+        for (int candidate = 0; candidate < candidate_count; ++candidate) {
+            candidate_nodes[candidate] = candidate_nodes[beam_width + candidate];
+            candidate_scores[candidate] = candidate_scores[beam_width + candidate];
+        }
+        if (candidate_count == 0) break;
+    }
+    int selected_count = 0;
+    for (int candidate = 0; candidate < candidate_count; ++candidate) {
+        int block = candidate_nodes[candidate] - leaf_count;
+        if (block < 0 || block >= block_count || block >= local_start) continue;
+        float score = candidate_scores[candidate];
+        if (selected_count < semantic_blocks) {
+            int insert = selected_count;
+            while (insert > 0 && ocean_cuda_sparse_precedes(
+                score, block, selected_scores[insert - 1], selected_blocks[insert - 1])) {
+                selected_scores[insert] = selected_scores[insert - 1];
+                selected_blocks[insert] = selected_blocks[insert - 1];
+                --insert;
+            }
+            selected_scores[insert] = score;
+            selected_blocks[insert] = block;
+            ++selected_count;
+        } else if (ocean_cuda_sparse_precedes(
+            score, block, selected_scores[semantic_blocks - 1],
+            selected_blocks[semantic_blocks - 1])) {
+            int insert = semantic_blocks - 1;
+            while (insert > 0 && ocean_cuda_sparse_precedes(
+                score, block, selected_scores[insert - 1], selected_blocks[insert - 1])) {
+                selected_scores[insert] = selected_scores[insert - 1];
+                selected_blocks[insert] = selected_blocks[insert - 1];
+                --insert;
+            }
+            selected_scores[insert] = score;
+            selected_blocks[insert] = block;
+        }
+    }
+    for (int index = 0; index < selected_count; ++index) {
+        route[route_base + (size_t)local_blocks + (size_t)index] =
+            selected_blocks[index];
+    }
+    if (block_count > 0) {
+        unsigned int state = random_seed ^
+            ((unsigned int)group * 747796405u + 2891336453u);
+        state = state * 1664525u + 1013904223u;
+        int random_block = (int)(state % (unsigned int)block_count);
+        bool duplicate = false;
+        for (int attempt = 0; attempt < block_count; ++attempt) {
+            duplicate = false;
+            for (int index = 0; index < local_blocks + selected_count; ++index) {
+                if (route[route_base + (size_t)index] == random_block) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) break;
+            state = state * 1664525u + 1013904223u;
+            random_block = (int)(state % (unsigned int)block_count);
+        }
+        if (duplicate) random_block = -1;
+        route[route_base + (size_t)local_blocks + (size_t)semantic_blocks] =
+            random_block;
+    }
+}
+
 __global__ void ocean_cuda_sparse_attention_kernel(
     const float *query,
     const float *key,
@@ -1763,6 +2110,98 @@ void ocean_cuda_sparse_build_route(
         summary_window, semantic_blocks, local_blocks, block_size, random_seed
     );
     ocean_cuda_check_launch("sparse route kernel");
+}
+
+void ocean_cuda_sparse_build_hierarchy(
+    const void *summaries,
+    void *hierarchy,
+    int batches,
+    int heads,
+    int summary_blocks,
+    int valid_blocks,
+    int head_dim,
+    int leaf_count
+) {
+    if (batches <= 0 || heads <= 0 || summary_blocks <= 0 ||
+        head_dim <= 0 || leaf_count <= 0) return;
+    size_t leaves_total = (size_t)batches * (size_t)heads *
+        (size_t)leaf_count * (size_t)head_dim;
+    ocean_cuda_sparse_hierarchy_leaves_kernel<<<
+        ocean_cuda_blocks(leaves_total), 256
+    >>>(
+        (const float *)summaries, (float *)hierarchy, batches, heads,
+        summary_blocks, head_dim, leaf_count
+    );
+    ocean_cuda_check_launch("sparse hierarchy leaves kernel");
+    for (int level = leaf_count / 2; level >= 1; level /= 2) {
+        size_t level_total = (size_t)batches * (size_t)heads *
+            (size_t)level * (size_t)head_dim;
+        ocean_cuda_sparse_hierarchy_level_kernel<<<
+            ocean_cuda_blocks(level_total), 256
+        >>>(
+            (float *)hierarchy, batches, heads, valid_blocks, head_dim,
+            leaf_count, level
+        );
+        ocean_cuda_check_launch("sparse hierarchy level kernel");
+    }
+}
+
+void ocean_cuda_sparse_update_hierarchy(
+    const void *summaries,
+    void *hierarchy,
+    int batches,
+    int heads,
+    int summary_blocks,
+    int valid_blocks,
+    int head_dim,
+    int leaf_count,
+    int block
+) {
+    if (batches <= 0 || heads <= 0 || summary_blocks <= 0 ||
+        valid_blocks <= 0 || head_dim <= 0 || leaf_count <= 0 || block < 0) return;
+    ocean_cuda_sparse_update_hierarchy_kernel<<<batches * heads, 128>>>(
+        (const float *)summaries, (float *)hierarchy, batches, heads,
+        summary_blocks, valid_blocks, head_dim, leaf_count, block
+    );
+    ocean_cuda_check_launch("sparse hierarchy update kernel");
+}
+
+void ocean_cuda_sparse_build_hierarchical_route(
+    const void *key,
+    const void *hierarchy,
+    void *route,
+    int batches,
+    int heads,
+    int key_length,
+    int tree_nodes,
+    int leaf_count,
+    int active_length,
+    int head_dim,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    unsigned int random_seed
+) {
+    if (batches <= 0 || heads <= 0 || key_length <= 0 || tree_nodes <= 0 ||
+        leaf_count <= 0 || active_length <= 0 || head_dim <= 0 ||
+        summary_window <= 0 || semantic_blocks <= 0 || local_blocks < 0 ||
+        block_size <= 0) return;
+    int beam_width = semantic_blocks * 4;
+    if (beam_width < 8) beam_width = 8;
+    if (beam_width > 32) beam_width = 32;
+    size_t shared_bytes = (size_t)head_dim * sizeof(float) +
+        (size_t)beam_width * 2u * (sizeof(float) + sizeof(int)) +
+        (size_t)semantic_blocks * (sizeof(float) + sizeof(int));
+    ocean_cuda_sparse_hierarchical_route_kernel<<<
+        batches * heads, 128, shared_bytes
+    >>>(
+        (const float *)key, (const float *)hierarchy, (int32_t *)route,
+        batches, heads, key_length, tree_nodes, leaf_count, active_length,
+        head_dim, summary_window, semantic_blocks, local_blocks, block_size,
+        random_seed, beam_width
+    );
+    ocean_cuda_check_launch("hierarchical sparse route kernel");
 }
 
 void ocean_cuda_sparse_attention_routed(

@@ -133,7 +133,7 @@ interval expires, the route is rebuilt from:
 
 ```text
 the latest 100 keys
-and all currently visible block summaries
+and the hierarchical summary index
 ```
 
 This produces the following execution pattern:
@@ -145,8 +145,10 @@ build route -> use route for 50 tokens -> build route -> ...
 The route is kept independently for each layer and attention head. The current
 key and value are written to the KV cache before routed attention is executed.
 
-The summary for the current block is also updated as new tokens arrive. On the
-CUDA path this uses a native summary-update kernel.
+The summary for the current block is also updated as new tokens arrive. The
+corresponding hierarchy leaf and all its ancestors are updated in place, so a
+decode step does not rebuild or rescan the entire context. On the CUDA path
+both summary and hierarchy updates use native kernels.
 
 ## Routed attention
 
@@ -155,7 +157,7 @@ attention over all tokens inside the selected blocks:
 
 ```text
 Q                         [batch, heads, query_length, head_dim]
-K_route, V_route          tokens from the six selected blocks
+K_route, V_route          tokens from the eight selected blocks at most
 scores = Q @ K_route^T
 scores = scores / sqrt(head_dim)
 scores = causal_softmax(scores)
@@ -197,6 +199,28 @@ for the sparse path. It does not eliminate all prompt-length-dependent work:
 QKV projections, block-summary construction, route selection, and output
 projection still process the prompt.
 
+For long prefill, the route selector uses a balanced hierarchy over the block
+summaries. The leaves contain the original block means; every internal node is
+a count-weighted mean of its two children. The tree is padded to the next
+power-of-two number of leaves, but padded leaves are never eligible routes.
+The runtime traverses the tree with a fixed beam (currently
+`clamp(4 * semantic_blocks, 8, 32)`) and returns only the best leaf candidates.
+This changes the selector from a full scan to a bounded tree traversal:
+
+```text
+build summaries + hierarchy = O(N * D)
+one chunk route               = O(W * D + beam * log(N/S) * D)
+all prefill chunks             = O(N * D + (N/C) * beam * log(N/S) * D)
+```
+
+With fixed `W`, `C`, `S`, and `beam`, the prefill route-selection component is
+`O(N log N)` in the strict comparison model and usually behaves close to
+linear for the practical context range. The model's QKV projections, MLP,
+embedding, LayerNorm, and output projection remain linear in the number of
+prompt tokens (with their usual per-token `D²` work). The index is an
+approximation: hierarchical node cosine scores can differ from the exact
+best leaf scores, so quality must be checked against the dense path.
+
 ## Complexity
 
 Let:
@@ -237,7 +261,7 @@ kernel itself is effectively `O(D)` with respect to context length `N`.
 
 ### Route refresh cost
 
-There are approximately `N / S` block summaries. A route refresh scans them and
+The legacy explicit route API scans approximately `N / S` block summaries and
 compares each summary with the recent vector:
 
 ```text
@@ -250,7 +274,7 @@ Amortized over `R` decoded tokens:
 per-token route cost = O(((W + (N / S)) * D) / R)
 ```
 
-Therefore, the current full decode path is best described as:
+That compatibility path is described by:
 
 ```text
 O(D^2)                         projections and MLP
@@ -258,14 +282,20 @@ O(D^2)                         projections and MLP
 + O(((W + N/S) * D) / R)       amortized route refresh
 ```
 
-The attention computation is sublinear in the amount of context inspected, but
-the current selector still scans all block summaries during a refresh. The
-complete implementation is therefore not strictly `O(1)` with respect to
-context length.
+The hierarchical route API used by GPT-2 prefill and decode instead has bounded
+traversal cost:
+
+```text
+one refresh = O((W + beam * log(N/S)) * D)
+```
+
+The GPT-2 decode cache now persists the hierarchy and updates one leaf-to-root
+path per token. Its selector is bounded by the tree traversal; the legacy
+full-scan route API remains available as a compatibility/reference path.
 
 ### Prefill cost
 
-For a chunk size `C`, the current prefill route selector is called for roughly
+For a chunk size `C`, the legacy prefill route selector is called for roughly
 `N / C` chunks. Its route-scanning component is approximately:
 
 ```text
@@ -278,9 +308,17 @@ The routed attention component is:
 O((N / C) * C * K * D) = O(N * K * D)
 ```
 
-The current prefill path is therefore subquadratic in practice because of the
-block and chunk factors, but its repeated global summary scans mean that it is
-not a strictly linear prefill algorithm.
+The hierarchical path removes this repeated global scan. Its indexed route
+component is approximately:
+
+```text
+O((N / C) * beam * log(N/S) * D)
+```
+
+so all prompt-dependent work is no longer quadratic in `N`. The hierarchy is
+constructed once after prefill and then updated along one leaf-to-root path per
+decoded token in `O(log(N/S) * D)`. The raw `O(N * D)` hierarchy construction is
+performed once per layer.
 
 ## Memory complexity
 
@@ -446,5 +484,7 @@ the full linear KV cache.
 
 The current design is best characterized as a practical sublinear-attention
 prototype: it substantially reduces the attention workload, approaches
-constant attention cost per token for a fixed route budget, and provides a
-clear path toward hierarchical long-context routing.
+constant attention cost per token for a fixed route budget, and now uses an
+incrementally maintained hierarchy so route refresh no longer performs a
+global context scan. The full KV cache remains linear in memory, and the
+hierarchical route is still an approximation whose quality must be measured.

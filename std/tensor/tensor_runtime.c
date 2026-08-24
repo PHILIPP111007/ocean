@@ -4647,6 +4647,275 @@ ocean_tensor_handle_t ocean_tensor_sparse_attention_build_summaries_active(
     return result;
 }
 
+static size_t ocean_tensor_sparse_next_power_of_two(size_t value) {
+    size_t result = 1;
+    while (result < value) {
+        if (result > SIZE_MAX / 2u) {
+            ocean_tensor_fail("SparseAttention hierarchy is too large");
+        }
+        result *= 2u;
+    }
+    return result;
+}
+
+static void ocean_tensor_sparse_tree_range_cpu(
+    size_t node,
+    size_t leaf_count,
+    size_t *start,
+    size_t *span
+) {
+    size_t first = 1;
+    size_t current_span = leaf_count;
+    while (node >= first * 2u) {
+        first *= 2u;
+        current_span /= 2u;
+    }
+    *start = (node - first) * current_span;
+    *span = current_span;
+}
+
+static ocean_tensor_handle_t ocean_tensor_sparse_attention_build_hierarchy_impl(
+    ocean_tensor_handle_t summaries,
+    size_t valid_blocks
+) {
+    if (!summaries || summaries->dtype != OCEAN_TENSOR_FLOAT32 ||
+        summaries->ndim != 4 || summaries->shape[2] == 0 ||
+        summaries->shape[3] == 0) {
+        ocean_tensor_fail(
+            "SparseAttention hierarchy requires float32 summaries [B,H,blocks,D]"
+        );
+    }
+    size_t batch = summaries->shape[0];
+    size_t heads = summaries->shape[1];
+    size_t summary_blocks = summaries->shape[2];
+    size_t head_dim = summaries->shape[3];
+    if (valid_blocks == 0 || valid_blocks > summary_blocks) {
+        ocean_tensor_fail("SparseAttention hierarchy active block count is invalid");
+    }
+    size_t leaf_count = ocean_tensor_sparse_next_power_of_two(summary_blocks);
+    if (leaf_count > SIZE_MAX / 2u || leaf_count * 2u > (size_t)INT_MAX ||
+        batch > (size_t)INT_MAX || heads > (size_t)INT_MAX ||
+        summary_blocks > (size_t)INT_MAX || head_dim > (size_t)INT_MAX) {
+        ocean_tensor_fail("SparseAttention hierarchy metadata is unsupported");
+    }
+    size_t shape[4] = {batch, heads, leaf_count * 2u, head_dim};
+    ocean_tensor_handle_t result = ocean_tensor_alloc_zeros(
+        shape, 4, OCEAN_TENSOR_FLOAT32, summaries->device
+    );
+    if (summaries->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (!ocean_tensor_is_contiguous(summaries)) {
+            ocean_tensor_release(result);
+            ocean_tensor_fail("CUDA SparseAttention hierarchy requires contiguous summaries");
+        }
+        ocean_cuda_sparse_build_hierarchy(
+            summaries->cuda_data, result->cuda_data,
+            (int)batch, (int)heads, (int)summary_blocks, (int)valid_blocks,
+            (int)head_dim,
+            (int)leaf_count
+        );
+        return result;
+#else
+        ocean_tensor_release(result);
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+    }
+    if (summaries->device != OCEAN_TENSOR_CPU) {
+        ocean_tensor_release(result);
+        ocean_tensor_fail("SparseAttention hierarchy currently supports CPU or CUDA only");
+    }
+    ocean_tensor_handle_t contiguous = ocean_tensor_is_contiguous(summaries)
+        ? summaries : ocean_tensor_contiguous(summaries);
+    const float *source = (const float *)contiguous->cpu_data;
+    float *destination = (float *)result->cpu_data;
+    size_t tree_nodes = leaf_count * 2u;
+    size_t group_count = batch * heads;
+    for (size_t group = 0; group < group_count; ++group) {
+        size_t source_base = group * summary_blocks * head_dim;
+        size_t tree_base = group * tree_nodes * head_dim;
+        memcpy(
+            destination + tree_base + leaf_count * head_dim,
+            source + source_base,
+            summary_blocks * head_dim * sizeof(float)
+        );
+        for (size_t node = leaf_count; node-- > 1u;) {
+            size_t left_start = 0;
+            size_t left_span = 0;
+            size_t right_start = 0;
+            size_t right_span = 0;
+            ocean_tensor_sparse_tree_range_cpu(
+                node * 2u, leaf_count, &left_start, &left_span
+            );
+            ocean_tensor_sparse_tree_range_cpu(
+                node * 2u + 1u, leaf_count, &right_start, &right_span
+            );
+            size_t left_count = valid_blocks > left_start
+                ? valid_blocks - left_start : 0;
+            if (left_count > left_span) left_count = left_span;
+            size_t right_count = valid_blocks > right_start
+                ? valid_blocks - right_start : 0;
+            if (right_count > right_span) right_count = right_span;
+            size_t count = left_count + right_count;
+            if (count == 0) continue;
+            for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                float value = 0.0f;
+                if (left_count > 0) {
+                    value += destination[tree_base + node * 2u * head_dim + dimension]
+                        * (float)left_count;
+                }
+                if (right_count > 0) {
+                    value += destination[tree_base + (node * 2u + 1u) * head_dim + dimension]
+                        * (float)right_count;
+                }
+                destination[tree_base + node * head_dim + dimension] =
+                    value / (float)count;
+            }
+        }
+    }
+    if (contiguous != summaries) ocean_tensor_release(contiguous);
+    return result;
+}
+
+ocean_tensor_handle_t ocean_tensor_sparse_attention_build_hierarchy(
+    ocean_tensor_handle_t summaries
+) {
+    if (!summaries || summaries->ndim != 4) {
+        ocean_tensor_fail("SparseAttention hierarchy requires rank-4 summaries");
+    }
+    return ocean_tensor_sparse_attention_build_hierarchy_impl(
+        summaries, summaries->shape[2]
+    );
+}
+
+ocean_tensor_handle_t ocean_tensor_sparse_attention_build_hierarchy_active(
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int block_size
+) {
+    if (!summaries || summaries->ndim != 4 || active_length <= 0 ||
+        block_size <= 0 || (size_t)active_length > summaries->shape[2] *
+            (size_t)block_size) {
+        ocean_tensor_fail("Active SparseAttention hierarchy metadata is invalid");
+    }
+    size_t valid_blocks = ((size_t)active_length + (size_t)block_size - 1u) /
+        (size_t)block_size;
+    if (valid_blocks > summaries->shape[2]) valid_blocks = summaries->shape[2];
+    return ocean_tensor_sparse_attention_build_hierarchy_impl(
+        summaries, valid_blocks
+    );
+}
+
+void ocean_tensor_sparse_attention_update_hierarchy_active(
+    ocean_tensor_handle_t hierarchy,
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int position,
+    int block_size
+) {
+    if (!hierarchy || !summaries || hierarchy->dtype != OCEAN_TENSOR_FLOAT32 ||
+        summaries->dtype != OCEAN_TENSOR_FLOAT32 || hierarchy->ndim != 4 ||
+        summaries->ndim != 4 || active_length <= 0 || position < 0 ||
+        block_size <= 0 || position >= active_length ||
+        hierarchy->shape[0] != summaries->shape[0] ||
+        hierarchy->shape[1] != summaries->shape[1] ||
+        hierarchy->shape[3] != summaries->shape[3] ||
+        hierarchy->shape[2] < 2u) {
+        ocean_tensor_fail("SparseAttention hierarchy update metadata is invalid");
+    }
+    size_t leaf_count = hierarchy->shape[2] / 2u;
+    size_t summary_blocks = summaries->shape[2];
+    size_t valid_blocks = ((size_t)active_length + (size_t)block_size - 1u) /
+        (size_t)block_size;
+    size_t block = (size_t)position / (size_t)block_size;
+    if (hierarchy->shape[2] % 2u != 0 ||
+        (leaf_count & (leaf_count - 1u)) != 0 ||
+        block >= valid_blocks || block >= summary_blocks ||
+        valid_blocks > summary_blocks) {
+        ocean_tensor_fail("SparseAttention hierarchy update range is invalid");
+    }
+    if (hierarchy->device != summaries->device ||
+        !ocean_tensor_is_contiguous(hierarchy)) {
+        ocean_tensor_fail("SparseAttention hierarchy update device mismatch");
+    }
+    if (hierarchy->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (!ocean_tensor_is_contiguous(summaries) ||
+            hierarchy->shape[0] > (size_t)INT_MAX ||
+            hierarchy->shape[1] > (size_t)INT_MAX ||
+            hierarchy->shape[2] > (size_t)INT_MAX ||
+            hierarchy->shape[3] > 128 || summary_blocks > (size_t)INT_MAX ||
+            valid_blocks > (size_t)INT_MAX || leaf_count > (size_t)INT_MAX) {
+            ocean_tensor_fail("CUDA SparseAttention hierarchy update is unsupported");
+        }
+        ocean_cuda_sparse_update_hierarchy(
+            summaries->cuda_data, hierarchy->cuda_data,
+            (int)hierarchy->shape[0], (int)hierarchy->shape[1],
+            (int)summary_blocks, (int)valid_blocks, (int)hierarchy->shape[3],
+            (int)leaf_count, (int)block
+        );
+        return;
+#else
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+    }
+    if (hierarchy->device != OCEAN_TENSOR_CPU) {
+        ocean_tensor_fail("SparseAttention hierarchy update supports CPU or CUDA only");
+    }
+    ocean_tensor_handle_t contiguous_summaries =
+        ocean_tensor_is_contiguous(summaries)
+        ? summaries : ocean_tensor_contiguous(summaries);
+    const float *source = (const float *)contiguous_summaries->cpu_data;
+    float *destination = (float *)hierarchy->cpu_data;
+    size_t head_dim = hierarchy->shape[3];
+    size_t tree_nodes = hierarchy->shape[2];
+    size_t group_count = hierarchy->shape[0] * hierarchy->shape[1];
+    for (size_t group = 0; group < group_count; ++group) {
+        size_t source_base = (group * summary_blocks + block) * head_dim;
+        size_t tree_base = group * tree_nodes * head_dim;
+        size_t leaf = leaf_count + block;
+        memcpy(
+            destination + tree_base + leaf * head_dim,
+            source + source_base,
+            head_dim * sizeof(float)
+        );
+        size_t node = leaf / 2u;
+        while (node > 0) {
+            size_t left_start = 0;
+            size_t left_span = 0;
+            size_t right_start = 0;
+            size_t right_span = 0;
+            ocean_tensor_sparse_tree_range_cpu(
+                node * 2u, leaf_count, &left_start, &left_span
+            );
+            ocean_tensor_sparse_tree_range_cpu(
+                node * 2u + 1u, leaf_count, &right_start, &right_span
+            );
+            size_t left_count = valid_blocks > left_start
+                ? valid_blocks - left_start : 0;
+            if (left_count > left_span) left_count = left_span;
+            size_t right_count = valid_blocks > right_start
+                ? valid_blocks - right_start : 0;
+            if (right_count > right_span) right_count = right_span;
+            size_t count = left_count + right_count;
+            for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                float value = 0.0f;
+                if (left_count > 0) {
+                    value += destination[tree_base + node * 2u * head_dim + dimension]
+                        * (float)left_count;
+                }
+                if (right_count > 0) {
+                    value += destination[tree_base + (node * 2u + 1u) * head_dim + dimension]
+                        * (float)right_count;
+                }
+                destination[tree_base + node * head_dim + dimension] =
+                    count > 0 ? value / (float)count : 0.0f;
+            }
+            node /= 2u;
+        }
+    }
+    if (contiguous_summaries != summaries) ocean_tensor_release(contiguous_summaries);
+}
+
 ocean_tensor_handle_t ocean_tensor_sparse_attention_blocked_cached(
     ocean_tensor_handle_t query,
     ocean_tensor_handle_t key,
@@ -5093,6 +5362,250 @@ static void ocean_tensor_sparse_route_cpu(
     if (contiguous_key != key) ocean_tensor_release(contiguous_key);
 }
 
+static void ocean_tensor_sparse_hierarchical_route_cpu(
+    ocean_tensor_handle_t route,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t hierarchy,
+    int active_length,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    int random_seed
+) {
+    ocean_tensor_handle_t contiguous_key = ocean_tensor_is_contiguous(key)
+        ? key : ocean_tensor_contiguous(key);
+    ocean_tensor_handle_t contiguous_hierarchy =
+        ocean_tensor_is_contiguous(hierarchy)
+        ? hierarchy : ocean_tensor_contiguous(hierarchy);
+    const float *key_data = (const float *)contiguous_key->cpu_data;
+    const float *hierarchy_data = (const float *)contiguous_hierarchy->cpu_data;
+    int32_t *route_data = (int32_t *)route->cpu_data;
+    size_t batch = key->shape[0];
+    size_t heads = key->shape[1];
+    size_t key_length = key->shape[2];
+    size_t head_dim = key->shape[3];
+    size_t tree_nodes = hierarchy->shape[2];
+    size_t leaf_count = tree_nodes / 2u;
+    size_t route_width = (size_t)local_blocks +
+        (size_t)semantic_blocks + 1u;
+    int end = active_length > (int)key_length ? (int)key_length : active_length;
+    int start = end - summary_window;
+    if (start < 0) start = 0;
+    int recent_count = end - start;
+    size_t block_count = ((size_t)active_length + (size_t)block_size - 1u) /
+        (size_t)block_size;
+    if (block_count > leaf_count) block_count = leaf_count;
+    size_t local_count = (size_t)local_blocks;
+    if (local_count > block_count) local_count = block_count;
+    size_t local_start = block_count - local_count;
+    int beam_width = semantic_blocks * 4;
+    if (beam_width < 8) beam_width = 8;
+    if (beam_width > 32) beam_width = 32;
+
+    for (size_t batch_index = 0; batch_index < batch; ++batch_index) {
+        for (size_t head = 0; head < heads; ++head) {
+            size_t route_base =
+                (batch_index * heads + head) * route_width;
+            for (size_t index = 0; index < route_width; ++index) {
+                route_data[route_base + index] = -1;
+            }
+            if (recent_count <= 0 || block_count == 0) continue;
+            for (size_t index = 0; index < local_count; ++index) {
+                route_data[route_base + index] =
+                    (int32_t)(local_start + index);
+            }
+            float *recent = (float *)calloc(head_dim, sizeof(float));
+            float *candidate_scores = (float *)malloc(
+                (size_t)beam_width * 2u * sizeof(float)
+            );
+            int32_t *candidate_nodes = (int32_t *)malloc(
+                (size_t)beam_width * 2u * sizeof(int32_t)
+            );
+            float *selected_scores = (float *)malloc(
+                (size_t)semantic_blocks * sizeof(float)
+            );
+            int32_t *selected_blocks = (int32_t *)malloc(
+                (size_t)semantic_blocks * sizeof(int32_t)
+            );
+            if (!recent || !candidate_scores || !candidate_nodes ||
+                !selected_scores || !selected_blocks) {
+                free(recent);
+                free(candidate_scores);
+                free(candidate_nodes);
+                free(selected_scores);
+                free(selected_blocks);
+                if (contiguous_hierarchy != hierarchy) {
+                    ocean_tensor_release(contiguous_hierarchy);
+                }
+                if (contiguous_key != key) ocean_tensor_release(contiguous_key);
+                ocean_tensor_fail("out of memory in hierarchical sparse route selection");
+            }
+            size_t key_group = (batch_index * heads + head) *
+                key_length * head_dim;
+            float recent_norm = 0.0f;
+            for (int token = start; token < end; ++token) {
+                size_t key_base = key_group + (size_t)token * head_dim;
+                for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                    recent[dimension] += key_data[key_base + dimension] /
+                        (float)recent_count;
+                }
+            }
+            for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                recent_norm += recent[dimension] * recent[dimension];
+            }
+            recent_norm = sqrtf(recent_norm);
+            size_t hierarchy_group = (batch_index * heads + head) *
+                tree_nodes * head_dim;
+            int candidate_count = 1;
+            candidate_nodes[0] = 1;
+            candidate_scores[0] = 0.0f;
+            int depth = 0;
+            for (size_t span = leaf_count; span > 1u; span /= 2u) ++depth;
+            for (int level = 0; level < depth; ++level) {
+                int next_count = 0;
+                for (int candidate = 0; candidate < candidate_count; ++candidate) {
+                    size_t parent = (size_t)candidate_nodes[candidate];
+                    for (size_t branch = 0; branch < 2u; ++branch) {
+                        size_t node = parent * 2u + branch;
+                        if (node == 0 || node >= tree_nodes) continue;
+                        size_t node_start = 0;
+                        size_t node_span = 0;
+                        ocean_tensor_sparse_tree_range_cpu(
+                            node, leaf_count, &node_start, &node_span
+                        );
+                        (void)node_span;
+                        if (node_start >= block_count) continue;
+                        size_t hierarchy_base = hierarchy_group + node * head_dim;
+                        float dot = 0.0f;
+                        float node_norm = 0.0f;
+                        for (size_t dimension = 0; dimension < head_dim; ++dimension) {
+                            float value = hierarchy_data[hierarchy_base + dimension];
+                            dot += recent[dimension] * value;
+                            node_norm += value * value;
+                        }
+                        float score = dot /
+                            (recent_norm * sqrtf(node_norm) + 1.0e-8f);
+                        if (next_count < beam_width) {
+                            int insert = next_count;
+                            while (insert > 0 && ocean_tensor_sparse_score_precedes(
+                                score, node,
+                                candidate_scores[beam_width + insert - 1],
+                                (size_t)candidate_nodes[beam_width + insert - 1]
+                            )) {
+                                candidate_scores[beam_width + insert] =
+                                    candidate_scores[beam_width + insert - 1];
+                                candidate_nodes[beam_width + insert] =
+                                    candidate_nodes[beam_width + insert - 1];
+                                --insert;
+                            }
+                            candidate_scores[beam_width + insert] = score;
+                            candidate_nodes[beam_width + insert] = (int32_t)node;
+                            ++next_count;
+                        } else if (ocean_tensor_sparse_score_precedes(
+                            score, node,
+                            candidate_scores[beam_width + beam_width - 1],
+                            (size_t)candidate_nodes[beam_width + beam_width - 1]
+                        )) {
+                            int insert = beam_width - 1;
+                            while (insert > 0 && ocean_tensor_sparse_score_precedes(
+                                score, node,
+                                candidate_scores[beam_width + insert - 1],
+                                (size_t)candidate_nodes[beam_width + insert - 1]
+                            )) {
+                                candidate_scores[beam_width + insert] =
+                                    candidate_scores[beam_width + insert - 1];
+                                candidate_nodes[beam_width + insert] =
+                                    candidate_nodes[beam_width + insert - 1];
+                                --insert;
+                            }
+                            candidate_scores[beam_width + insert] = score;
+                            candidate_nodes[beam_width + insert] = (int32_t)node;
+                        }
+                    }
+                }
+                candidate_count = next_count;
+                for (int candidate = 0; candidate < candidate_count; ++candidate) {
+                    candidate_nodes[candidate] =
+                        candidate_nodes[beam_width + candidate];
+                    candidate_scores[candidate] =
+                        candidate_scores[beam_width + candidate];
+                }
+                if (candidate_count == 0) break;
+            }
+            size_t selected_count = 0;
+            for (int candidate = 0; candidate < candidate_count; ++candidate) {
+                int block = (int)((size_t)candidate_nodes[candidate] - leaf_count);
+                if (block < 0 || (size_t)block >= block_count ||
+                    (size_t)block >= local_start) continue;
+                float score = candidate_scores[candidate];
+                if (selected_count < (size_t)semantic_blocks) {
+                    size_t insert = selected_count;
+                    while (insert > 0 && ocean_tensor_sparse_score_precedes(
+                        score, (size_t)block, selected_scores[insert - 1],
+                        (size_t)selected_blocks[insert - 1]
+                    )) {
+                        selected_scores[insert] = selected_scores[insert - 1];
+                        selected_blocks[insert] = selected_blocks[insert - 1];
+                        --insert;
+                    }
+                    selected_scores[insert] = score;
+                    selected_blocks[insert] = (int32_t)block;
+                    ++selected_count;
+                } else if (ocean_tensor_sparse_score_precedes(
+                    score, (size_t)block,
+                    selected_scores[semantic_blocks - 1],
+                    (size_t)selected_blocks[semantic_blocks - 1]
+                )) {
+                    size_t insert = (size_t)semantic_blocks - 1u;
+                    while (insert > 0 && ocean_tensor_sparse_score_precedes(
+                        score, (size_t)block, selected_scores[insert - 1],
+                        (size_t)selected_blocks[insert - 1]
+                    )) {
+                        selected_scores[insert] = selected_scores[insert - 1];
+                        selected_blocks[insert] = selected_blocks[insert - 1];
+                        --insert;
+                    }
+                    selected_scores[insert] = score;
+                    selected_blocks[insert] = (int32_t)block;
+                }
+            }
+            for (size_t index = 0; index < selected_count; ++index) {
+                route_data[route_base + local_count + index] =
+                    selected_blocks[index];
+            }
+            uint32_t state = (uint32_t)random_seed ^
+                (uint32_t)((batch_index * heads + head) * 747796405u +
+                2891336453u);
+            state = state * 1664525u + 1013904223u;
+            int32_t random_block = (int32_t)(state % (uint32_t)block_count);
+            bool duplicate = false;
+            for (size_t attempt = 0; attempt < block_count; ++attempt) {
+                duplicate = false;
+                for (size_t index = 0; index < local_count + selected_count; ++index) {
+                    if (route_data[route_base + index] == random_block) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!duplicate) break;
+                state = state * 1664525u + 1013904223u;
+                random_block = (int32_t)(state % (uint32_t)block_count);
+            }
+            if (duplicate) random_block = -1;
+            route_data[route_base + (size_t)local_blocks +
+                (size_t)semantic_blocks] = random_block;
+            free(recent);
+            free(candidate_scores);
+            free(candidate_nodes);
+            free(selected_scores);
+            free(selected_blocks);
+        }
+    }
+    if (contiguous_hierarchy != hierarchy) ocean_tensor_release(contiguous_hierarchy);
+    if (contiguous_key != key) ocean_tensor_release(contiguous_key);
+}
+
 ocean_tensor_handle_t ocean_tensor_sparse_attention_build_route_active(
     ocean_tensor_handle_t key,
     ocean_tensor_handle_t summaries,
@@ -5190,6 +5703,118 @@ void ocean_tensor_sparse_attention_update_route_active(
     }
     ocean_tensor_sparse_route_cpu(
         route, key, summaries, active_length, summary_window,
+        semantic_blocks, local_blocks, block_size, random_seed
+    );
+}
+
+static void ocean_tensor_sparse_validate_hierarchy(
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t hierarchy,
+    int active_length,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size
+) {
+    if (!key || !hierarchy || key->dtype != OCEAN_TENSOR_FLOAT32 ||
+        hierarchy->dtype != OCEAN_TENSOR_FLOAT32 || key->ndim != 4 ||
+        hierarchy->ndim != 4 || active_length <= 0 || summary_window <= 0 ||
+        semantic_blocks <= 0 || local_blocks < 0 || block_size <= 0) {
+        ocean_tensor_fail("Hierarchical sparse route requires valid Tensor metadata");
+    }
+    size_t tree_nodes = hierarchy->shape[2];
+    size_t leaf_count = tree_nodes / 2u;
+    if (active_length > (int)key->shape[2] || tree_nodes < 2u ||
+        tree_nodes % 2u != 0 || leaf_count == 0 ||
+        (leaf_count & (leaf_count - 1u)) != 0 ||
+        hierarchy->shape[0] != key->shape[0] ||
+        hierarchy->shape[1] != key->shape[1] ||
+        hierarchy->shape[3] != key->shape[3]) {
+        ocean_tensor_fail("Hierarchical sparse route metadata mismatch");
+    }
+}
+
+ocean_tensor_handle_t ocean_tensor_sparse_attention_build_route_hierarchical_active(
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t hierarchy,
+    int active_length,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    int random_seed
+) {
+    ocean_tensor_sparse_validate_hierarchy(
+        key, hierarchy, active_length, summary_window, semantic_blocks,
+        local_blocks, block_size
+    );
+    size_t route_shape[3] = {
+        key->shape[0], key->shape[1], (size_t)local_blocks +
+            (size_t)semantic_blocks + 1u
+    };
+    ocean_tensor_handle_t route = ocean_tensor_alloc_uninitialized(
+        route_shape, 3, OCEAN_TENSOR_INT32, key->device
+    );
+    ocean_tensor_sparse_attention_update_route_hierarchical_active(
+        route, key, hierarchy, active_length, summary_window,
+        semantic_blocks, local_blocks, block_size, random_seed
+    );
+    return route;
+}
+
+void ocean_tensor_sparse_attention_update_route_hierarchical_active(
+    ocean_tensor_handle_t route,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t hierarchy,
+    int active_length,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    int random_seed
+) {
+    ocean_tensor_sparse_validate_hierarchy(
+        key, hierarchy, active_length, summary_window, semantic_blocks,
+        local_blocks, block_size
+    );
+    if (!route || route->dtype != OCEAN_TENSOR_INT32 || route->ndim != 3 ||
+        route->shape[0] != key->shape[0] || route->shape[1] != key->shape[1] ||
+        route->shape[2] != (size_t)local_blocks + (size_t)semantic_blocks + 1u ||
+        route->device != key->device || hierarchy->device != key->device ||
+        !ocean_tensor_is_contiguous(route)) {
+        ocean_tensor_fail("Hierarchical sparse route update metadata mismatch");
+    }
+    size_t leaf_count = hierarchy->shape[2] / 2u;
+    size_t block_count = ((size_t)active_length + (size_t)block_size - 1u) /
+        (size_t)block_size;
+    if (block_count > leaf_count) block_count = leaf_count;
+    if (key->device == OCEAN_TENSOR_BACKEND_CUDA) {
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+        if (!ocean_tensor_is_contiguous(key) ||
+            !ocean_tensor_is_contiguous(hierarchy) ||
+            key->shape[0] > (size_t)INT_MAX || key->shape[1] > (size_t)INT_MAX ||
+            key->shape[2] > (size_t)INT_MAX || key->shape[3] > 128 ||
+            hierarchy->shape[2] > (size_t)INT_MAX || leaf_count > (size_t)INT_MAX ||
+            block_count > (size_t)INT_MAX) {
+            ocean_tensor_fail("CUDA hierarchical sparse route metadata mismatch");
+        }
+        ocean_cuda_sparse_build_hierarchical_route(
+            key->cuda_data, hierarchy->cuda_data, route->cuda_data,
+            (int)key->shape[0], (int)key->shape[1], (int)key->shape[2],
+            (int)hierarchy->shape[2], (int)leaf_count, active_length,
+            (int)key->shape[3], summary_window, semantic_blocks, local_blocks,
+            block_size, (unsigned int)random_seed
+        );
+        return;
+#else
+        ocean_tensor_fail("CUDA backend was not compiled");
+#endif
+    }
+    if (key->device != OCEAN_TENSOR_CPU) {
+        ocean_tensor_fail("Hierarchical sparse route supports CPU or CUDA only");
+    }
+    ocean_tensor_sparse_hierarchical_route_cpu(
+        route, key, hierarchy, active_length, summary_window,
         semantic_blocks, local_blocks, block_size, random_seed
     );
 }

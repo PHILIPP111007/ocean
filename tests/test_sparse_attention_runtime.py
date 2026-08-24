@@ -179,6 +179,42 @@ int main(void) {
         );
     }
 
+    ocean_tensor_handle_t hierarchy =
+        ocean_tensor_sparse_attention_build_hierarchy(summaries);
+    if (ocean_tensor_shape(hierarchy, 2) != 4) {
+        fprintf(stderr, "unexpected sparse hierarchy width\n");
+        return 1;
+    }
+    ocean_tensor_sparse_attention_update_hierarchy_active(
+        hierarchy, summaries, 4, 2, 2
+    );
+    check_close(
+        ocean_tensor_get_flat_f32(hierarchy, 3 * 2),
+        ocean_tensor_get_flat_f32(summaries, 1 * 2),
+        "updated hierarchy leaf"
+    );
+    ocean_tensor_handle_t hierarchical_route =
+        ocean_tensor_sparse_attention_build_route_hierarchical_active(
+            key, hierarchy, 4, 4, 1, 1, 2, 17
+        );
+    if (ocean_tensor_shape(hierarchical_route, 2) != 3 ||
+        ocean_tensor_get_flat_i32(hierarchical_route, 0) != 1) {
+        fprintf(stderr, "unexpected hierarchical sparse route\n");
+        return 1;
+    }
+    ocean_tensor_handle_t hierarchical_routed =
+        ocean_tensor_sparse_attention_blocked_cached_routed(
+            query, key, value, hierarchical_route, 4, 2, 1.0, 0, false
+        );
+    for (size_t i = 0; i < 4; ++i) {
+        check_close_tolerance(
+            ocean_tensor_get_flat_f32(hierarchical_routed, i),
+            ocean_tensor_get_flat_f32(full, i),
+            1e-4f,
+            "hierarchical routed attention"
+        );
+    }
+
     ocean_tensor_handle_t causal = ocean_tensor_sparse_attention(
         query, key, value, 4, 1.0, 0, true
     );
@@ -196,6 +232,9 @@ int main(void) {
     );
 
     ocean_tensor_release(causal);
+    ocean_tensor_release(hierarchical_routed);
+    ocean_tensor_release(hierarchical_route);
+    ocean_tensor_release(hierarchy);
     ocean_tensor_release(full);
     ocean_tensor_release(routed);
     ocean_tensor_release(route);

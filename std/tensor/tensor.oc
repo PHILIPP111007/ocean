@@ -293,13 +293,36 @@ class Tensor:
         ocean_tensor_sparse_attention_update_summary_active(self.handle, key.handle, active_length, position, block_size)
         return None
 
+    def sparse_attention_build_hierarchy(self) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention_build_hierarchy(self.handle)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def sparse_attention_build_hierarchy_active(self, active_length: int, block_size: int) -> Tensor:
+        var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention_build_hierarchy_active(self.handle, active_length, block_size)
+        var result: Tensor = Tensor(handle)
+        return result
+
+    def sparse_attention_update_hierarchy_active(self, summaries: &Tensor, active_length: int, position: int, block_size: int) -> None:
+        ocean_tensor_sparse_attention_update_hierarchy_active(self.handle, summaries.handle, active_length, position, block_size)
+        return None
+
     def sparse_attention_build_route_active(self, summaries: &Tensor, active_length: int, summary_window: int, semantic_blocks: int, local_blocks: int, block_size: int, random_seed: int) -> Tensor[int32]:
         var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention_build_route_active(self.handle, summaries.handle, active_length, summary_window, semantic_blocks, local_blocks, block_size, random_seed)
         var result: Tensor[int32] = Tensor(handle)
         return result
 
+    def sparse_attention_build_route_hierarchical_active(self, hierarchy: &Tensor, active_length: int, summary_window: int, semantic_blocks: int, local_blocks: int, block_size: int, random_seed: int) -> Tensor[int32]:
+        var handle: ocean_tensor_handle_t = ocean_tensor_sparse_attention_build_route_hierarchical_active(self.handle, hierarchy.handle, active_length, summary_window, semantic_blocks, local_blocks, block_size, random_seed)
+        var result: Tensor[int32] = Tensor(handle)
+        return result
+
     def sparse_attention_update_route_active(self, summaries: &Tensor, route: Tensor[int32], active_length: int, summary_window: int, semantic_blocks: int, local_blocks: int, block_size: int, random_seed: int) -> None:
         ocean_tensor_sparse_attention_update_route_active(route.handle, self.handle, summaries.handle, active_length, summary_window, semantic_blocks, local_blocks, block_size, random_seed)
+        return None
+
+    def sparse_attention_update_route_hierarchical_active(self, hierarchy: &Tensor, route: Tensor[int32], active_length: int, summary_window: int, semantic_blocks: int, local_blocks: int, block_size: int, random_seed: int) -> None:
+        ocean_tensor_sparse_attention_update_route_hierarchical_active(route.handle, self.handle, hierarchy.handle, active_length, summary_window, semantic_blocks, local_blocks, block_size, random_seed)
         return None
 
     def sparse_attention_blocked_cached(self, key: &Tensor, value: &Tensor, summaries: &Tensor, top_k: int, top_blocks: int, block_size: int, scale: float64, query_start: int, causal: bool) -> Tensor:

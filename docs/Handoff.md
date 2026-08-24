@@ -3463,6 +3463,41 @@ CPU routing v0.2 всё ещё сканирует все block summaries (`O(num
 а summaries используют простое mean pooling. Поэтому v0.2 сама по себе ещё не
 является полной hierarchical/subquadratic реализацией.
 
+## 80.1.2a Hierarchical summary index v0.5
+
+Для длинного prefill добавлен backend-neutral hierarchical route API:
+
+```c
+hierarchy = ocean_tensor_sparse_attention_build_hierarchy(summaries);
+route = ocean_tensor_sparse_attention_build_route_hierarchical_active(
+    key_cache, hierarchy, active_length,
+    summary_window, semantic_blocks, local_blocks, block_size, random_seed
+);
+```
+
+Индекс хранится как `[B, H, 2 * P, D]`, где `P` — ближайшая степень двойки,
+не меньшая числа summary-блоков. Leaves содержат исходные mean summaries,
+внутренние nodes — count-weighted mean двух детей. Для CUDA построение leaves и
+каждого уровня дерева выполняется native kernels; CPU path используется как
+reference.
+
+Hierarchical selector не сканирует все leaves. Он раскрывает небольшой
+фиксированный beam (`clamp(4 * semantic_blocks, 8, 32)`) на каждом уровне и
+выбирает semantic leaves, после чего добавляет обязательные local blocks и
+exploration block. Поэтому long-prompt prefill больше не имеет повторяющегося
+`O(chunks * blocks * D)` full scan: route lookup зависит от
+`O(beam * log(blocks) * D)` после линейного построения индекса.
+
+`GPT2Attention.forward_prefill_sparse()` и GPU decode уже используют этот
+путь. `GPT2KVCache` хранит hierarchy для каждого слоя, при каждом новом token
+обновляются текущая leaf и путь до root, а при refresh route выполняется
+bounded beam traversal. Старый full-scan route API сохранён как compatibility и
+CPU reference path.
+
+Это не делает sparse attention точным dense attention: hierarchical cosine
+оценка является routing approximation. Нужны отдельные long-context quality и
+CUDA benchmark на целевом окружении.
+
 ## 80.1.3 CUDA sparse decode v0.3
 
 Добавлен CUDA backend для трёх операций:
@@ -3663,9 +3698,10 @@ P3  CPU reference SparseAttention                  -> реализован, corr
 P4  SparseKVCache/block summaries                   -> summaries + cached API + block update реализованы
 P5  интегрировать SparseAttention в GPT2 KV-cache и перенести routing/gather на CUDA -> реализовано, CUDA hardware validation pending
 P6  измерить active-length decode на prompt 1K/4K/16K и сравнить с dense KV-cache
-P7  переиспользовать CUDA inference workspace и распараллелить serial selector
-P8  сравнить refresh interval 25/50/100 и semantic/random block budgets
-P9  после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
+P7  hierarchical summary index + incremental leaf-to-root updates -> реализовано, CUDA hardware validation pending
+P8  переиспользовать CUDA inference workspace и распараллелить serial selector
+P9  сравнить refresh interval 25/50/100 и semantic/random block budgets
+P10 после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
 ```
 
 Backend/server vertical остаётся равноправной частью проекта: long-context ML

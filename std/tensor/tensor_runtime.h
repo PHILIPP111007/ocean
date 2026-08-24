@@ -384,9 +384,34 @@ void ocean_tensor_sparse_attention_update_summary_active(
     int position,
     int block_size
 );
+ocean_tensor_handle_t ocean_tensor_sparse_attention_build_hierarchy(
+    ocean_tensor_handle_t summaries
+);
+ocean_tensor_handle_t ocean_tensor_sparse_attention_build_hierarchy_active(
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int block_size
+);
+void ocean_tensor_sparse_attention_update_hierarchy_active(
+    ocean_tensor_handle_t hierarchy,
+    ocean_tensor_handle_t summaries,
+    int active_length,
+    int position,
+    int block_size
+);
 ocean_tensor_handle_t ocean_tensor_sparse_attention_build_route_active(
     ocean_tensor_handle_t key,
     ocean_tensor_handle_t summaries,
+    int active_length,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    int random_seed
+);
+ocean_tensor_handle_t ocean_tensor_sparse_attention_build_route_hierarchical_active(
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t hierarchy,
     int active_length,
     int summary_window,
     int semantic_blocks,
@@ -398,6 +423,17 @@ void ocean_tensor_sparse_attention_update_route_active(
     ocean_tensor_handle_t route,
     ocean_tensor_handle_t key,
     ocean_tensor_handle_t summaries,
+    int active_length,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    int random_seed
+);
+void ocean_tensor_sparse_attention_update_route_hierarchical_active(
+    ocean_tensor_handle_t route,
+    ocean_tensor_handle_t key,
+    ocean_tensor_handle_t hierarchy,
     int active_length,
     int summary_window,
     int semantic_blocks,
