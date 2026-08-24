@@ -2905,6 +2905,47 @@ ocean_tensor_handle_t ocean_paged_kv_cache_build_route_hierarchical(
     int random_seed
 ) {
     if (!cache) ocean_tensor_fail("PagedKVCache route on null cache");
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (cache->device == OCEAN_TENSOR_BACKEND_CUDA &&
+        block_size > 0 && (size_t)block_size == cache->page_size) {
+        if (!hierarchy || hierarchy->dtype != OCEAN_TENSOR_FLOAT32 ||
+            hierarchy->ndim != 4 || hierarchy->device != cache->device ||
+            !ocean_tensor_is_contiguous(hierarchy) || active_length <= 0 ||
+            (size_t)active_length > cache->length || summary_window <= 0 ||
+            semantic_blocks <= 0 || local_blocks < 0 || block_size <= 0 ||
+            hierarchy->shape[0] != cache->batches ||
+            hierarchy->shape[1] != cache->heads ||
+            hierarchy->shape[3] != cache->head_dim ||
+            hierarchy->shape[2] < 2 || hierarchy->shape[2] % 2 != 0) {
+            ocean_tensor_fail("PagedKVCache hierarchical route metadata mismatch");
+        }
+        size_t leaf_count = hierarchy->shape[2] / 2u;
+        if ((leaf_count & (leaf_count - 1u)) != 0 ||
+            cache->page_count == 0 || cache->page_count > (size_t)INT_MAX ||
+            cache->page_size > (size_t)INT_MAX ||
+            cache->batches > (size_t)INT_MAX || cache->heads > (size_t)INT_MAX ||
+            cache->head_dim > 128 || hierarchy->shape[2] > (size_t)INT_MAX ||
+            leaf_count > (size_t)INT_MAX ||
+            (size_t)local_blocks + (size_t)semantic_blocks + 1u > (size_t)INT_MAX) {
+            ocean_tensor_fail("CUDA PagedKVCache hierarchical route is too large");
+        }
+        size_t route_shape[3] = {
+            cache->batches, cache->heads,
+            (size_t)local_blocks + (size_t)semantic_blocks + 1u
+        };
+        ocean_tensor_handle_t route = ocean_tensor_alloc_uninitialized(
+            route_shape, 3, OCEAN_TENSOR_INT32, cache->device
+        );
+        ocean_cuda_sparse_build_paged_hierarchical_route(
+            cache->cuda_key_table, hierarchy->cuda_data, route->cuda_data,
+            (int)cache->batches, (int)cache->heads, (int)cache->page_count,
+            (int)cache->page_size, (int)hierarchy->shape[2], (int)leaf_count,
+            active_length, (int)cache->head_dim, summary_window,
+            semantic_blocks, local_blocks, block_size, (unsigned int)random_seed
+        );
+        return route;
+    }
+#endif
     ocean_tensor_handle_t key = ocean_paged_kv_cache_materialize_key(cache);
     ocean_tensor_handle_t route =
         ocean_tensor_sparse_attention_build_route_hierarchical_active(
@@ -2927,6 +2968,46 @@ void ocean_paged_kv_cache_update_route_hierarchical(
     int random_seed
 ) {
     if (!cache) ocean_tensor_fail("PagedKVCache route update on null cache");
+#ifdef OCEAN_TENSOR_ENABLE_CUDA
+    if (cache->device == OCEAN_TENSOR_BACKEND_CUDA &&
+        block_size > 0 && (size_t)block_size == cache->page_size) {
+        if (!route || !hierarchy || route->dtype != OCEAN_TENSOR_INT32 ||
+            hierarchy->dtype != OCEAN_TENSOR_FLOAT32 || route->ndim != 3 ||
+            hierarchy->ndim != 4 || route->device != cache->device ||
+            hierarchy->device != cache->device ||
+            !ocean_tensor_is_contiguous(route) ||
+            !ocean_tensor_is_contiguous(hierarchy) || active_length <= 0 ||
+            (size_t)active_length > cache->length || summary_window <= 0 ||
+            semantic_blocks <= 0 || local_blocks < 0 || block_size <= 0 ||
+            route->shape[0] != cache->batches ||
+            route->shape[1] != cache->heads ||
+            route->shape[2] != (size_t)local_blocks +
+                (size_t)semantic_blocks + 1u ||
+            hierarchy->shape[0] != cache->batches ||
+            hierarchy->shape[1] != cache->heads ||
+            hierarchy->shape[3] != cache->head_dim ||
+            hierarchy->shape[2] < 2 || hierarchy->shape[2] % 2 != 0) {
+            ocean_tensor_fail("PagedKVCache hierarchical route update metadata mismatch");
+        }
+        size_t leaf_count = hierarchy->shape[2] / 2u;
+        if ((leaf_count & (leaf_count - 1u)) != 0 ||
+            cache->page_count == 0 || cache->page_count > (size_t)INT_MAX ||
+            cache->page_size > (size_t)INT_MAX ||
+            cache->batches > (size_t)INT_MAX || cache->heads > (size_t)INT_MAX ||
+            cache->head_dim > 128 || hierarchy->shape[2] > (size_t)INT_MAX ||
+            leaf_count > (size_t)INT_MAX) {
+            ocean_tensor_fail("CUDA PagedKVCache hierarchical route is too large");
+        }
+        ocean_cuda_sparse_build_paged_hierarchical_route(
+            cache->cuda_key_table, hierarchy->cuda_data, route->cuda_data,
+            (int)cache->batches, (int)cache->heads, (int)cache->page_count,
+            (int)cache->page_size, (int)hierarchy->shape[2], (int)leaf_count,
+            active_length, (int)cache->head_dim, summary_window,
+            semantic_blocks, local_blocks, block_size, (unsigned int)random_seed
+        );
+        return;
+    }
+#endif
     ocean_tensor_handle_t key = ocean_paged_kv_cache_materialize_key(cache);
     ocean_tensor_sparse_attention_update_route_hierarchical_active(
         route, key, hierarchy, active_length, summary_window, semantic_blocks,

@@ -147,6 +147,10 @@ transient selector copy is the next optimization step.
 On CUDA, page writes use a fused K/V append kernel: one launch copies both
 streams directly into the destination page, avoiding temporary slices during
 decode. CPU and non-CUDA paths retain the reference implementation.
+CUDA hierarchical route refresh reads its recent keys directly from the page
+table instead of materializing the full K tensor. Paged routed attention uses
+warp-parallel score construction and a block-wide softmax; the old CPU path is
+unchanged.
 
 ## NumPy `.npy` files
 

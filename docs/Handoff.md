@@ -3721,6 +3721,12 @@ checkout. OpenCL для этого API намеренно не использу�
 decode это один kernel launch на запись, а CPU и non-CUDA paths сохраняют прежнюю
 reference-реализацию.
 
+Hierarchical route refresh на CUDA теперь читает последние ключи напрямую через
+page table и больше не материализует весь contiguous K. Paged routed attention
+также получил warp-parallel kernel: dot-products `Q·K` распределяются по warp-ам,
+а softmax выполняется block-wide вместо последовательного вычисления на lane 0.
+Обе оптимизации требуют CUDA runtime для численного и throughput benchmark.
+
 GPT-2 теперь использует один `PagedKVCache` на слой: отдельные contiguous
 `cache_k`/`cache_v` больше не выделяются. Summaries строятся и обновляются из
 страниц, а hierarchy хранится отдельно как компактный индекс. Для совместимости
@@ -3754,8 +3760,8 @@ P8  переиспользовать CUDA inference workspace и распара�
 P9  сравнить refresh interval 25/50/100 и semantic/random block budgets
 P10 после benchmark оптимизировать selector/workspace и рассматривать 1M+ / distributed execution
 P11 page-native summaries/hierarchy и миграция GPT2 с contiguous KV-cache на PagedKVCache -> реализовано, route selector ещё materialize-ит transient K
-P12 убрать transient K materialization из hierarchical selector
-P13 измерить fused paged K/V append на CUDA и сравнить с прежним slice/cache-write path
+P12 убрать transient K materialization из hierarchical selector -> реализовано для CUDA PagedKVCache
+P13 измерить fused paged K/V append и warp-parallel paged attention на CUDA
 P14 CUDA hardware validation для PagedKVCache и memory/throughput benchmark
 ```
 

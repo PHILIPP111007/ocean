@@ -351,6 +351,24 @@ void ocean_cuda_sparse_build_hierarchical_route(
     int block_size,
     unsigned int random_seed
 );
+void ocean_cuda_sparse_build_paged_hierarchical_route(
+    const void *key_pages,
+    const void *hierarchy,
+    void *route,
+    int batches,
+    int heads,
+    int page_count,
+    int page_size,
+    int tree_nodes,
+    int leaf_count,
+    int active_length,
+    int head_dim,
+    int summary_window,
+    int semantic_blocks,
+    int local_blocks,
+    int block_size,
+    unsigned int random_seed
+);
 void ocean_cuda_sparse_attention_routed(
     const void *query,
     const void *key,
