@@ -1146,8 +1146,9 @@ __global__ void ocean_cuda_sparse_route_kernel(
         if (count <= 0) return;
         int head = (int)(group % (size_t)heads);
         int batch = (int)(group / (size_t)heads);
-        size_t key_group = ((size_t)batch * (size_t)heads + (size_t)head) *
-            (size_t)key_length * (size_t)head_dim;
+        const float *key_group = key +
+            (((size_t)batch * (size_t)heads + (size_t)head) *
+                (size_t)key_length * (size_t)head_dim);
         float query_norm = 0.0f;
         for (int dimension = 0; dimension < head_dim; ++dimension) {
             float sum = 0.0f;
